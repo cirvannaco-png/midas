@@ -43,8 +43,14 @@ jobs:
           }
           if (-not $editor -or -not (Test-Path $editor)) { throw "MetaEditor64.exe was not installed. Installer exit: $($proc.ExitCode)" }
           if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) {
-            $root = Split-Path (Split-Path $editor -Parent) -Parent
-            $mql5 = Join-Path $root "MQL5"
+            $editorDir = Split-Path $editor -Parent
+            $mql5 = Join-Path $editorDir "MQL5"
+          }
+          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) {
+            $tradeInclude = Get-ChildItem "C:\Program Files" -Filter "Trade.mqh" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+            if ($tradeInclude) {
+              $mql5 = Split-Path (Split-Path (Split-Path $tradeInclude -Parent) -Parent) -Parent
+            }
           }
           if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) { throw "MT5 standard-library Include\Trade\Trade.mqh not found." }
           "METAEDITOR=$editor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
