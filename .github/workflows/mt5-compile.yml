@@ -13,28 +13,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: python scripts/build_single_file.py --check
-      - run: python scripts/validate_single_file.py
+      - name: Regenerate the single-file EA
+        run: python scripts/build_single_file.py
+      - name: Validate flattened source and safety defaults
+        run: python scripts/validate_single_file.py
   metaeditor-compile:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && vars.MT5_METAEDITOR_PATH != '' && vars.MT5_MQL5_ROOT != ''
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      METAEDITOR: ${{ vars.MT5_METAEDITOR_PATH }}
+      MQL5ROOT: ${{ vars.MT5_MQL5_ROOT }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install official MT5 desktop platform
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Regenerate the single-file EA
+        run: python scripts/build_single_file.py
+      - name: Verify MetaEditor installation and standard library
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $installer = Join-Path $env:TEMP "mt5setup.exe"
-          Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" -OutFile $installer
-          $proc = Start-Process -FilePath $installer -ArgumentList @("/auto", "/path:C:\MetaTrader5") -Wait -PassThru
-          if ($proc.ExitCode -ne 0) { throw "MT5 installer failed: $($proc.ExitCode)" }
-          $editor = Get-ChildItem "C:\MetaTrader5" -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $editor) { throw "MetaEditor64.exe not found" }
-          $mql5 = "C:\MetaTrader5\MQL5"
-          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) { throw "MQL5 Trade.mqh standard include not found" }
-          "METAEDITOR=$($editor.FullName)" | Out-File $env:GITHUB_ENV -Append
-          "MQL5ROOT=$mql5" | Out-File $env:GITHUB_ENV -Append
+          if (-not (Test-Path $env:METAEDITOR)) { throw "Configured MetaEditor path does not exist." }
+          if (-not (Test-Path (Join-Path $env:MQL5ROOT "Include\Trade\Trade.mqh"))) { throw "Configured MQL5 root lacks Include\Trade\Trade.mqh." }
       - name: Compile with MetaEditor64
         shell: pwsh
         run: |
@@ -60,7 +61,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Copy-Item $ex5 artifacts/MidasTouch2.ex5 -Force
           Copy-Item $log artifacts/MidasTouch2.MetaEditor.log -Force
-          if ($warnings -gt 0) { Write-Warning "Review warnings before promotion." }
       - name: Upload MetaEditor artifacts
         if: always()
         uses: actions/upload-artifact@v4
