@@ -17,37 +17,54 @@ jobs:
         run: python scripts/build_single_file.py
       - name: Validate flattened source and safety defaults
         run: python scripts/validate_single_file.py
+
   metaeditor-compile:
-    if: github.event_name != 'pull_request' && vars.MT5_METAEDITOR_PATH != '' && vars.MT5_MQL5_ROOT != ''
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 30
-    env:
-      METAEDITOR: ${{ vars.MT5_METAEDITOR_PATH }}
-      MQL5ROOT: ${{ vars.MT5_MQL5_ROOT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - name: Regenerate the single-file EA
         run: python scripts/build_single_file.py
-      - name: Verify MetaEditor installation and standard library
+      - name: Install official MetaTrader 5 and locate MetaEditor
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          if (-not (Test-Path $env:METAEDITOR)) { throw "Configured MetaEditor path does not exist." }
-          if (-not (Test-Path (Join-Path $env:MQL5ROOT "Include\Trade\Trade.mqh"))) { throw "Configured MQL5 root lacks Include\Trade\Trade.mqh." }
+          $installer = Join-Path $env:RUNNER_TEMP "mt5setup.exe"
+          Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" -OutFile $installer
+          $installPath = "C:\MT5"
+          $proc = Start-Process -FilePath $installer -ArgumentList @("/auto", "/path:C:\MT5") -Wait -PassThru
+          $editor = Join-Path $installPath "metaeditor64.exe"
+          $mql5 = Join-Path $installPath "MQL5"
+          if (-not (Test-Path $editor)) {
+            $editor = Get-ChildItem "C:\Program Files" -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $editor -or -not (Test-Path $editor)) { throw "MetaEditor64.exe was not installed. Installer exit: $($proc.ExitCode)" }
+          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) {
+            $root = Split-Path (Split-Path $editor -Parent) -Parent
+            $mql5 = Join-Path $root "MQL5"
+          }
+          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) { throw "MT5 standard-library Include\Trade\Trade.mqh not found." }
+          "METAEDITOR=$editor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MQL5ROOT=$mql5" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "MetaEditor: $editor"
+          Write-Host "MQL5 root: $mql5"
       - name: Compile with MetaEditor64
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $target = Join-Path $env:MQL5ROOT "Experts\MidasTouch2"
+          if (-not (Test-Path $env:METAEDITOR)) { throw "MetaEditor path missing." }
+          if (-not (Test-Path (Join-Path $env:MQL5ROOT "Include\Trade\Trade.mqh"))) { throw "MT5 standard library missing." }
+          $target = Join-Path $env:RUNNER_TEMP "MidasTouch2"
           New-Item -ItemType Directory -Force -Path $target | Out-Null
           $source = Join-Path $target "MidasTouch2.mq5"
           Copy-Item "MidasTouch2.mq5" $source -Force
+          $log = Join-Path $target "MidasTouch2.log"
           $compileArg = '/compile:"' + $source + '"'
           $includeArg = '/include:"' + $env:MQL5ROOT + '"'
           $proc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($compileArg, $includeArg, "/log") -Wait -PassThru
-          $log = Join-Path $target "MidasTouch2.log"
           if (-not (Test-Path $log)) { throw "MetaEditor log missing; process exit $($proc.ExitCode)" }
           $content = Get-Content $log -Raw -Encoding Unicode
           $match = [regex]::Match($content, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
@@ -61,6 +78,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Copy-Item $ex5 artifacts/MidasTouch2.ex5 -Force
           Copy-Item $log artifacts/MidasTouch2.MetaEditor.log -Force
+          "MetaEditor result: $errors errors, $warnings warnings" | Out-File artifacts/compile-summary.txt -Encoding utf8
       - name: Upload MetaEditor artifacts
         if: always()
         uses: actions/upload-artifact@v4
