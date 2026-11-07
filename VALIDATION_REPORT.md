@@ -2,7 +2,7 @@
 
 **Build branch:** \`build/single-file-staging\`  
 **Build commit:** \`368020275a756eb80bace4165633940c11d21308\`  
-**Upstream source:** \`cirvannaco-png/Midas-touch2-@\3622ed5a434c36f0c05ab9c9863d17b6fd743e9a\`  
+**Upstream source:** \`cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a\`  
 **EA artifact:** \`MidasTouch2.mq5\`
 
 ## MetaEditor compile
