@@ -1,0 +1,70 @@
+name: MidasTouch2 validation and MetaEditor compile
+on:
+  push:
+    branches: ["build/**", "release/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python scripts/build_single_file.py --check
+      - run: python scripts/validate_single_file.py
+  metaeditor-compile:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official MT5 desktop platform
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Join-Path $env:TEMP "mt5setup.exe"
+          Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" -OutFile $installer
+          $proc = Start-Process -FilePath $installer -ArgumentList @("/auto", "/path:C:\MetaTrader5") -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "MT5 installer failed: $($proc.ExitCode)" }
+          $editor = Get-ChildItem "C:\MetaTrader5" -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $editor) { throw "MetaEditor64.exe not found" }
+          $mql5 = "C:\MetaTrader5\MQL5"
+          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) { throw "MQL5 Trade.mqh standard include not found" }
+          "METAEDITOR=$($editor.FullName)" | Out-File $env:GITHUB_ENV -Append
+          "MQL5ROOT=$mql5" | Out-File $env:GITHUB_ENV -Append
+      - name: Compile with MetaEditor64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $target = Join-Path $env:MQL5ROOT "Experts\MidasTouch2"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $source = Join-Path $target "MidasTouch2.mq5"
+          Copy-Item "MidasTouch2.mq5" $source -Force
+          $compileArg = '/compile:"' + $source + '"'
+          $includeArg = '/include:"' + $env:MQL5ROOT + '"'
+          $proc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($compileArg, $includeArg, "/log") -Wait -PassThru
+          $log = Join-Path $target "MidasTouch2.log"
+          if (-not (Test-Path $log)) { throw "MetaEditor log missing; process exit $($proc.ExitCode)" }
+          $content = Get-Content $log -Raw -Encoding Unicode
+          $match = [regex]::Match($content, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
+          if (-not $match.Success) { throw "Cannot parse MetaEditor result: $content" }
+          $errors = [int]$match.Groups[1].Value
+          $warnings = [int]$match.Groups[2].Value
+          Write-Host "MetaEditor: $errors errors, $warnings warnings"
+          if ($errors -ne 0) { throw "Compilation errors: $errors" }
+          $ex5 = Join-Path $target "MidasTouch2.ex5"
+          if (-not (Test-Path $ex5)) { throw "Compiled EX5 not produced" }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item $ex5 artifacts/MidasTouch2.ex5 -Force
+          Copy-Item $log artifacts/MidasTouch2.MetaEditor.log -Force
+          if ($warnings -gt 0) { Write-Warning "Review warnings before promotion." }
+      - name: Upload MetaEditor artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MidasTouch2-MetaEditor-build
+          path: artifacts/
+          if-no-files-found: warn

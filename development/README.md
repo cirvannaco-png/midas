@@ -1,0 +1,1 @@
+Modular development source pinned to cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a. Edit EA/ modules, then regenerate root MidasTouch2.mq5. Original source tree remains unchanged.
