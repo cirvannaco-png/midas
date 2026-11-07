@@ -191,7 +191,6 @@ ENUM_NEWS_RISK CNewsFilter::GetRiskTier(string &labelOut, int &minutesToEventOut
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Core/NewsFilter.mqh
 
 enum ENUM_TREND_STATE { TREND_BULL_STRONG, TREND_BULL, TREND_NEUTRAL, TREND_BEAR, TREND_BEAR_STRONG };
@@ -290,7 +289,6 @@ struct PendingSetup {
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Core/Config.mqh
 // BEGIN INLINED MODULE: includes/Core/CandleData.mqh
 //+------------------------------------------------------------------+
@@ -412,7 +410,6 @@ void CCandleData::Refresh()
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Core/CandleData.mqh
 // BEGIN INLINED MODULE: includes/Core/SessionFilter.mqh
 //+------------------------------------------------------------------+
@@ -620,7 +617,6 @@ bool CSessionFilter::IsAllowed()
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Core/SessionFilter.mqh
 // BEGIN INLINED MODULE: includes/Core/SignalLogger.mqh
 //+------------------------------------------------------------------+
@@ -1156,7 +1152,6 @@ bool CSignalLogger::LogSMCStructure(TradeSetup &setup, string symbol, ENUM_TIMEF
 //+------------------------------------------------------------------+
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Core/SignalLogger.mqh
 // BEGIN INLINED MODULE: includes/Analysis/TFContext.mqh
 //+------------------------------------------------------------------+
@@ -1327,7 +1322,6 @@ SwingPoint CSwingDetector::GetLow(int i) const
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Structure/SwingDetector.mqh
 // BEGIN INLINED MODULE: includes/Structure/BOS.mqh
 //+------------------------------------------------------------------+
@@ -1520,7 +1514,6 @@ BOSEvent CBOS::GetBOS(int i) const
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Structure/BOS.mqh
 // BEGIN INLINED MODULE: includes/Structure/CHOCH.mqh
 //+------------------------------------------------------------------+
@@ -1662,7 +1655,6 @@ CHOCHPoint CCHOCH::Get(int i) const
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Structure/CHOCH.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/FVG.mqh
 //+------------------------------------------------------------------+
@@ -1833,7 +1825,6 @@ FVGZone CFVG::GetZone(int i) const
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/FVG.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/Liquidity.mqh
 //+------------------------------------------------------------------+
@@ -2242,7 +2233,6 @@ bool CLiquidity::HasExternalSweep(int recencyBars, ENUM_LIQ_TYPE &outType, doubl
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/Liquidity.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/SupportResistance.mqh
 //+------------------------------------------------------------------+
@@ -2375,7 +2365,6 @@ void CSupportResistance::Detect()
 SRZone CSupportResistance::GetZone(int i) const { if(i<0||i>=m_zoneCount) { SRZone e; ZeroMemory(e); return e; } return m_zones[i]; }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/SupportResistance.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/VolumeEngine.mqh
 //+------------------------------------------------------------------+
@@ -2484,7 +2473,6 @@ double CVolumeEngine::Score(int shift, double rvolThreshold) const
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/VolumeEngine.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/FibonacciEngine.mqh
 //+------------------------------------------------------------------+
@@ -2705,7 +2693,6 @@ double CFibonacciEngine::Score(bool forBuy, double price, double zoneMinPct, dou
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/FibonacciEngine.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/ValueAreaEngine.mqh
 //+------------------------------------------------------------------+
@@ -3255,7 +3242,6 @@ bool CValueAreaEngine::HardConflict(bool forBuy, double price) const
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/ValueAreaEngine.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/OrderBlock.mqh
 //+------------------------------------------------------------------+
@@ -3478,7 +3464,6 @@ bool COrderBlock::NearestZone(ENUM_FVG_DIR dir, double price, double atr, double
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/OrderBlock.mqh
 // BEGIN INLINED MODULE: includes/Analysis/TrendEngine.mqh
 //+------------------------------------------------------------------+
@@ -3554,7 +3539,6 @@ ENUM_TREND_STATE CTrendEngine::GetCurrentTrend()
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Analysis/TrendEngine.mqh
 
 // One full SMC detection pipeline, scoped to a single timeframe. Building
@@ -3738,7 +3722,6 @@ void CTFContextPool::DetectAll(bool force)
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Analysis/TFContext.mqh
 // BEGIN INLINED MODULE: includes/Analysis/TopDownMTFEngine.mqh
 //+------------------------------------------------------------------+
@@ -3927,7 +3910,6 @@ void CTopDownMTFEngine::AdjustSetup(TradeSetup &setup) const
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Analysis/TopDownMTFEngine.mqh
 // BEGIN INLINED MODULE: includes/Analysis/Scoring.mqh
 //+------------------------------------------------------------------+
@@ -4418,7 +4400,6 @@ InducementResult CInducement::Validate(bool forBuy)
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/Inducement.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/PremiumDiscount.mqh
 //+------------------------------------------------------------------+
@@ -4462,7 +4443,6 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/PremiumDiscount.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/MarketPhase.mqh
 //+------------------------------------------------------------------+
@@ -4563,7 +4543,6 @@ ENUM_MARKET_PHASE CMarketPhase::Detect()
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/MarketPhase.mqh
 // already inlined once under include guard: includes/SmartMoney/OrderBlock.mqh
 // BEGIN INLINED MODULE: includes/Analysis/VolatilityRegime.mqh
@@ -4644,7 +4623,6 @@ ENUM_VOL_REGIME CVolatilityRegime::Classify(int shift)
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Analysis/VolatilityRegime.mqh
 // already inlined once under include guard: includes/Core/SessionFilter.mqh
 // BEGIN INLINED MODULE: includes/Core/PipCalculator.mqh
@@ -4720,7 +4698,6 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Core/PipCalculator.mqh
 // BEGIN INLINED MODULE: includes/Regime/RegimeDetector.mqh
 //+------------------------------------------------------------------+
@@ -4817,7 +4794,6 @@ ENUM_MARKET_REGIME CRegimeDetector::Classify()
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Regime/RegimeDetector.mqh
 // BEGIN INLINED MODULE: includes/SmartMoney/SMCStructuralValidator.mqh
 //+------------------------------------------------------------------+
@@ -5096,7 +5072,6 @@ SMCStructuralValidation CSMCStructuralValidator::Validate(
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/SMCStructuralValidator.mqh
 // BEGIN INLINED MODULE: includes/Strategies/MomentumBreakout.mqh
 //+------------------------------------------------------------------+
@@ -5325,7 +5300,6 @@ void CMomentumBreakoutEngine::Evaluate(bool forBuy, double &momentumScore, doubl
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Strategies/MomentumBreakout.mqh
 // BEGIN INLINED MODULE: includes/Strategies/MeanReversion.mqh
 //+------------------------------------------------------------------+
@@ -5578,7 +5552,6 @@ void CMeanReversionEngine::Evaluate(bool forBuy, double &reversionScore, ENUM_RE
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Strategies/MeanReversion.mqh
 // BEGIN INLINED MODULE: includes/Strategies/KeyLevelReaction.mqh
 //+------------------------------------------------------------------+
@@ -5782,7 +5755,6 @@ bool CExtendedKeyLevels::NearestRoundLevel(bool forBuy, double price, double max
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/SmartMoney/ExtendedKeyLevels.mqh
 
 // v2.14 addition. Strategy module #3 of the multi-strategy architecture
@@ -6117,7 +6089,6 @@ void CKeyLevelEngine::Evaluate(bool forBuy, ENUM_KEYLEVEL_SOURCE &source, ENUM_K
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Strategies/KeyLevelReaction.mqh
 // BEGIN INLINED MODULE: includes/Strategies/StrategySelector.mqh
 //+------------------------------------------------------------------+
@@ -6247,7 +6218,6 @@ void CStrategySelector::Select(const SetupReasons &r, double smcConfidence,
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Strategies/StrategySelector.mqh
 
 // v2.1 SCORING MODEL — replaces the old flat weighted sum with the
@@ -7341,7 +7311,6 @@ void CScoringEngine::PopulateStrategyDiagnostics(bool forBuy, double confidence,
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Analysis/Scoring.mqh
 // BEGIN INLINED MODULE: includes/Trading/StrategyTradeZone.mqh
 //+------------------------------------------------------------------+
@@ -7464,7 +7433,6 @@ void CTargetSelector::AssignTargets(TradeSetup &setup, CTFContext* liqCtx, strin
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Trading/Targets.mqh
 class CStrategySetupBuilders
   {
@@ -7480,7 +7448,6 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Trading/StrategySetupBuilders.mqh
 // already inlined once under include guard: includes/Trading/Targets.mqh
 // BEGIN INLINED MODULE: includes/Trading/EnvironmentStrategyMemory.mqh
@@ -7517,7 +7484,6 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Trading/EnvironmentStrategyMemory.mqh
 
 extern CTFContext* g_chartCtx;
@@ -7632,7 +7598,6 @@ TradeSetup CTradeDecision::GenerateBuySetup(){return BuildAuthoritativeStrategy(
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Trading/StrategyTradeZone.mqh
 // already inlined once under include guard: includes/Trading/EnvironmentStrategyMemory.mqh
 // BEGIN INLINED MODULE: includes/Trading/RiskEngine.mqh
@@ -7775,7 +7740,6 @@ bool ResolveConfiguredAccountRiskLimits(ENUM_ACCOUNT_RISK_PROFILE selected,
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Portfolio/AccountRiskProfilePolicy.mqh
 
 class CRiskEngine
@@ -7977,7 +7941,6 @@ bool CRiskEngine::ValidateSetupAtEntry(const TradeSetup &setup,double entry,doub
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Trading/RiskEngine.mqh
 // BEGIN INLINED MODULE: includes/Trading/OutcomeTrackerLive.mqh
 //+------------------------------------------------------------------+
@@ -8159,7 +8122,6 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Trading/CalibrationEngine.mqh
 // BEGIN INLINED MODULE: includes/Signals/SignalPublisher.mqh
 //+------------------------------------------------------------------+
@@ -8232,7 +8194,6 @@ struct ExecutionRecord
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Decision/TradeDecision.mqh
 // BEGIN INLINED MODULE: includes/Signals/SubscriberPlatform.mqh
 //+------------------------------------------------------------------+
@@ -8385,7 +8346,6 @@ void CSubscriberPlatform::RecordDelivery(string subscriberId, long decisionId, b
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Signals/SubscriberPlatform.mqh
 // BEGIN INLINED MODULE: includes/Decision/DecisionFingerprint.mqh
 //+------------------------------------------------------------------+
@@ -8459,7 +8419,6 @@ string DecisionFingerprintFor(const TradeDecisionRecord &rec)
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Decision/DecisionFingerprint.mqh
 // already inlined once under include guard: includes/Core/PipCalculator.mqh
 class CSignalPublisher
@@ -8528,7 +8487,6 @@ bool CSignalPublisher::PublishOutcome(string signalId,string symbol,string direc
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Signals/SignalPublisher.mqh
 // already inlined once under include guard: includes/Trading/EnvironmentStrategyMemory.mqh
 class COutcomeTrackerLive;
@@ -9079,7 +9037,6 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Trading/OutcomeTrackerLive.mqh
 // BEGIN INLINED MODULE: includes/Trading/DailyTradeTarget.mqh
 //+------------------------------------------------------------------+
@@ -9515,7 +9472,6 @@ public:
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Trading/DailyTradeTarget.mqh
 // already inlined once under include guard: includes/Decision/DecisionFingerprint.mqh
 // BEGIN INLINED MODULE: includes/Decision/DecisionEngine.mqh
@@ -9631,7 +9587,6 @@ public:
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Portfolio/EnvironmentPolicy.mqh
 // already inlined once under include guard: includes/Decision/TradeDecision.mqh
 
@@ -9806,7 +9761,6 @@ TradeDecisionRecord CDecisionEngine::Decide(const TradeSetup &setup)
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Decision/DecisionEngine.mqh
 // BEGIN INLINED MODULE: includes/Decision/DecisionStore.mqh
 //+------------------------------------------------------------------+
@@ -9935,7 +9889,6 @@ CDecisionStore g_store;
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Decision/DecisionStore.mqh
 // BEGIN INLINED MODULE: includes/Execution/BrokerAdapter.mqh
 //+------------------------------------------------------------------+
@@ -10013,7 +9966,6 @@ bool NormalizePriceToTickGrid(const double rawPrice,
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/PriceGridNormalizer.mqh
 
 class CBrokerAdapter
@@ -10576,7 +10528,6 @@ bool CBrokerAdapter::CloseFull(ulong ticket)
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/BrokerAdapter.mqh
 // BEGIN INLINED MODULE: includes/Execution/OrderManager.mqh
 //+------------------------------------------------------------------+
@@ -10747,7 +10698,6 @@ string CProductionMonitor::StatusSummary()
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Monitoring/ProductionMonitor.mqh
 // BEGIN INLINED MODULE: includes/Execution/TradeStateMachine.mqh
 //+------------------------------------------------------------------+
@@ -10956,7 +10906,6 @@ void CTradeStateMachine::ForceState(ENUM_TRADE_STATE to)
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/TradeStateMachine.mqh
 // already inlined once under include guard: includes/Execution/BrokerAdapter.mqh
 
@@ -11328,7 +11277,6 @@ bool COrderManager::RestoreTrade(const TradeDecisionRecord &decision,double volu
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/OrderManager.mqh
 // BEGIN INLINED MODULE: includes/Portfolio/MultiTradeEngine.mqh
 //+------------------------------------------------------------------+
@@ -11476,7 +11424,6 @@ bool CMultiTradeEngine::Build(const TradeSetup &setup,int availableSlots,MultiTr
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Portfolio/MultiTradeEngine.mqh
 // BEGIN INLINED MODULE: includes/Execution/PositionManager.mqh
 //+------------------------------------------------------------------+
@@ -11764,7 +11711,6 @@ public:
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/ExecutionLedgerClient.mqh
 // already inlined once under include guard: includes/Trading/RiskEngine.mqh
 // BEGIN INLINED MODULE: includes/Execution/DynamicStopEngine.mqh
@@ -11798,7 +11744,6 @@ input double InpDynamicStopStructuralBufferATR = 0.10; // buffer beyond the stru
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/DynamicStopInputs.mqh
 
 enum ENUM_DYNAMIC_STOP_STAGE
@@ -12008,7 +11953,6 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/DynamicStopEngine.mqh
 // already inlined once under include guard: includes/Execution/DynamicStopInputs.mqh
 // BEGIN INLINED MODULE: includes/Execution/PositionManagementPolicy.mqh
@@ -12035,7 +11979,6 @@ bool ShouldTakePartialAtR(ENUM_TRADE_STATE state,double r,double partialAtR)
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/PositionManagementPolicy.mqh
 // BEGIN INLINED MODULE: includes/Monitoring/SLModificationAudit.mqh
 //+------------------------------------------------------------------+
@@ -12089,7 +12032,6 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Monitoring/SLModificationAudit.mqh
 // already inlined once under include guard: includes/Structure/SwingDetector.mqh
 
@@ -12386,7 +12328,6 @@ void CPositionManager::OnTick(double currentAtr)
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/PositionManager.mqh
 // BEGIN INLINED MODULE: includes/Execution/TesterDealExport.mqh
 //+------------------------------------------------------------------+
@@ -12683,7 +12624,6 @@ public:
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/TesterDealExport.mqh
 // BEGIN INLINED MODULE: includes/Recovery/RecoveryEngine.mqh
 //+------------------------------------------------------------------+
@@ -12859,7 +12799,6 @@ int CRecoveryEngine::Recover()
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Recovery/RecoveryEngine.mqh
 // BEGIN INLINED MODULE: includes/Portfolio/PortfolioManager.mqh
 //+------------------------------------------------------------------+
@@ -13023,7 +12962,6 @@ bool CPortfolioManager::AllowNewTrade(string symbol,double proposedRiskAmount,st
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Portfolio/PortfolioManager.mqh
 // BEGIN INLINED MODULE: includes/Portfolio/RiskGuard.mqh
 //+------------------------------------------------------------------+
@@ -13263,7 +13201,6 @@ void CRiskGuard::ManualReset()
 //+------------------------------------------------------------------+
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Portfolio/RiskGuard.mqh
 // already inlined once under include guard: includes/Portfolio/AccountRiskProfilePolicy.mqh
 // BEGIN INLINED MODULE: includes/Portfolio/OpposingPositionPolicy.mqh
@@ -13340,7 +13277,6 @@ bool MidasConcurrentOpposingPolicyAllows(ENUM_ACCOUNT_MARGIN_MODE accountMode,
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Portfolio/OpposingPositionPolicy.mqh
 // already inlined once under include guard: includes/Core/NewsFilter.mqh
 // already inlined once under include guard: includes/Signals/SubscriberPlatform.mqh
@@ -13506,7 +13442,6 @@ public:
 
 #endif // CONFIGSYNC_CONTRACT_MQH
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Signals/ConfigSyncContract.mqh
 
 class CConfigSync
@@ -13667,7 +13602,6 @@ bool CConfigSync::ExtractJsonIntField(const string &json,const string field,int 
   }
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Signals/ConfigSync.mqh
 // already inlined once under include guard: includes/Monitoring/ProductionMonitor.mqh
 // BEGIN INLINED MODULE: includes/Execution/ExecutionAudit.mqh
@@ -13721,7 +13655,6 @@ public:
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/Execution/ExecutionAudit.mqh
 // already inlined once under include guard: includes/Execution/ExecutionLedgerClient.mqh
 // BEGIN INLINED MODULE: includes/UI/TradeControlPanel.mqh
@@ -13855,7 +13788,6 @@ public:
 
 #endif
 //+------------------------------------------------------------------+
-
 // END INLINED MODULE: includes/UI/TradeControlPanel.mqh
 
 input group "General"
@@ -15488,4 +15420,3 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
      }
   }
 //+------------------------------------------------------------------+
-
