@@ -37,22 +37,22 @@ jobs:
           $installPath = "C:\MT5"
           $proc = Start-Process -FilePath $installer -ArgumentList @("/auto", "/path:C:\MT5") -Wait -PassThru
           $editor = Join-Path $installPath "metaeditor64.exe"
-          $mql5 = Join-Path $installPath "MQL5"
           if (-not (Test-Path $editor)) {
-            $editor = Get-ChildItem "C:\Program Files" -Filter "metaeditor64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+            $editor = Join-Path $env:ProgramFiles "MetaTrader 5\metaeditor64.exe"
           }
           if (-not $editor -or -not (Test-Path $editor)) { throw "MetaEditor64.exe was not installed. Installer exit: $($proc.ExitCode)" }
-          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) {
-            $editorDir = Split-Path $editor -Parent
-            $mql5 = Join-Path $editorDir "MQL5"
-          }
-          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) {
-            $tradeInclude = Get-ChildItem "C:\Program Files" -Filter "Trade.mqh" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-            if ($tradeInclude) {
-              $mql5 = Split-Path (Split-Path (Split-Path $tradeInclude -Parent) -Parent) -Parent
+          $mql5Candidates = @($installPath, (Split-Path $editor -Parent)) | ForEach-Object { Join-Path $_ "MQL5" }
+          $mql5 = $mql5Candidates | Where-Object { Test-Path (Join-Path $_ "Include\Trade\Trade.mqh") } | Select-Object -First 1
+          if (-not $mql5) {
+            $terminalData = Join-Path $env:APPDATA "MetaQuotes\Terminal"
+            if (Test-Path $terminalData) {
+              foreach ($terminal in Get-ChildItem $terminalData -Directory -ErrorAction SilentlyContinue) {
+                $candidate = Join-Path $terminal.FullName "MQL5"
+                if (Test-Path (Join-Path $candidate "Include\Trade\Trade.mqh")) { $mql5 = $candidate; break }
+              }
             }
           }
-          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) { throw "MT5 standard-library Include\Trade\Trade.mqh not found." }
+          if (-not $mql5) { throw "MT5 standard-library Include\Trade\Trade.mqh not found in install or terminal data folders." }
           "METAEDITOR=$editor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "MQL5ROOT=$mql5" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "MetaEditor: $editor"
