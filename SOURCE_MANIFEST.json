@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "build/single-file-staging",
-    "commit": "258133ce7ca1bdb612d99310aa7e5c662fa9bf10",
-    "git_tree_sha": "c78a2925ce14a477a96ce8cd0f9b5451fd22e1cc",
+    "commit": "27d02aff78c4f99a740799e0c2320ab97f18ec56",
+    "git_tree_sha": "da8a335579d031c68ef6d981154c30e15fe1dc62",
     "root": "development/EA",
     "file_count": 95,
     "files": [
