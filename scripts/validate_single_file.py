@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Static structural checks for flattened MQL5 source; not a compiler."""
-import collections, json, re, sys
+import collections, hashlib, json, re, sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]; EA=ROOT/"MidasTouch2.mq5"; MANIFEST=ROOT/"SOURCE_MANIFEST.json"
 def mask(text):
@@ -76,7 +76,30 @@ def main():
     for name,pattern in safeties.items():
         if not re.search(pattern,code): fail.append("required safety default missing: "+name)
     manifest=json.loads(MANIFEST.read_text(encoding="utf-8"))
-    print("Source:",manifest["source_repository"]+"@"+manifest["source_commit"])
+    snapshot=manifest.get("current_source_snapshot",{})
+    snapshot_files=snapshot.get("files",[])
+    source_root=ROOT/"development"/"EA"
+    if not snapshot_files:
+        fail.append("current staged EA source snapshot missing from SOURCE_MANIFEST.json")
+    else:
+        expected={item["path"]:item for item in snapshot_files}
+        actual={p.relative_to(ROOT).as_posix():p for p in source_root.rglob("*") if p.is_file()}
+        missing=sorted(set(expected)-set(actual))
+        extra=sorted(set(actual)-set(expected))
+        if missing: fail.append("staged source files missing from manifest: "+", ".join(missing))
+        if extra: fail.append("unmanifested staged source files: "+", ".join(extra))
+        for rel,item in expected.items():
+            path=actual.get(rel)
+            if path is None: continue
+            data=path.read_bytes()
+            blob=hashlib.sha1(b"blob "+str(len(data)).encode("ascii")+b"\\0"+data).hexdigest()
+            if blob!=item.get("git_blob_sha"):
+                fail.append("staged source hash mismatch: "+rel)
+            if len(data)!=item.get("size_bytes"):
+                fail.append("staged source size mismatch: "+rel)
+    print("Upstream baseline:",manifest["source_repository"]+"@"+manifest["source_commit"])
+    print("Staged source snapshot:",snapshot.get("repository","")+"@"+snapshot.get("commit",""))
+    print("Staged source files:",len(snapshot_files),"expected;",len(actual) if 'actual' in locals() else 0,"found")
     print("Named type definitions:",len(type_names),"; duplicates:",len(dup_types))
     print("Input declarations:",len(inputs),"; duplicate names:",len(dup_inputs))
     print("Standard includes:",system)
