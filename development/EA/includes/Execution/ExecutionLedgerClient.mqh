@@ -13,6 +13,7 @@ private:
    string m_portfolioKey;
    int    m_timeoutMs;
    bool   m_ready;
+   bool   m_healthVerified;
    bool   m_admissionHealthy;
 
    string JsonSafe(string value)
@@ -44,12 +45,14 @@ private:
       int status=WebRequest("POST",m_baseUrl+path,headers,m_timeoutMs,data,result,resultHeaders);
       if(status==-1)
         {
+         m_healthVerified=false;
          m_admissionHealthy=false;
          PrintFormat("Midas execution ledger: POST %s failed at transport layer (error=%d); do not assume broker outcome.",path,GetLastError());
          return false;
         }
       if(status<200 || status>=300)
         {
+         m_healthVerified=false;
          m_admissionHealthy=false;
          PrintFormat("Midas execution ledger: POST %s returned HTTP %d; response=%s",path,status,CharArrayToString(result));
          return false;
@@ -67,7 +70,8 @@ public:
       m_timeoutMs=MathMax(1000,timeoutMs);
       m_portfolioKey="";
       m_ready=false;
-       m_admissionHealthy=false;
+      m_healthVerified=false;
+      m_admissionHealthy=false;
 
        if(StringLen(m_baseUrl)<8 || StringLen(m_apiKey)==0)
          {
@@ -87,13 +91,18 @@ public:
          return;
         }
       m_ready=true;
-      // Configuration is not proof of bridge/database readiness. Admission
-      // remains closed until the authenticated health probe succeeds.
+      // Configuration is not proof of bridge/database readiness, and a healthy
+      // database is not proof of broker reconciliation. Keep both gates separate.
+      m_healthVerified=false;
       m_admissionHealthy=false;
      }
 
    bool CheckHealth()
      {
+      // Every fresh health probe closes admission until broker/history reconciliation
+      // is completed and MarkReconciled() is called in the same lifecycle.
+      m_healthVerified=false;
+      m_admissionHealthy=false;
       // MetaTrader explicitly disallows WebRequest inside Strategy Tester agents.
       // Research backtests must run with the bridge disconnected and ledger admission
       // explicitly disabled; demo/live operation remains fail-closed by default.
@@ -133,14 +142,23 @@ public:
          PrintFormat("Midas execution ledger: health response did not confirm execution_ledger=ready and ledger_schema=ready; body=%s",body);
          return false;
         }
-      m_admissionHealthy=true;
+      m_healthVerified=true;
+      // Health alone never opens admission. Only a successful reconciliation may.
+      m_admissionHealthy=false;
       return true;
      }
 
    bool Ready() const { return m_ready; }
-   bool AdmissionReady() const { return (m_ready && m_admissionHealthy); }
-   void RequireReconciliation() { m_admissionHealthy=false; }
-   void MarkReconciled() { if(m_ready) m_admissionHealthy=true; }
+   bool AdmissionReady() const { return (m_ready && m_healthVerified && m_admissionHealthy); }
+   void RequireReconciliation()
+     {
+      m_healthVerified=false;
+      m_admissionHealthy=false;
+     }
+   void MarkReconciled()
+     {
+      m_admissionHealthy=(m_ready && m_healthVerified);
+     }
    string PortfolioKey() const { return m_portfolioKey; }
 
    string RequestIdForDecision(const long decisionId,const int legIndex)
