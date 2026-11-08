@@ -61,6 +61,7 @@ def main():
         "Strategy Tester FX conversion requires explicit input":r'if\s*\(\(bool\)MQLInfoInteger\(MQL_TESTER\)\)[\s\S]{0,350}InpAccountCurrencyPerKES\s*<=\s*0\.0[\s\S]{0,180}return\s+false',
         "live FX conversion scans direct and inverse KES pairs":r'for\s*\(int\s+direction\s*=\s*0\s*;\s*direction\s*<\s*2[\s\S]{0,1500}bool\s+direct\s*=\s*\(baseCurrency\s*==\s*"KES"[\s\S]{0,250}bool\s+inverse\s*=\s*\(baseCurrency\s*==\s*accountCurrency[\s\S]{0,500}SymbolInfoTick\(candidate,tick\)',
         "live conversion quotes must be fresh":r'age\s*=\s*\(long\)now\s*-\s*\(long\)tick\.time\s*;[\s\S]{0,100}age\s*>\s*maxAge',
+        "live conversion calls the tested direct/inverse quote policy":r'ResolveKESConversionFactorFromQuote\(tick\.bid,tick\.ask,direct,[\s\S]{0,100}tick\.time,now,maxAge,candidateRate\)',
         "Gold risk percent is capped by KES-derived account money":r'ResolveRiskPercentWithCashCap\(equity,g_activeRiskLimits\.riskPercentPerTrade[\s\S]{0,160}goldCashCapMoney,true,effectiveRiskPercent',
         "Gold exception is isolated from other symbols":r'!IsGoldRiskLimitedSymbol\(_Symbol\)',
         "automated sizing uses capped risk percent":r'CalculateLotSize\(_Symbol,effectiveRiskPercent\*fraction',
@@ -78,7 +79,10 @@ def main():
     policy_test_checks={
         "Gold policy tests cover KES cap overflow":r'GoldStopRiskWithinCashCap\(7\.51,7\.50\)',
         "Gold policy tests retain non-Gold risk":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,false',
-        "Gold policy tests cover cash-cap conversion":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,true'
+        "Gold policy tests cover cash-cap conversion":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,true',
+        "KES tests cover direct conversion":r'ResolveKESConversionFactorFromQuote\(0\.0065,0\.0066,true',
+        "KES tests cover inverse conversion":r'ResolveKESConversionFactorFromQuote\(150\.0,151\.0,false',
+        "KES tests reject stale quotes":r'"stale KES conversion ticks are rejected"'
     }
     for name,pattern in bridge_checks.items():
         if not re.search(pattern,raw): fail.append("bridge/control regression: "+name)
