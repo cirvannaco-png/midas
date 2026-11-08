@@ -11576,7 +11576,42 @@ public:
          return;
         }
       m_ready=true;
+      // Configuration is not proof of bridge/database readiness. Admission
+      // remains closed until the authenticated health probe succeeds.
+      m_admissionHealthy=false;
+     }
+
+   bool CheckHealth()
+     {
+      if(!m_ready)
+        {
+         m_admissionHealthy=false;
+         return false;
+        }
+      char data[];
+      ArrayResize(data,0);
+      char result[];
+      string resultHeaders;
+      string headers="X-API-Key: "+m_apiKey+"\r\n";
+      ResetLastError();
+      int status=WebRequest("GET",m_baseUrl+"/execution-ledger/health",headers,
+                            m_timeoutMs,data,result,resultHeaders);
+      if(status!=200)
+        {
+         m_admissionHealthy=false;
+         PrintFormat("Midas execution ledger: authenticated health probe failed (HTTP=%d, error=%d); new entries remain blocked.",
+                     status,GetLastError());
+         return false;
+        }
+      string body=CharArrayToString(result,0,-1,CP_UTF8);
+      if(StringFind(body,"\\"execution_ledger\\":\\"ready\\"")<0)
+        {
+         m_admissionHealthy=false;
+         PrintFormat("Midas execution ledger: health response did not confirm execution_ledger=ready; body=%s",body);
+         return false;
+        }
       m_admissionHealthy=true;
+      return true;
      }
 
    bool Ready() const { return m_ready; }
@@ -14633,7 +14668,11 @@ int OnInit()
    g_testerDealExport.Init(InpTesterExportRunId,_Symbol,InpMagicNumber,
                            (bool)MQLInfoInteger(MQL_TESTER));
    if(StringLen(InpExecutionLedgerBaseUrl)>0 && StringLen(InpBridgeApiKey)>0)
+     {
       g_executionLedger.Init(InpExecutionLedgerBaseUrl,InpBridgeApiKey,InpMagicNumber,InpWebRequestTimeoutMs);
+      if(!g_executionLedger.CheckHealth())
+         g_execAudit.Log("EXECUTION_LEDGER_HEALTH_FAILED","authenticated bridge health probe did not confirm database-backed execution_ledger=ready; new entries remain blocked");
+     }
    else
       Print("Midas execution ledger: configure InpExecutionLedgerBaseUrl and InpBridgeApiKey before enabling ledger-enforced entries.");
    g_executionLedgerHealthy=(!InpEnableExecution || !InpRequireExecutionLedger);
@@ -14668,9 +14707,11 @@ int OnInit()
    g_scoring.Init(g_trendCtx,g_bosCtx,g_liqCtx,g_fvgCtx,g_chartCtx,&g_chartCtx.candles);g_scoring.ConfigureMTFStructureAlignment(InpRequireMtfStructureAlignment,InpMtfMaxBosAgeBars);g_scoring.ConfigureInducement(InpImpulseLookbackBars,InpImpulseATRMult,InpImpulseBodyRatio,InpEqualTolATR,InpMaxLegExtend,InpRequirePremiumDiscount,InpRequireDistributionPhase,InpPhaseRangeLookback,InpPhaseCompressionATRMult);g_scoring.ConfigureVolumeFibonacci(InpRequireVolumeConfirmation,InpRVOLThreshold,InpRequireFibonacciZone,InpFibZoneMinPct,InpFibZoneMaxPct);g_scoring.ConfigureValueArea(InpRequireValueAreaLocation,InpBlockValueAreaContradictions);g_scoring.ConfigureHtfOrderBlock(g_htfObCtx,InpRequireHtfOB,InpOBDistATRMax);g_scoring.ConfigureVolatilityRegime(InpBlockLowVolRegime,InpVolRegimeLookback,InpVolRegimeLowPct,InpVolRegimeHighPct);g_scoring.ConfigureSessionFilter(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_operatorSessionFilter.Configure(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_scoring.ConfigureSweepQuality(InpRequireMinSweepGrade,(ENUM_SWEEP_GRADE)InpMinSweepGrade,InpRequireFreshSetup,InpMaxBarsSinceBOS);g_scoring.ConfigureChaseFilter(InpRequireChaseFilter,InpMaxChaseDistATR);g_scoring.ConfigureFVGProximity(InpFVGMaxDistATR);g_scoring.ConfigureLearnedDiagnostics(InpDiagContradictionWeight,InpDiagEnvWeight,InpDiagExecWeight);g_scoring.ConfigureStrategyDiagnostics(InpMomentumBreakoutRecencyBars,InpBreakoutLiqOverlapBars,InpBreakoutExtensionLookbackBars,InpBreakoutExhaustionATRMult,InpMomentumLookbackBars);g_scoring.ConfigureMeanReversionDiagnostics(InpReversionMinStretchATR,InpReversionSRZoneATRTolerance,InpReversionWickRejectionRatio,InpReversionLiqRecencyBars,InpReversionTrendConflictRecencyBars,InpReversionTrendConflictMinStrength);g_scoring.ConfigureKeyLevelDiagnostics(InpKeyLevelLookbackBars,InpKeyLevelSearchATRMax,InpKeyLevelTouchToleranceATRMult,InpKeyLevelAbsorptionMinTouches,InpKeyLevelWickRejectionRatio,InpKeyLevelRoundStep);g_scoring.ConfigureStrategySelection(InpMinSelectionScore);
    g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride);g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,0,0.0,0.0,5,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
    if(StringLen(InpConfigSyncEndpoint)>0){g_configSync.Init(_Symbol,InpConfigSyncEndpoint,InpBridgeApiKey,InpWeightSetVersion,InpWebRequestTimeoutMs);EventSetTimer(MathMax(60,InpConfigSyncPollMinutes*60));}g_tracker.ConfigurePublishing(&g_publisher,InpWeightSetVersion);g_portfolio.Init(g_activeRiskLimits.maxPortfolioRiskPercent,g_activeRiskLimits.maxPositionsPerSymbol,g_activeRiskLimits.maxPositionsPerGroup,InpMagicNumber,&g_risk);g_riskGuard.Init(_Symbol,g_activeRiskLimits.maxDailyLossPercent,g_activeRiskLimits.maxDrawdownPercent,g_activeRiskLimits.deriskStartPercent,g_activeRiskLimits.deriskFloor,InpEnableProgressiveDailyLossDeRisk);if(InpUseNewsFilter)g_newsFilter.Load(InpNewsFilterFile,InpNewsMinutesBefore,InpNewsMinutesAfter);g_scoring.ConfigureNewsAwareness(GetPointer(g_newsFilter),InpNewsWarnMinutesBefore,InpNewsWarnMinutesAfter,InpNewsWarnMultiplier);g_recovery.Init(&g_store,&g_orders,InpMagicNumber,_Symbol);int restored=g_recovery.Recover();if(restored>0)PrintFormat("MedisTouch EA: recovery restored %d live trade(s).",restored);TradeDecisionRecord prior[];int n=g_store.LoadAll(prior);long maxId=0;for(int i=0;i<n;i++)if(prior[i].decision_id>maxId)maxId=prior[i].decision_id;if(maxId>0)g_router.SeedNextId(maxId+1);
-   if(InpEnableExecution && g_executionLedger.Ready())
+   if(InpEnableExecution && g_executionLedger.Ready() && g_executionLedger.AdmissionReady())
      {
-      g_executionLedgerHealthy=ReconcileBrokerStateSnapshot();
+      // Retry authenticated health before database reconciliation. A URL or
+      // cached success is not sufficient to reopen trade admission.
+      g_executionLedgerHealthy=g_executionLedger.CheckHealth() && ReconcileBrokerStateSnapshot();
       if(g_executionLedgerHealthy) g_executionLedger.MarkReconciled();
       if(!g_executionLedgerHealthy)
          g_execAudit.Log("EXECUTION_LEDGER_NOT_READY","broker/database startup reconciliation incomplete; existing positions remain managed, but new EA entries are blocked");
@@ -14680,7 +14721,7 @@ int OnInit()
    else if(InpEnableExecution && InpRequireExecutionLedger)
      {
       g_executionLedgerHealthy=false;
-      g_execAudit.Log("EXECUTION_LEDGER_CONFIGURATION_MISSING","new automated and manual entries remain blocked until bridge URL and API key are configured");
+      g_execAudit.Log("EXECUTION_LEDGER_NOT_READY","bridge health or credentials are unavailable; new automated and manual entries remain blocked while local position protection continues");
      }
    else g_executionLedgerHealthy=true;
    if(StringLen(InpConfigSyncEndpoint)>0 || (InpEnableExecution && InpRequireExecutionLedger) || g_emergencyStop)
