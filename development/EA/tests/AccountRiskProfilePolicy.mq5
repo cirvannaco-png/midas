@@ -173,6 +173,11 @@ int OnInit()
       MathAbs(accountCurrencyPerKES-(1.0/151.0))<0.0000001,
       "inverse account-currency/KES conversion uses the conservative inverse ask");
 
+   double usdCashCap=7.50*0.0065;
+   AssertTrue(ResolveRiskPercentWithCashCap(9.75,20.0,usdCashCap,true,
+      effectiveRisk,reason) && MathAbs(effectiveRisk-0.50)<0.000001,
+      "KES 7.50 converts to account currency before computing the Gold risk percentage");
+
    accountCurrencyPerKES=0.0;
    AssertTrue(!ResolveKESConversionFactorFromQuote(0.0065,0.0066,true,
       D'2026.11.08 08:00:00',D'2026.11.08 10:05:00',3600,accountCurrencyPerKES),
