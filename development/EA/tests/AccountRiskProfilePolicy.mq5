@@ -163,13 +163,13 @@ void OnStart()
 
    double accountCurrencyPerKES=0.0;
    AssertTrue(ResolveKESConversionFactorFromQuote(0.0065,0.0066,true,
-      D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',3600,accountCurrencyPerKES) &&
+      D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',300,accountCurrencyPerKES) &&
       MathAbs(accountCurrencyPerKES-0.0065)<0.0000001,
       "direct KES/account-currency conversion uses the conservative bid");
 
    accountCurrencyPerKES=0.0;
    AssertTrue(ResolveKESConversionFactorFromQuote(150.0,151.0,false,
-      D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',3600,accountCurrencyPerKES) &&
+      D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',300,accountCurrencyPerKES) &&
       MathAbs(accountCurrencyPerKES-(1.0/151.0))<0.0000001,
       "inverse account-currency/KES conversion uses the conservative inverse ask");
 
@@ -180,16 +180,16 @@ void OnStart()
 
    accountCurrencyPerKES=0.0;
    AssertTrue(!ResolveKESConversionFactorFromQuote(0.0065,0.0066,true,
-      D'2026.11.08 08:00:00',D'2026.11.08 10:05:00',3600,accountCurrencyPerKES),
+      D'2026.11.08 08:00:00',D'2026.11.08 10:05:00',300,accountCurrencyPerKES),
       "stale KES conversion ticks are rejected");
    AssertTrue(!ResolveKESConversionFactorFromQuote(0.0,0.0066,true,
-      D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',3600,accountCurrencyPerKES),
+      D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',300,accountCurrencyPerKES),
       "direct conversion without a positive bid is rejected");
    AssertTrue(!ResolveKESConversionFactorFromQuote(150.0,0.0,false,
-      D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',3600,accountCurrencyPerKES),
+      D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',300,accountCurrencyPerKES),
       "inverse conversion without a positive ask is rejected");
    AssertTrue(!ResolveKESConversionFactorFromQuote(150.0,151.0,false,
-      D'2026.11.08 10:06:00',D'2026.11.08 10:05:00',3600,accountCurrencyPerKES),
+      D'2026.11.08 10:06:00',D'2026.11.08 10:05:00',300,accountCurrencyPerKES),
       "future-dated conversion ticks are rejected");
 
    PrintFormat("AccountRiskProfilePolicy tests: %d failure(s)",failures);
