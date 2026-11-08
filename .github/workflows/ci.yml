@@ -13,7 +13,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - name: Regenerate the single-file EA from modular sources
+      - name: Verify committed single-file EA on pull requests
+        if: github.event_name == 'pull_request'
+        run: python scripts/build_single_file.py --check
+      - name: Regenerate single-file EA on branch pushes
+        if: github.event_name != 'pull_request'
         run: python scripts/build_single_file.py
       - name: Run structural and safety checks
         run: python scripts/validate_single_file.py
