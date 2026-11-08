@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SOURCE_REPO="https://github.com/cirvannaco-png/Midas-touch2-.git"
-SOURCE_REF="${BACKEND_SOURCE_REF:-main}"
+SOURCE_REF="${BACKEND_SOURCE_REF:-main}" # refresh source snapshot after validated upstream merges
 SOURCE_DIR="${RUNNER_TEMP:-/tmp}/midas-touch2-source"
 DEST_DIR="backend/source"
 
