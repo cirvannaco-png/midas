@@ -63,6 +63,42 @@ The three filtered Causal v2.1 runs processed the complete available market-upda
 4. Do not enable either filter as a live default, and do not lower thresholds to force the daily target. The next analysis should attribute average winning R, average losing R, tail losses, partial-exit contribution, and costs per complete position group; then test one exit change at a time on a matched training range and untouched OOS range.
 5. These runs are strategy-validator diagnostics only. No profitability claim, broker execution claim, or live approval follows from them.
 
+
+## Preserved findings from the earlier position-attribution research branch
+
+The retired research branch contained a separate 500-close-record audit that is not the same experiment as either the 2025 benchmark table above or the fresh 2026 ablations:
+
+- StrategyTune script: `Midas Touch 2 Gold Profit Research — Strict Tier Disabled`.
+- Run ID: `66f36e9d-938a-46b3-b816-7d699df89eb9`; saved record: `f468ly941x0ymssig6z3vstb`.
+- Gold / IC Markets / M15; engine P&L **-$58.74 USD**, maximum drawdown **$120.53**.
+- The engine reported 500 closing records: 442 positive and 58 negative (**88.4% record win rate**).
+- Those records traced to 260 opening fills: 202 net-positive and 58 net-negative (**77.7% position win rate**); grouped profit factor was **0.894**.
+- The run was incomplete and stopped at the order-operation limit during March 2025, before its requested 2025-12-31 endpoint. It is a separate script, not a substitute for the three benchmark variants.
+- In that sample, profitable market-close rows totalled +$400.17 while stop-loss/take-profit rows totalled -$458.91. This is a clue to investigate, not proof that exits alone caused the loss; the complete position paths, cost allocation, MFE/MAE and partial-exit sequence must be reconstructed.
+
+This audit is the clearest existing evidence that a close-record win rate can materially overstate position-level accuracy. Position/decision-level outcomes must remain the primary metric.
+
+## Current MT5 staging defaults and audit implications
+
+The checked EA source currently defaults to:
+- `InpRequireVolumeConfirmation=true`, `InpRVOLThreshold=1.5`, `InpRVOLLookback=20`.
+- `InpRequireFibonacciZone=true`, with a 50.0–61.8% pullback zone.
+- `InpMinDirectionalAdvantage=0.0`; it does not reproduce the research proxy's earlier directional-advantage setting of 8.
+
+The live volume gate reads RVOL from the **most recently closed BOS-context bar (shift 1)**, avoiding partial-bar confirmation. On FX/CFD feeds this is quote/tick activity, not centralized exchange-traded volume. The gate's value must be evaluated per instrument and broker data feed.
+
+The latest StrategyTune filter combination (quote-activity confirmation plus Fibonacci zone) produced no entries over the 88-day research sample. That is **not a direct MT5 EA test**: the research script and EA have different code paths and data/runtime assumptions. It is nevertheless a material risk signal because both filters are enabled in the current EA defaults. Do not silently disable either filter or promote them as proven. The next MT5 Strategy Tester ablation should isolate baseline, volume-only, Fibonacci-only and combined behavior using identical inputs except for the one tested gate.
+
+The EA's daily target is separate from that StrategyTune validator diagnostic: MT5 counts one outcome only after the complete position closes, only when its realized result is at least +0.25R, and only on weekdays. It is passive telemetry and does not change the router or force entries. The research validator's `minDailyTradesTarget=3` diagnostic instead measures daily entry frequency and is not equivalent to three qualified closed winners.
+
+## Calibration and regime attribution gaps
+
+The current calibration engine uses 20 fixed bins, each five raw-confidence points wide, and defaults to 30 resolved win/loss samples per bin. Outcomes are persisted by symbol but are not individually timestamped, and the calibration filename does not carry the decision's calibration/model version. It therefore cannot establish a chronological training/validation boundary or cleanly separate observations produced by different scoring versions.
+
+Before calibration influences entry admission or risk sizing, redesign it to persist timestamped, resolved position outcomes scoped by symbol and model/calibration version; estimate from prior observations only; expose sample adequacy and uncertainty; and return UNKNOWN when data is insufficient. Keep sparse estimates diagnostic only.
+
+The EA has regime and strategy-family diagnostics for SMC, momentum/breakout, mean reversion and key-level reaction. Promotion needs independent sample size, win rate, expectancy, profit factor, drawdown and frequency by strategy family and regime. Do not combine a family into the authoritative router because of a high close-record win rate alone.
+
 ## Next research steps
 
 - Re-run the StrategyTune variants after the daily compute allowance resets, reducing trade-operation consumption (lower daily entry cap and/or less aggressive multi-tranche exits) so each run reaches the same end date. Keep the same instrument, provider, interval, balance, costs assumptions and dates across variants.
