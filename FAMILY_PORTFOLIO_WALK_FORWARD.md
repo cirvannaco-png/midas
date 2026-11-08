@@ -2,7 +2,7 @@
 
 **Status:** Research only. No production EA code or live risk settings changed.  
 **Research script v1.1:** `a15gl2vswagiiobrul4z58uc` (compiled version 9)  
-**Weekend-guard candidate:** `y8hhgudv0ojp8mf4dcmlrqdh` (version 1; compiled successfully)  
+**Current research candidate:** `y8hhgudv0ojp8mf4dcmlrqdh` (version 3; compiled successfully)  
 **Instrument / timeframe:** IC Markets, M15  
 **Report date:** 2026-11-08
 
@@ -171,19 +171,23 @@ The existing telemetry uses a simple 8-bar vs 21-bar mean gap normalized by ATR:
 
 The next version should produce a reliable entry-level audit trail for every opening fill: family, side, quality components, market regime at decision time, stop distance, spread/ATR, volatility and session context. Outcomes must then be reconciled against the saved position ledger. Averages without reliable entry-to-outcome linkage are not adequate for false-positive attribution.
 
-## Research-only weekend guard added
+## Research harness v2.2 — family regimes, exits and weekend protection
 
-A separate StrategyTune strategy was created and compiled successfully:
+A separate StrategyTune research strategy is maintained independently from the consolidated production MQL5 EA:
 
-- **Name:** MT2 Family Research v2 — Weekend Guard Candidate
+- **Name:** MT2 Family Research v2.2 — Regime and Family Exits
 - **Script ID:** `y8hhgudv0ojp8mf4dcmlrqdh`
-- **Version:** 1
-- **Compile status:** valid
-- **New inputs:** `avoidWeekendExposure` (default false, for baseline parity) and `fridayCutoffHourUTC` (default 17).
-- When explicitly enabled for research, the guard blocks entries after the configured Friday UTC cutoff and closes at most one remaining lot per market update. It returns before ordinary entry selection while the guard is active.
-- Counters report Friday flatten actions, failed flatten attempts and blocked entry bars.
+- **Version:** 3
+- **Compile status:** valid; `compileFailed=false`
+- **New weekend behaviour:** when `avoidWeekendExposure=true`, block entries after the Friday UTC cutoff, flatten the entire net position through one `closePosition()` request, and block Saturday/Sunday entries. Diagnostics report flatten calls, failures, lots targeted, bars blocked and residual lots at finish.
+- **Regime eligibility:** optional `rangeOnlySingleSwing` and `trendOnlyContinuation` gates. The existing research proxy is absolute 8-bar vs 21-bar mean separation divided by ATR: range below 0.20, transition from 0.20 to below 0.45, trend at or above 0.45. Enabling the family-specific gates excludes the transition bucket from both specialist families. This is a study proxy, not the production EA's classifier.
+- **Independent stop controls:** separate stop buffer and maximum stop-distance inputs for sweep/reclaim and continuation families.
+- **Independent exit controls:** separate TP1/TP2 R multiples, partial-close fractions, BE offsets in R, and trailing ATR distances for each family. Defaults match the previously tested shared exit configuration, preserving baseline behaviour until the inputs are deliberately varied.
+- **Safety:** `minDailyTrades` remains diagnostic only; it does not force entries. This remains research code and is not deployed in the production EA.
 
-This is not added to the production MQL5 EA and is not yet validated. It must be tested on training data first, then a genuinely untouched later holdout. The May data that exposed the problem is now known and cannot be presented as an untouched validation period for this guard.
+The guard uses one account-wide flatten request to reduce the chance of leaving residual lots at the weekend boundary. If multiple lots close on the same update, the script's single-`lastClosedTrade` attribution path can miss close events; it explicitly invalidates the internal tracker when that occurs. Full-position outcomes must then be rebuilt from saved session rows grouped by original opening fill. A compile success is not a performance validation.
+
+The previous v2.0 guard closed only one lot per update and blocked only Friday-after-cutoff entries. Version 3 supersedes that weaker behaviour. No backtest has yet been run on the new guard or the family-specific regime/exit controls.
 
 ## Walk-forward status and next tests
 
@@ -198,7 +202,7 @@ A valid next sequence is:
 4. Repeat sequentially. Never tune on a month after inspecting its validation result and still call that month an out-of-sample holdout.
 5. Run a shared-allocator portfolio simulation in MT5 Strategy Tester, including cross-symbol risk, correlation, weekend rules, gaps and broker execution. StrategyTune's independent symbol runs cannot prove this.
 
-The current StrategyTune daily compute use reached approximately 586 of 600 seconds. No additional StrategyTune backtests were started after that limit was reached. The weekend guard has only been compiled; no performance claim is made for it.
+The last completed StrategyTune run reported 586 of 600 daily compute seconds used. No further backtests were launched after that reading. Version 3 of the research harness compiled successfully, but the weekend guard, regime gates and family-specific stop/exit controls have no measured performance result yet.
 
 ## Promotion gates
 
