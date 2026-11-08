@@ -206,7 +206,7 @@ input int InpMaxPositionsPerGroup=3;
 // gaps, slippage, commission and swaps. These are not profit guarantees.
 // The EA rejects a trade if broker minimum volume would exceed its budget.
 input group "Risk Profile — Small Account (high-risk; validate on demo first)"
-input double InpSmallMinimumRiskPercentPerTrade=15.0;
+input double InpSmallMinimumRiskPercentPerTrade=15.0; // Applies to non-Gold small-account trades; the KES Gold cash cap is the stricter exception.
 input double InpSmallRiskPercentPerTrade=20.0; // Target; hard cap is shared with lot sizing
 input int    InpSmallMaxOpenTrades=3;           // Ceiling; runtime admits one initially and expands conditionally
 input double InpSmallMaxDailyLossPercent=25.0;
