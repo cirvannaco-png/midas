@@ -14,7 +14,7 @@ The EA owns market analysis, signal generation, strategy selection, risk sizing,
 
 The bridge is a separate FastAPI service backed by PostgreSQL. It provides authenticated execution reservations, idempotent state transitions, position/order/deal synchronization, and restart/history reconciliation. It **does not submit or retry broker orders**; the EA remains the sole broker execution authority.
 
-The EA requires an authenticated `GET /execution-ledger/health` probe returning HTTP 200 and `execution_ledger=ready`, followed by successful broker snapshot and history reconciliation, before new ledger-enforced entries are allowed. If the bridge or ledger is unavailable, new entries fail closed. Local protective management of already-open broker positions remains an EA responsibility.
+The EA requires an authenticated `GET /execution-ledger/health` probe returning HTTP 200 with both `execution_ledger=ready` and `ledger_schema=ready` and `ledger_schema=ready`, followed by successful broker snapshot and history reconciliation, before new ledger-enforced entries are allowed. If the bridge or ledger is unavailable, new entries fail closed. Local protective management of already-open broker positions remains an EA responsibility.
 
 The bridge API uses `X-API-Key`. Configure the HTTPS base URL and key through EA inputs locally; do not commit credentials. Add the bridge origin to MT5's **Tools → Options → Expert Advisors → Allow WebRequest for listed URL** setting.
 
