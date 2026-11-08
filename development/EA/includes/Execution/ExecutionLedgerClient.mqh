@@ -94,6 +94,15 @@ public:
 
    bool CheckHealth()
      {
+      // MetaTrader explicitly disallows WebRequest inside Strategy Tester agents.
+      // Research backtests must run with the bridge disconnected and ledger admission
+      // explicitly disabled; demo/live operation remains fail-closed by default.
+      if((bool)MQLInfoInteger(MQL_TESTER))
+        {
+         m_admissionHealthy=false;
+         Print("Midas execution ledger: WebRequest is unavailable in Strategy Tester; disable ledger enforcement only for isolated backtests.");
+         return false;
+        }
       if(!m_ready)
         {
          m_admissionHealthy=false;
