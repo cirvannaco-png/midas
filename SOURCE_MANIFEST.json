@@ -481,5 +481,490 @@
       "size_bytes": 1817
     }
   ],
-  "note": "Original modular source retained under development/EA; production amalgamation generated from active include closure."
+  "note": "files[] is the immutable upstream baseline snapshot. current_source_snapshot pins the complete staged EA development tree used to generate the distributable root EA. The validator checks every staged file's exact Git blob SHA and ensures no unmanifested source file is present.",
+  "current_source_snapshot": {
+    "repository": "cirvannaco-png/midas",
+    "branch": "build/single-file-staging",
+    "commit": "142bf7d477b527c01b4a717af7f33f85f5e284ce",
+    "git_tree_sha": "ac3f2e3028956eaee38b64082c7ce0250376d097",
+    "root": "development/EA",
+    "file_count": 95,
+    "files": [
+      {
+        "path": "development/EA/includes/Analysis/Scoring.mqh",
+        "git_blob_sha": "589618f324666c242e5982f30271fd959791241b",
+        "size_bytes": 58341
+      },
+      {
+        "path": "development/EA/includes/Analysis/TFContext.mqh",
+        "git_blob_sha": "aa0d30d3cf8f7b54cdfc3a860a5f31ee30a3d425",
+        "size_bytes": 9110
+      },
+      {
+        "path": "development/EA/includes/Analysis/TopDownMTFEngine.mqh",
+        "git_blob_sha": "ac1422737b817bcda15dac1c66bc509a61639ecc",
+        "size_bytes": 6765
+      },
+      {
+        "path": "development/EA/includes/Analysis/TrendEngine.mqh",
+        "git_blob_sha": "5d6daea35b9233041fd9aeda3cfc468302e54009",
+        "size_bytes": 2482
+      },
+      {
+        "path": "development/EA/includes/Analysis/VolatilityRegime.mqh",
+        "git_blob_sha": "b20c17f51e9761d745227711248187e20321a793",
+        "size_bytes": 3201
+      },
+      {
+        "path": "development/EA/includes/Core/BrokerMarketAvailability.mqh",
+        "git_blob_sha": "0c426b6fe29df4845e212e343d94abb2952f8cbb",
+        "size_bytes": 3469
+      },
+      {
+        "path": "development/EA/includes/Core/CandleData.mqh",
+        "git_blob_sha": "564383e1b8d3aea332a3d69b08a5a4160e665b3d",
+        "size_bytes": 4056
+      },
+      {
+        "path": "development/EA/includes/Core/Config.mqh",
+        "git_blob_sha": "2c5d2c474fbd287296f259f754729424ac68a85d",
+        "size_bytes": 10192
+      },
+      {
+        "path": "development/EA/includes/Core/NewsFilter.mqh",
+        "git_blob_sha": "dd4c880c6320369ab932fdff8444376503c133a6",
+        "size_bytes": 7420
+      },
+      {
+        "path": "development/EA/includes/Core/ObjectManager.mqh",
+        "git_blob_sha": "afe72029ee1634170eb758aa5c2d1d91320c16d2",
+        "size_bytes": 6806
+      },
+      {
+        "path": "development/EA/includes/Core/PipCalculator.mqh",
+        "git_blob_sha": "9bb3923279aa917291a091c57ff92d3158fe1647",
+        "size_bytes": 3418
+      },
+      {
+        "path": "development/EA/includes/Core/SessionFilter.mqh",
+        "git_blob_sha": "9f93943735f6b4deae448a899653192afa20a02a",
+        "size_bytes": 9038
+      },
+      {
+        "path": "development/EA/includes/Core/SignalLogger.mqh",
+        "git_blob_sha": "f328b27d8415ffb6abbf788005a0878cc8e7134d",
+        "size_bytes": 26061
+      },
+      {
+        "path": "development/EA/includes/Decision/DecisionEngine.mqh",
+        "git_blob_sha": "db50040f950c3806f278023eeeccd67d518a9ebc",
+        "size_bytes": 8007
+      },
+      {
+        "path": "development/EA/includes/Decision/DecisionFingerprint.mqh",
+        "git_blob_sha": "18e6c64c613029617b08f463d8a4681a3f719b12",
+        "size_bytes": 2941
+      },
+      {
+        "path": "development/EA/includes/Decision/DecisionStore.mqh",
+        "git_blob_sha": "33e7101eb14222d2284359be27548af49836e158",
+        "size_bytes": 10214
+      },
+      {
+        "path": "development/EA/includes/Decision/DecisionTraceLogger.mqh",
+        "git_blob_sha": "08e7f8c50207ef190963f952643194e6edb51d87",
+        "size_bytes": 3792
+      },
+      {
+        "path": "development/EA/includes/Decision/MarketConditionsPolicy.mqh",
+        "git_blob_sha": "c12f96ccbceae6f1b69935bf075b6336248eebe0",
+        "size_bytes": 7705
+      },
+      {
+        "path": "development/EA/includes/Decision/RegimeShadowLogger.mqh",
+        "git_blob_sha": "b0c8e56680229af2fd622df624feaa4735c430ab",
+        "size_bytes": 8298
+      },
+      {
+        "path": "development/EA/includes/Decision/TradeDecision.mqh",
+        "git_blob_sha": "8aba66fce35bbe5192fc9ad5cf7b792f9d01e613",
+        "size_bytes": 1887
+      },
+      {
+        "path": "development/EA/includes/Execution/BrokerAdapter.mqh",
+        "git_blob_sha": "1bd0b532cfa7b02130ab2bcfdfbf9ac8cb57e665",
+        "size_bytes": 24803
+      },
+      {
+        "path": "development/EA/includes/Execution/DynamicStopEngine.mqh",
+        "git_blob_sha": "1b01921891113fd0327f048be081755dd6fc9ec7",
+        "size_bytes": 8763
+      },
+      {
+        "path": "development/EA/includes/Execution/DynamicStopInputs.mqh",
+        "git_blob_sha": "b3b3e0a8c7629dfce57fa17dacae0f7e149f9422",
+        "size_bytes": 1482
+      },
+      {
+        "path": "development/EA/includes/Execution/ExecutionAudit.mqh",
+        "git_blob_sha": "39977baf965c2903e39efec0e09cb8131ea99608",
+        "size_bytes": 1955
+      },
+      {
+        "path": "development/EA/includes/Execution/ExecutionLedgerClient.mqh",
+        "git_blob_sha": "2486c641c738b5da61e14ee69c753f41c18127ea",
+        "size_bytes": 16979
+      },
+      {
+        "path": "development/EA/includes/Execution/OrderManager.mqh",
+        "git_blob_sha": "9fb1315e1a6db896b7ba364bd991bb3fe9b8b475",
+        "size_bytes": 15987
+      },
+      {
+        "path": "development/EA/includes/Execution/PositionManagementPolicy.mqh",
+        "git_blob_sha": "92f04e57a34fd6de06cfd42e876739bc3281c20e",
+        "size_bytes": 1109
+      },
+      {
+        "path": "development/EA/includes/Execution/PositionManager.mqh",
+        "git_blob_sha": "9f28ef528524f534755921919809e793c6fbd763",
+        "size_bytes": 13636
+      },
+      {
+        "path": "development/EA/includes/Execution/PriceGridNormalizer.mqh",
+        "git_blob_sha": "99fd35bbcdf5e5b48eb3c8f2543ab4140ec5bbed",
+        "size_bytes": 2706
+      },
+      {
+        "path": "development/EA/includes/Execution/TesterDealExport.mqh",
+        "git_blob_sha": "9a41e018603a6886b9d1d3a132fe621b629b8487",
+        "size_bytes": 10708
+      },
+      {
+        "path": "development/EA/includes/Execution/TradeStateMachine.mqh",
+        "git_blob_sha": "4f89105d1c9dd4e1879bb3010e0792f4b4293354",
+        "size_bytes": 10473
+      },
+      {
+        "path": "development/EA/includes/HTF_OrderBlock.mqh",
+        "git_blob_sha": "ceaedf4d47e2ba28f431776eb01c218934bbf255",
+        "size_bytes": 1242
+      },
+      {
+        "path": "development/EA/includes/InducementEngine.mqh",
+        "git_blob_sha": "96f24af66a084b6fd1f527e2cc2361366c573ade",
+        "size_bytes": 1229
+      },
+      {
+        "path": "development/EA/includes/KeyLevelReaction.mqh",
+        "git_blob_sha": "6deb72b07b085d03090899e78112584150645b83",
+        "size_bytes": 1273
+      },
+      {
+        "path": "development/EA/includes/MeanReversion.mqh",
+        "git_blob_sha": "c130cdb6a54ed1e6d315d4e46ec9a614b322b2fe",
+        "size_bytes": 1072
+      },
+      {
+        "path": "development/EA/includes/MomentumBreakout.mqh",
+        "git_blob_sha": "2b07c7782996a21e1044d5a82231ac871e02a7c4",
+        "size_bytes": 1022
+      },
+      {
+        "path": "development/EA/includes/Monitoring/ProductionMonitor.mqh",
+        "git_blob_sha": "7d8c7483578e6e70ef251158b1eccd19c1d57753",
+        "size_bytes": 8274
+      },
+      {
+        "path": "development/EA/includes/Monitoring/SLModificationAudit.mqh",
+        "git_blob_sha": "59f54c25e93718d78e5e47260ee5935c8db31911",
+        "size_bytes": 1962
+      },
+      {
+        "path": "development/EA/includes/Portfolio/AccountRiskProfilePolicy.mqh",
+        "git_blob_sha": "6386b89364d3d613b1c65bde606d5d272ce93edc",
+        "size_bytes": 6329
+      },
+      {
+        "path": "development/EA/includes/Portfolio/EnvironmentPolicy.mqh",
+        "git_blob_sha": "e1a0b53109d868ebfbcf306b231da98a67f73203",
+        "size_bytes": 3519
+      },
+      {
+        "path": "development/EA/includes/Portfolio/MultiTradeEngine.mqh",
+        "git_blob_sha": "5184ff6b9cc704aefa6f5f0ded2b94f0b8eae411",
+        "size_bytes": 5607
+      },
+      {
+        "path": "development/EA/includes/Portfolio/OpposingPositionPolicy.mqh",
+        "git_blob_sha": "3909498933d375f40803b5c53a3f889dc0a9ae8d",
+        "size_bytes": 2958
+      },
+      {
+        "path": "development/EA/includes/Portfolio/PortfolioManager.mqh",
+        "git_blob_sha": "d1ec73b49719106b5e00c8dd1fa6d3ae35032eaa",
+        "size_bytes": 7765
+      },
+      {
+        "path": "development/EA/includes/Portfolio/RiskGuard.mqh",
+        "git_blob_sha": "bd83388578ff2c41029ac17702d9576a9b8306f7",
+        "size_bytes": 9740
+      },
+      {
+        "path": "development/EA/includes/Recovery/RecoveryEngine.mqh",
+        "git_blob_sha": "6ad67dd114a3dd961a9ed02fce4d13a630dfefc6",
+        "size_bytes": 7391
+      },
+      {
+        "path": "development/EA/includes/Regime/RegimeDetector.mqh",
+        "git_blob_sha": "8643c2f19bb61f0a6ce776dcca19523d4566403a",
+        "size_bytes": 4357
+      },
+      {
+        "path": "development/EA/includes/RegimeDetector.mqh",
+        "git_blob_sha": "5e9b59b54f6b845c2dc044b55918035766dcf492",
+        "size_bytes": 900
+      },
+      {
+        "path": "development/EA/includes/Signals/ConfigSync.mqh",
+        "git_blob_sha": "204d81468bcb6ecb2fc8af52496eac9d6d62c3fd",
+        "size_bytes": 6814
+      },
+      {
+        "path": "development/EA/includes/Signals/ConfigSyncContract.mqh",
+        "git_blob_sha": "19e3f51ef2f04cd77162f75db8fc1ffde242a7f2",
+        "size_bytes": 4378
+      },
+      {
+        "path": "development/EA/includes/Signals/SignalPublisher.mqh",
+        "git_blob_sha": "601cfc2364387b34036a23d23515a3b767aaae6e",
+        "size_bytes": 19283
+      },
+      {
+        "path": "development/EA/includes/Signals/SubscriberPlatform.mqh",
+        "git_blob_sha": "7bcd5e2eeac76732511e84bc33bcdb4308abd88d",
+        "size_bytes": 5873
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/ExtendedKeyLevels.mqh",
+        "git_blob_sha": "c2d705b85e633bcf585cd29924f5e19268c0416e",
+        "size_bytes": 8538
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/FibonacciEngine.mqh",
+        "git_blob_sha": "74df9e8c41352e1c43ad99d83e1aa0992b367380",
+        "size_bytes": 8793
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/FVG.mqh",
+        "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
+        "size_bytes": 5668
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/Inducement.mqh",
+        "git_blob_sha": "b9a1da8d19a27100f531b3931dc8a9b523b5076e",
+        "size_bytes": 21534
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/Liquidity.mqh",
+        "git_blob_sha": "cb1ebd88058883447af64b115e8c324aed0645b2",
+        "size_bytes": 15822
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/MarketPhase.mqh",
+        "git_blob_sha": "6dbbef36bfa35c4e78d7cd5be0c3b75c1a6f27d1",
+        "size_bytes": 4111
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/OrderBlock.mqh",
+        "git_blob_sha": "5ef95357838c159a9183876f5f0a8ee7f43c131f",
+        "size_bytes": 10148
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/PremiumDiscount.mqh",
+        "git_blob_sha": "922edf1a56bcd0ca8d85efc85774b5bb97e691ca",
+        "size_bytes": 1944
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/SMCStructuralValidator.mqh",
+        "git_blob_sha": "e7a7383a8e47230bb8fcb8adf9deb3a28eff16c2",
+        "size_bytes": 10620
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/SupportResistance.mqh",
+        "git_blob_sha": "31e7cf185c54a14a96dab6f6255859cb68346a23",
+        "size_bytes": 4878
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/ValueAreaEngine.mqh",
+        "git_blob_sha": "c6d538ec470f6170043d122e6432df4bef389e01",
+        "size_bytes": 16342
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/VolumeEngine.mqh",
+        "git_blob_sha": "07d3abe6d5fee9a7e2152275c77f14490dffe7a3",
+        "size_bytes": 4719
+      },
+      {
+        "path": "development/EA/includes/Strategies/KeyLevelReaction.mqh",
+        "git_blob_sha": "62b53fe2a8fd892b378c9643391ea7bb794bb888",
+        "size_bytes": 16709
+      },
+      {
+        "path": "development/EA/includes/Strategies/MeanReversion.mqh",
+        "git_blob_sha": "94c31a5909ce116346fcc3cda2ccc6de66cf2f1d",
+        "size_bytes": 12731
+      },
+      {
+        "path": "development/EA/includes/Strategies/MomentumBreakout.mqh",
+        "git_blob_sha": "8d4ec610b90355944ec3cc5fe52510f2cad3a783",
+        "size_bytes": 10666
+      },
+      {
+        "path": "development/EA/includes/Strategies/StrategySelector.mqh",
+        "git_blob_sha": "a5aca8743d1982451fd2d9ff706c077f93d89b82",
+        "size_bytes": 4824
+      },
+      {
+        "path": "development/EA/includes/StrategySelector.mqh",
+        "git_blob_sha": "d17919154188e48c908410d5e5347194d11e3d89",
+        "size_bytes": 1178
+      },
+      {
+        "path": "development/EA/includes/Structure/BOS.mqh",
+        "git_blob_sha": "3e18afe9d14bcd4a37b19b5e5c91d90b725bdaa2",
+        "size_bytes": 7485
+      },
+      {
+        "path": "development/EA/includes/Structure/CHOCH.mqh",
+        "git_blob_sha": "643c1dd6a4f3f0e812ff2708f51ae798ab604c73",
+        "size_bytes": 3955
+      },
+      {
+        "path": "development/EA/includes/Structure/SwingDetector.mqh",
+        "git_blob_sha": "902f67a177c2bba63bf9a29723aa7ce46fa23f76",
+        "size_bytes": 5302
+      },
+      {
+        "path": "development/EA/includes/Trading/AccuracyPolicyShadow.mqh",
+        "git_blob_sha": "f034fe5521c69e266666c098f6b8e3f79e8207be",
+        "size_bytes": 2376
+      },
+      {
+        "path": "development/EA/includes/Trading/CalibrationEngine.mqh",
+        "git_blob_sha": "4e2432b2504371191dcae820bc87f800c7af6143",
+        "size_bytes": 7826
+      },
+      {
+        "path": "development/EA/includes/Trading/DailyTradeTarget.mqh",
+        "git_blob_sha": "3167c7a1f6cb28d3319536c8e94dcae62dc53c37",
+        "size_bytes": 15894
+      },
+      {
+        "path": "development/EA/includes/Trading/EnvironmentStrategyMemory.mqh",
+        "git_blob_sha": "e202b4e0ce8e003e9eb97d7deeb0b8125b72e726",
+        "size_bytes": 6901
+      },
+      {
+        "path": "development/EA/includes/Trading/OutcomeTracker.mqh",
+        "git_blob_sha": "cc360df2d77000970ef50459ee324fc25b8753ff",
+        "size_bytes": 24897
+      },
+      {
+        "path": "development/EA/includes/Trading/OutcomeTrackerLive.mqh",
+        "git_blob_sha": "52cfde06c000049aab28184e1495eb1622a590bd",
+        "size_bytes": 32790
+      },
+      {
+        "path": "development/EA/includes/Trading/RiskEngine.mqh",
+        "git_blob_sha": "b73d4666677e2896130b7c63ae2b95906be38a40",
+        "size_bytes": 9272
+      },
+      {
+        "path": "development/EA/includes/Trading/StrategySetupBuilders.mqh",
+        "git_blob_sha": "f4a31076e456aed92e03c60ce48a8b2ae60bb289",
+        "size_bytes": 6149
+      },
+      {
+        "path": "development/EA/includes/Trading/StrategyTradeZone.mqh",
+        "git_blob_sha": "d88fe751466745d10a0464079992e307dddac664",
+        "size_bytes": 13523
+      },
+      {
+        "path": "development/EA/includes/Trading/Targets.mqh",
+        "git_blob_sha": "0dd121bd3cc51fa8db955f63e0a93473c8830059",
+        "size_bytes": 4273
+      },
+      {
+        "path": "development/EA/includes/Trading/TradeZone.mqh",
+        "git_blob_sha": "0a0a765a52fa43d73772a1a0ffb6da424081b4db",
+        "size_bytes": 800
+      },
+      {
+        "path": "development/EA/includes/UI/Dashboard.mqh",
+        "git_blob_sha": "6162f2889c36ebdc91c472b7ea3139b35fdb5c8f",
+        "size_bytes": 8828
+      },
+      {
+        "path": "development/EA/includes/UI/TradeControlPanel.mqh",
+        "git_blob_sha": "7368a18d9fc6938d2f290546a0323dede98a703f",
+        "size_bytes": 5426
+      },
+      {
+        "path": "development/EA/includes/UI/Visuals.mqh",
+        "git_blob_sha": "15f3f29755be64ed14a250cd820c7cb5e9584f71",
+        "size_bytes": 7655
+      },
+      {
+        "path": "development/EA/includes/VolatilityRegime.mqh",
+        "git_blob_sha": "26f21d5a2d07ec4e1f48f89669053a82f96f6781",
+        "size_bytes": 1047
+      },
+      {
+        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
+        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
+        "size_bytes": 15553
+      },
+      {
+        "path": "development/EA/MedisTouch_v2.8.mq5",
+        "git_blob_sha": "08349ab97f15f7868f377b2fe3463dbe44ba8c9d",
+        "size_bytes": 100698
+      },
+      {
+        "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
+        "git_blob_sha": "3e1de3a897f5746d1552fe799674a38096ee7872",
+        "size_bytes": 6291
+      },
+      {
+        "path": "development/EA/tests/ConfigSyncContract.mq5",
+        "git_blob_sha": "063c1470d8792f57c61da2597b4a7eb50d401256",
+        "size_bytes": 1813
+      },
+      {
+        "path": "development/EA/tests/DecisionEngineGeometry.mq5",
+        "git_blob_sha": "041cdeec7b29d95f5724c415b72412a8819f6105",
+        "size_bytes": 2423
+      },
+      {
+        "path": "development/EA/tests/DynamicStopEngine.mq5",
+        "git_blob_sha": "4ad59767bbd3fa7a7030fccaad1ae383d624af8c",
+        "size_bytes": 8333
+      },
+      {
+        "path": "development/EA/tests/OpposingPositionPolicy.mq5",
+        "git_blob_sha": "d7ebd3ab49430be34fa937b68996f2955b922103",
+        "size_bytes": 4290
+      },
+      {
+        "path": "development/EA/tests/PositionManagementPolicy.mq5",
+        "git_blob_sha": "bf9f3034f06a347383b19b2780912405d864139b",
+        "size_bytes": 1275
+      },
+      {
+        "path": "development/EA/tests/ProductionRuntimePreflight.mq5",
+        "git_blob_sha": "950880379115e3769cf5f770b08670c54d940146",
+        "size_bytes": 6984
+      }
+    ]
+  }
 }
