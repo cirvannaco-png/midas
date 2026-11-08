@@ -122,6 +122,21 @@ The earlier source audit found no separate Gold cash-risk ceiling. That gap has 
 
 The current 20% profile remains high-risk for non-Gold instruments: 20% target risk, 15% minimum, 25% daily-loss limit, 35% drawdown limit and 20% portfolio open risk. These values are preserved from the selected profile, not endorsed as prudent. Broker-specific contract, account-currency conversion and actual KSh 7.50 stop-loss behavior still require demo verification before live use.
 
+
+## Implemented Gold cash-risk exception — 2026-11-08
+
+The current staging EA now implements the previously documented KES 7.50 Gold stop-risk ceiling for the small-account profile:
+
+- It applies to symbols containing `XAU` or `GOLD` and caps the **combined risk of one signal**, not each individual leg. Automated multi-leg orders and manual chart orders use the same budget.
+- For a KES-denominated account, the cap is KES 7.50 directly. For other live/demo account currencies, the EA scans available broker symbols for direct KES/account-currency or inverse account-currency/KES pairs. It uses the direct quote bid or inverse quote ask, requires a tick no older than `InpKESConversionMaxQuoteAgeSeconds` (default 3,600 seconds), and rejects Gold entries when no usable quote exists.
+- In Strategy Tester, a non-KES account must explicitly set `InpAccountCurrencyPerKES` (account-currency units per one KES). The default is zero, which deliberately fails closed rather than guessing an exchange rate.
+- Gold sizing uses the adverse edge of the configured `InpMaxEntryDeviationATR` band when calculating stop risk, then checks the actual proposed volume against the converted account-currency cap. Broker volume is rounded down; a minimum lot that still exceeds KES 7.50 is rejected.
+- The existing 20% small-account profile remains unchanged for non-Gold instruments. Its 20% target/15% minimum/25% daily loss/35% drawdown/20% portfolio open-risk settings remain high-risk and are not endorsed for live use.
+
+Pure policy tests now cover Gold symbol recognition, preservation of non-Gold risk, conversion of KES cash cap to an equity risk percentage, direct/inverse FX quote math, stale/future/zero quote rejection, and cash-cap boundary behavior. The current GitHub workflow compiles both the consolidated EA and the dedicated `AccountRiskProfilePolicy.mq5` test source; this is compile evidence, not evidence that the assertion script has been executed on an MT5 terminal.
+
+Demo validation must still verify the broker actually supplies the expected KES cross, the quote age behaves correctly during market sessions, the Gold contract's stop-loss cash calculation matches `OrderCalcProfit`, adverse-fill sizing stays within the cap, and the EA rejects minimum-lot breaches. This does not authorize live trading.
+ 
 ## Next research steps
 
 - Re-run the StrategyTune variants after the daily compute allowance resets, reducing trade-operation consumption (lower daily entry cap and/or less aggressive multi-tranche exits) so each run reaches the same end date. Keep the same instrument, provider, interval, balance, costs assumptions and dates across variants.
