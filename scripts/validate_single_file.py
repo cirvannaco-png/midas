@@ -92,7 +92,7 @@ def main():
             path=actual.get(rel)
             if path is None: continue
             data=path.read_bytes()
-            blob=hashlib.sha1(b"blob "+str(len(data)).encode("ascii")+b"\\0"+data).hexdigest()
+            blob=hashlib.sha1(b"blob "+str(len(data)).encode("ascii")+b"\0"+data).hexdigest()
             if blob!=item.get("git_blob_sha"):
                 fail.append("staged source hash mismatch: "+rel)
             if len(data)!=item.get("size_bytes"):
