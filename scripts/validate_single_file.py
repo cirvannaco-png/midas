@@ -64,8 +64,12 @@ def main():
         "Gold risk percent is capped by KES-derived account money":r'ResolveRiskPercentWithCashCap\(equity,g_activeRiskLimits\.riskPercentPerTrade[\s\S]{0,160}goldCashCapMoney,true,effectiveRiskPercent',
         "Gold exception is isolated from other symbols":r'!IsGoldRiskLimitedSymbol\(_Symbol\)',
         "automated sizing uses capped risk percent":r'CalculateLotSize\(_Symbol,effectiveRiskPercent\*fraction',
+        "automated Gold sizing uses worst permitted adverse entry":r'riskEntry\s*=\s*\(decision\.setup\.type\s*==\s*ORDER_TYPE_BUY\s*\?\s*entry\s*\+\s*maxDeviation\s*:\s*entry\s*-\s*maxDeviation\)',
+        "automated stop risk is measured at worst permitted fill":r'CalculateLotSize\(_Symbol,effectiveRiskPercent\*fraction,riskEntry[\s\S]{0,250}RiskAmountForLots\(_Symbol,legLots\[leg\],riskEntry',
         "automated multi-leg risk is capped as one signal":r'GoldStopRiskWithinCashCap\(totalProposedRisk,goldCashCapMoney\)',
-        "manual sizing uses capped risk percent":r'CalculateLotSize\(_Symbol,effectiveRiskPercent,entry,setup\.stop_loss',
+        "manual sizing uses capped risk percent":r'CalculateLotSize\(_Symbol,effectiveRiskPercent,riskEntry,setup\.stop_loss',
+        "manual Gold sizing uses worst permitted adverse entry":r'riskEntry\s*=\s*\(isBuy\s*\?\s*entry\s*\+\s*maxDeviation\s*:\s*entry\s*-\s*maxDeviation\)',
+        "manual stop risk is measured at worst permitted fill":r'RiskAmountForLots\(_Symbol,lots,riskEntry,setup\.stop_loss\)',
         "manual Gold cash risk is capped":r'GoldStopRiskWithinCashCap\(proposedRisk,goldCashCapMoney\)',
         "Gold cap exception does not bypass zero-risk rejection":r'bool\s+SmallAccountRiskFloorSatisfied[\s\S]{0,280}plannedRiskPercent\s*<=\s*0\.0[\s\S]{0,100}if\s*\(goldCashCapApplies\)',
     }
