@@ -2,7 +2,7 @@
 
 **Status:** Research only. No production EA code or live risk settings changed.  
 **Research script v1.1:** `a15gl2vswagiiobrul4z58uc` (compiled version 9)  
-**Current research candidate:** `y8hhgudv0ojp8mf4dcmlrqdh` (version 3; compiled successfully)  
+**Current research candidate:** `y8hhgudv0ojp8mf4dcmlrqdh` (version 4; compiled successfully)  
 **Instrument / timeframe:** IC Markets, M15  
 **Report date:** 2026-11-08
 
@@ -177,7 +177,7 @@ A separate StrategyTune research strategy is maintained independently from the c
 
 - **Name:** MT2 Family Research v2.2 — Regime and Family Exits
 - **Script ID:** `y8hhgudv0ojp8mf4dcmlrqdh`
-- **Version:** 3
+- **Version:** 4
 - **Compile status:** valid; `compileFailed=false`
 - **New weekend behaviour:** when `avoidWeekendExposure=true`, block entries after the Friday UTC cutoff, flatten the entire net position through one `closePosition()` request, and block Saturday/Sunday entries. Diagnostics report flatten calls, failures, lots targeted, bars blocked and residual lots at finish.
 - **Regime eligibility:** optional `rangeOnlySingleSwing` and `trendOnlyContinuation` gates. The existing research proxy is absolute 8-bar vs 21-bar mean separation divided by ATR: range below 0.20, transition from 0.20 to below 0.45, trend at or above 0.45. Enabling the family-specific gates excludes the transition bucket from both specialist families. This is a study proxy, not the production EA's classifier.
@@ -185,7 +185,7 @@ A separate StrategyTune research strategy is maintained independently from the c
 - **Independent exit controls:** separate TP1/TP2 R multiples, partial-close fractions, BE offsets in R, and trailing ATR distances for each family. Defaults match the previously tested shared exit configuration, preserving baseline behaviour until the inputs are deliberately varied.
 - **Safety:** `minDailyTrades` remains diagnostic only; it does not force entries. This remains research code and is not deployed in the production EA.
 
-The guard uses one account-wide flatten request to reduce the chance of leaving residual lots at the weekend boundary. If multiple lots close on the same update, the script's single-`lastClosedTrade` attribution path can miss close events; it explicitly invalidates the internal tracker when that occurs. Full-position outcomes must then be rebuilt from saved session rows grouped by original opening fill. A compile success is not a performance validation.
+The shared break-even input is named `beOffsetR` because the value is applied as a fraction of the original stop distance, not as an ATR multiple. Family-specific break-even inputs use the same R unit. The guard uses one account-wide flatten request to reduce the chance of leaving residual lots at the weekend boundary. If multiple lots close on the same update, the script's single-`lastClosedTrade` attribution path can miss close events; it explicitly invalidates the internal tracker when that occurs. Full-position outcomes must then be rebuilt from saved session rows grouped by original opening fill. A compile success is not a performance validation.
 
 The previous v2.0 guard closed only one lot per update and blocked only Friday-after-cutoff entries. Version 3 supersedes that weaker behaviour. No backtest has yet been run on the new guard or the family-specific regime/exit controls.
 
