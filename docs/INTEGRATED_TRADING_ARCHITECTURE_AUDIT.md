@@ -5,6 +5,25 @@ at upstream commit 77b180f97855a315d8b62396a50dff8a44643e19.
 
 This is an implementation audit, not a profitability certification.
 
+## 0. Source reconciliation
+
+The imported backend snapshot was compared path-for-path and blob-for-blob
+against upstream main at the recorded commit: 494 upstream files, 494 snapshot
+files, zero missing paths, zero content differences, and zero extra paths.
+
+The root EA source was not overwritten. Comparing the two EA source trees
+shows 95 files in each, with 89 identical files. Five files differ:
+MedisTouch_v2.8.mq5, includes/Execution/ExecutionLedgerClient.mqh,
+includes/Portfolio/AccountRiskProfilePolicy.mqh,
+tests/AccountRiskProfilePolicy.mq5, and tests/ProductionRuntimePreflight.mq5.
+The upstream EA README is retained in the snapshot; the root EA also has the
+root-only AccuracyPolicyShadow.mqh module.
+
+These differences are preserved intentionally. They must be reviewed as
+targeted source reconciliations; copying the older upstream EA files over the
+root Midas versions would risk discarding newer ledger, risk-profile, and
+runtime-preflight behavior.
+
 ## 1. Regime intelligence and strategy eligibility
 
 ### Already implemented
