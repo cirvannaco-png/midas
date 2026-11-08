@@ -107,13 +107,14 @@ void OnStart()
          bool hasOnline = (StringFind(body, quote + "status" + quote + ":" + quote + "online" + quote) >= 0);
          bool hasConnected = (StringFind(body, quote + "database" + quote + ":" + quote + "connected" + quote) >= 0);
          bool hasReady = (StringFind(body, quote + "execution_ledger" + quote + ":" + quote + "ready" + quote) >= 0);
-         apiHealthy = (httpStatus == 200 && hasOnline && hasConnected && hasReady);
+         bool hasSchemaReady = (StringFind(body, quote + "ledger_schema" + quote + ":" + quote + "ready" + quote) >= 0);
+         apiHealthy = (httpStatus == 200 && hasOnline && hasConnected && hasReady && hasSchemaReady);
          if(apiHealthy)
-            Print("LEDGER_API=PASS: authenticated request accepted; API reports online, database connected, execution ledger ready.");
+            Print("LEDGER_API=PASS: authenticated request accepted; API reports online, database connected, execution ledger ready, and ledger schema ready.");
          else if(httpStatus == 401 || httpStatus == 403)
             PrintFormat("LEDGER_API=FAIL: HTTP %d; key rejected. Compare this value with the bridge SECRET_KEY locally; do not print it.", httpStatus);
          else
-            PrintFormat("LEDGER_API=FAIL: HTTP %d; expected HTTP 200 and online/connected/ready response. Response body intentionally not printed.", httpStatus);
+            PrintFormat("LEDGER_API=FAIL: HTTP %d; expected HTTP 200 and exact online/connected/execution_ledger=ready/ledger_schema=ready response. Response body intentionally not printed.", httpStatus);
         }
      }
 
