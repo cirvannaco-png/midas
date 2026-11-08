@@ -41,7 +41,8 @@ def main():
     code=mask(raw); fail=[]
     bridge_checks={
         "authenticated execution-ledger health request":r'WebRequest\s*\(\s*"GET"\s*,\s*m_baseUrl\s*\+\s*"/execution-ledger/health"',
-        "exact execution_ledger readiness token":r'readinessToken\s*=\s*CharToString\(34\)\s*\+\s*"execution_ledger"\s*\+\s*CharToString\(34\)\s*\+\s*":"\s*\+\s*CharToString\(34\)\s*\+\s*"ready"\s*\+\s*CharToString\(34\)',
+        "exact execution_ledger readiness token":r'readinessToken\s*=\s*quote\s*\+\s*"execution_ledger"\s*\+\s*quote\s*\+\s*":"\s*\+\s*quote\s*\+\s*"ready"\s*\+\s*quote',
+        "exact ledger_schema readiness token":r'schemaToken\s*=\s*quote\s*\+\s*"ledger_schema"\s*\+\s*quote\s*\+\s*":"\s*\+\s*quote\s*\+\s*"ready"\s*\+\s*quote',
         "Strategy Tester WebRequest guard":r'bool\s+CheckHealth\s*\(\s*\)\s*\{[\s\S]{0,700}MQLInfoInteger\(MQL_TESTER\)',
         "recovery requires health and reconciliation":r'if\s*\(!\(bool\)MQLInfoInteger\(MQL_TESTER\)[\s\S]{0,700}g_executionLedgerHealthy\s*=\s*g_executionLedger\.CheckHealth\(\)\s*&&\s*ReconcileBrokerStateSnapshot\(\)',
         "retry time persisted before retry":r'g_lastLedgerReconcileAttempt\s*=\s*localNow\s*;',
