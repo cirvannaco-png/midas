@@ -25,7 +25,7 @@ void SetLimits(AccountRiskLimits &v,double risk,int openTrades,double daily,doub
    v.maxPositionsPerGroup=perGroup;
   }
 
-int OnInit()
+void OnStart()
   {
    AccountRiskLimits legacy,smallAccount,propFirm,selected;
    SetLimits(legacy,0.50,3,3.0,10.0,5.0,0.25,3.0,3,3);
@@ -193,5 +193,18 @@ int OnInit()
       "future-dated conversion ticks are rejected");
 
    PrintFormat("AccountRiskProfilePolicy tests: %d failure(s)",failures);
-   return failures==0 ? INIT_SUCCEEDED : INIT_FAILED;
+   int resultHandle=FileOpen("AccountRiskProfilePolicy-tests.txt",FILE_WRITE|FILE_TXT|FILE_ANSI);
+   if(resultHandle==INVALID_HANDLE)
+     {
+      PrintFormat("FAIL: could not write policy test result file (error=%d)",GetLastError());
+      if(MQLInfoInteger(MQL_STARTED_FROM_CONFIG)) TerminalClose(2);
+      return;
+     }
+   FileWrite(resultHandle,StringFormat("failures=%d",failures));
+   FileClose(resultHandle);
+
+   // CI starts this as a one-shot startup script; close the portable terminal
+   // with the test result as its process exit code. Manual launches stay open.
+   if(MQLInfoInteger(MQL_STARTED_FROM_CONFIG))
+      TerminalClose(failures==0 ? 0 : 1);
   }
