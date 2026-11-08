@@ -1,5 +1,7 @@
 name: MidasTouch2 source consistency
 on:
+  # Branch pushes regenerate and commit the distributable artifact; pull requests
+  # only verify that the committed artifact already matches the modular source.
   push:
     branches: ["build/**", "release/**"]
   pull_request:
