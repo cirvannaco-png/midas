@@ -99,6 +99,23 @@ Before calibration influences entry admission or risk sizing, redesign it to per
 
 The EA has regime and strategy-family diagnostics for SMC, momentum/breakout, mean reversion and key-level reaction. Promotion needs independent sample size, win rate, expectancy, profit factor, drawdown and frequency by strategy family and regime. Do not combine a family into the authoritative router because of a high close-record win rate alone.
 
+
+## Small-account risk-profile release blocker — 2026-11-08
+
+A source audit of the selected default `ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT` found the current inputs:
+- Target stop risk per trade: **20% of equity**.
+- Minimum allowed planned risk: **15% of equity**.
+- Maximum daily loss: **25% of equity**.
+- Maximum peak drawdown: **35% of equity**.
+- Maximum portfolio open risk: **20% of equity**.
+- Progressive daily loss de-risk is disabled by default. The profile's 0.75 derisk floor still leaves a 15% per-trade target.
+
+On an account with KSh 1,500 equity, that is KSh 300 target stop risk per ordinary trade, KSh 225 minimum accepted planned risk, KSh 375 daily-loss limit and KSh 525 drawdown limit. These are very aggressive settings. They are not equivalent to a 0.5% trade-risk policy.
+
+The lot-sizing engine does correctly round down to the broker's volume step and refuses to raise an undersized request to the broker minimum; the `InpAllowMinLotOverride` input is retained for compatibility but does not override that hard rejection. However, the current source does **not** implement a separate explicit Gold minimum-volume stop-risk ceiling of KSh 7.50. It instead sizes toward the selected account risk budget (and refuses only when the broker minimum lot exceeds that much larger configured budget).
+
+This is a production blocker. The 20% profile and KSh 7.50 Gold-minimum-lot constraint must be made coherent using the actual broker account currency and symbol contract specifications. No currency conversion, broker symbol mapping, or user-selected account currency should be guessed. Do not trade this small-account profile live until the risk policy is explicitly reconciled and verified in broker demo. The existing 20% profile is documented, not endorsed as safe.
+
 ## Next research steps
 
 - Re-run the StrategyTune variants after the daily compute allowance resets, reducing trade-operation consumption (lower daily entry cap and/or less aggressive multi-tranche exits) so each run reaches the same end date. Keep the same instrument, provider, interval, balance, costs assumptions and dates across variants.
