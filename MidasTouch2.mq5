@@ -11583,6 +11583,15 @@ public:
 
    bool CheckHealth()
      {
+      // MetaTrader explicitly disallows WebRequest inside Strategy Tester agents.
+      // Research backtests must run with the bridge disconnected and ledger admission
+      // explicitly disabled; demo/live operation remains fail-closed by default.
+      if((bool)MQLInfoInteger(MQL_TESTER))
+        {
+         m_admissionHealthy=false;
+         Print("Midas execution ledger: WebRequest is unavailable in Strategy Tester; disable ledger enforcement only for isolated backtests.");
+         return false;
+        }
       if(!m_ready)
         {
          m_admissionHealthy=false;
@@ -14754,7 +14763,9 @@ void OnTimer()
          Print("CRITICAL: MidasTouch stop remains active in memory, but persistent restart latch refresh failed.");
         }
      }
-   if(InpEnableExecution && InpRequireExecutionLedger && (!g_executionLedgerHealthy || !g_executionLedger.AdmissionReady()) &&
+   if(!(bool)MQLInfoInteger(MQL_TESTER) &&
+      InpEnableExecution && InpRequireExecutionLedger &&
+      (!g_executionLedgerHealthy || !g_executionLedger.AdmissionReady()) &&
       localNow-g_lastLedgerReconcileAttempt>=MathMax(10,InpExecutionLedgerRetrySeconds))
      {
       // Retry cadence uses local terminal time so recovery continues while the market is closed.
