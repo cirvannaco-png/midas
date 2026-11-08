@@ -1,0 +1,210 @@
+name: Midas Touch CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+      - hardening/production-recovery-reconciliation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: midas-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/telegram-bridge
+
+jobs:
+  python-tests:
+    name: Python tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: telegram-bridge
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: telegram-bridge/requirements-dev.txt
+
+      - name: Install bridge test dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt
+
+      - name: Run bridge tests
+        env:
+          BOT_TOKEN: "123456:test-token"
+          CHAT_ID: "-1000000000"
+          ADMIN_CHAT_ID: "777000777"
+          SECRET_KEY: "test-secret-key"
+          WEBHOOK_SECRET_TOKEN: "test-webhook-secret"
+          DATABASE_URL: "sqlite+aiosqlite:///./ci_test.db"
+          RATE_LIMIT_MAX_REQUESTS: "5"
+          RATE_LIMIT_WINDOW_SECONDS: "60"
+        run: |
+          set -euo pipefail
+          for test_file in tests/test_*.py; do
+            echo "=== $test_file ==="
+            timeout 240 python -m pytest -q "$test_file"
+          done
+
+  migration-smoke:
+    name: PostgreSQL migration smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: midas_migration_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d midas_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: telegram-bridge
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/midas_migration_test
+      BOT_TOKEN: "123456:test-token"
+      CHAT_ID: "-1000000000"
+      ADMIN_CHAT_ID: "777000777"
+      SECRET_KEY: "test-secret-key"
+      WEBHOOK_SECRET_TOKEN: "test-webhook-secret"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install migration dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+
+      - name: Upgrade all migrations, downgrade the new revision, and re-upgrade
+        run: |
+          set -euo pipefail
+          alembic upgrade head
+          alembic downgrade -1
+          alembic upgrade head
+
+  research-tests:
+    name: Research tools tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install research test dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r telegram-bridge/requirements.txt pytest==9.1.1
+
+      - name: Compile all repository Python sources
+        run: python -m compileall -q tools telegram-bridge/app telegram-bridge/migrations telegram-bridge/scripts medis_touch/app medis_touch/tests
+
+      - name: Run tools tests
+        env:
+          BOT_TOKEN: "123456:test-token"
+          CHAT_ID: "-1000000000"
+          ADMIN_CHAT_ID: "777000777"
+          SECRET_KEY: "test-secret-key"
+          WEBHOOK_SECRET_TOKEN: "test-webhook-secret"
+          DATABASE_URL: "sqlite+aiosqlite:///./ci_tools_test.db"
+          RATE_LIMIT_MAX_REQUESTS: "5"
+          RATE_LIMIT_WINDOW_SECONDS: "60"
+        run: python -m pytest -q tools/tests
+
+  mql5-structure:
+    name: MQL5 structural validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate MQL5 include tree
+        run: |
+          python tools/validate_mql5.py EA
+          python tools/validate_mql5_architecture.py
+          python tools/validate_edge_lineage.py
+          python tools/phase_a_d_manifest.py
+
+  handbook-tests:
+    name: Handbook reference tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install handbook dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r medis_touch/requirements-dev.txt
+
+      - name: Run handbook tests
+        run: python -m pytest -q medis_touch/tests
+
+  bridge-quality:
+    name: Bridge quality and security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bridge development tooling
+        run: python -m pip install --upgrade pip && python -m pip install -r telegram-bridge/requirements-dev.txt
+
+      - name: Ruff
+        run: ruff check telegram-bridge/app telegram-bridge/migrations telegram-bridge/scripts telegram-bridge/tests
+
+      - name: Bandit
+        run: bandit -r telegram-bridge/app telegram-bridge/scripts -q
+
+      - name: Dependency audit
+        run: pip-audit -r telegram-bridge/requirements.txt
+
+      - name: Render secret contract tests
+        env:
+          BOT_TOKEN: "123456:ci-placeholder"
+          CHAT_ID: "-1000000000"
+          ADMIN_CHAT_ID: "777000777"
+          SECRET_KEY: "ci-placeholder-secret"
+        run: python telegram-bridge/scripts/render_sync_secrets.py --dry-run
