@@ -1,0 +1,31 @@
+name: Sync Midas-touch2 source snapshot
+
+on:
+  push:
+    branches:
+      - "integration/midas-monorepo-backend-*"
+    paths:
+      - ".github/workflows/backend-source-sync.yml"
+      - "scripts/sync_backend_source.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backend-source-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Midas
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Sync complete backend source snapshot
+        run: bash scripts/sync_backend_source.sh
+

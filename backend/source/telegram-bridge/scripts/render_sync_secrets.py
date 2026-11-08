@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Sync secret env vars to a Render service and (optionally) redeploy.
+
+Why this exists
+---------------
+`render.yaml` declares BOT_TOKEN / CHAT_ID / ADMIN_CHAT_ID / SECRET_KEY /
+WEBHOOK_SECRET_TOKEN
+with `sync: false`, which means Render never manages their values - somebody
+has to paste them into the dashboard by hand. That is exactly how the service
+ended up booting with a WEBHOOK_SECRET_TOKEN that Telegram rejected.
+
+This script makes that step reproducible:
+
+  * values come from the environment (GitLab CI/CD variables in automation),
+  * WEBHOOK_SECRET_TOKEN is generated when absent and always validated
+    against Telegram's ``^[A-Za-z0-9_-]{1,256}$`` before it is uploaded,
+  * env vars are PUT to the Render API, then a deploy is triggered so the
+    new values are actually picked up.
+
+Usage:
+    RENDER_API_KEY=rnd_xxx RENDER_SERVICE_ID=srv-xxx \
+        python scripts/render_sync_secrets.py [--dry-run] [--no-deploy]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import secrets
+import sys
+import urllib.error
+import urllib.request
+
+RENDER_API = "https://api.render.com/v1"
+
+# Same constraint enforced by app.config.Settings._validate_webhook_secret_token.
+TELEGRAM_SECRET_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{1,256}")
+
+# Secrets render.yaml marks `sync: false`. Optional ones are skipped when unset.
+REQUIRED_SECRETS = ("BOT_TOKEN", "CHAT_ID", "ADMIN_CHAT_ID", "SECRET_KEY")
+GENERATED_SECRETS = ("WEBHOOK_SECRET_TOKEN",)
+LEGACY_EXECUTION_ENV_KEY = "MT5_EXECUTION_API_KEY"
+# These settings are required for the bridge to boot. Check key presence before
+# deploying auth changes; never reconstruct or replace the complete env list.
+REQUIRED_RUNTIME_KEYS = ("BOT_TOKEN", "CHAT_ID", "ADMIN_CHAT_ID", "WEBHOOK_SECRET_TOKEN")
+
+
+class RenderSyncError(RuntimeError):
+    """Raised for any unrecoverable configuration or API failure."""
+
+
+def generate_webhook_secret_token() -> str:
+    """Return a token that always satisfies Telegram's charset rule.
+
+    ``token_hex`` is used rather than ``token_urlsafe``/base64 because the
+    latter emit '+', '/' and '=' which Telegram's setWebhook rejects.
+    """
+    return secrets.token_hex(32)
+
+
+def validate_webhook_secret_token(value: str) -> str:
+    if not TELEGRAM_SECRET_TOKEN_RE.fullmatch(value):
+        raise RenderSyncError(
+            "WEBHOOK_SECRET_TOKEN must match ^[A-Za-z0-9_-]{1,256}$ "
+            "(Telegram's requirement for secret_token). "
+            "Regenerate with: openssl rand -hex 32"
+        )
+    return value
+
+
+def collect_bridge_auth(env: dict[str, str]) -> dict[str, str]:
+    """Use the protected GitHub bridge key as the canonical Render auth value."""
+    bridge_key = (env.get("BRIDGE_API_KEY") or "").strip()
+    legacy_key = (env.get("SECRET_KEY") or "").strip()
+    if not bridge_key:
+        raise RenderSyncError("Missing BRIDGE_API_KEY protected GitHub environment secret.")
+    if legacy_key and not secrets.compare_digest(bridge_key, legacy_key):
+        raise RenderSyncError("BRIDGE_API_KEY and SECRET_KEY differ; refusing to rotate production with conflicting values.")
+    return {
+        "SECRET_KEY": bridge_key,
+        "BRIDGE_API_KEY": bridge_key,
+    }
+
+
+def collect_secrets(env: dict[str, str]) -> dict[str, str]:
+    """Build the env-var payload from the process environment."""
+    missing = [k for k in REQUIRED_SECRETS if not env.get(k)]
+    if missing:
+        raise RenderSyncError(
+            "Missing required secret(s): "
+            + ", ".join(missing)
+            + ". Add them as protected/masked GitLab CI/CD variables."
+        )
+
+    bridge_key = env.get("BRIDGE_API_KEY") or env["SECRET_KEY"]
+    if not secrets.compare_digest(bridge_key, env["SECRET_KEY"]):
+        raise RenderSyncError("BRIDGE_API_KEY and SECRET_KEY must be identical; refusing to deploy a mismatched authentication pair.")
+    payload = {k: env[k] for k in REQUIRED_SECRETS}
+    payload["BRIDGE_API_KEY"] = bridge_key
+
+    for key in GENERATED_SECRETS:
+        value = env.get(key) or generate_webhook_secret_token()
+        payload[key] = validate_webhook_secret_token(value)
+
+    return payload
+
+
+def _request(method: str, path: str, api_key: str, body: object | None = None) -> object:
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(  # nosec B310 - fixed https host
+        f"{RENDER_API}{path}",
+        data=data,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
+            raw = resp.read().decode() or "null"
+    except urllib.error.HTTPError as exc:  # surface Render's message verbatim
+        detail = exc.read().decode(errors="replace")
+        raise RenderSyncError(f"Render API {method} {path} failed [{exc.code}]: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RenderSyncError(f"Render API {method} {path} unreachable: {exc.reason}") from exc
+    return json.loads(raw)
+
+
+def put_env_vars(service_id: str, api_key: str, values: dict[str, str]) -> None:
+    """Update only requested keys without replacing the service env-var collection.
+
+    Render's collection-level PUT is destructive: omitted variables are deleted.
+    Use the per-key endpoint instead, and verify boot-critical key presence before
+    changing credentials or triggering a deploy.
+    """
+    current = _request("GET", f"/services/{service_id}/env-vars?limit=100", api_key)
+    if not isinstance(current, list):
+        raise RenderSyncError("Render returned an unexpected environment-variable inventory; refusing to deploy.")
+
+    existing_keys: set[str] = set()
+    for item in current:
+        env_var = item.get("envVar", item) if isinstance(item, dict) else {}
+        key = env_var.get("key") if isinstance(env_var, dict) else None
+        if isinstance(key, str) and key:
+            existing_keys.add(key)
+
+    missing = sorted(set(REQUIRED_RUNTIME_KEYS) - existing_keys)
+    if missing:
+        raise RenderSyncError(
+            "Missing required Render runtime env var(s): "
+            + ", ".join(missing)
+            + ". Restore these in the production service before auth synchronization; refusing to deploy."
+        )
+
+    for key, value in sorted(values.items()):
+        _request(
+            "PUT",
+            f"/services/{service_id}/env-vars/{key}",
+            api_key,
+            {"value": value},
+        )
+
+    # Retire the obsolete second credential using the non-collection endpoint.
+    # A 404 simply means the service-level key is already absent.
+    try:
+        _request("DELETE", f"/services/{service_id}/env-vars/{LEGACY_EXECUTION_ENV_KEY}", api_key)
+    except RenderSyncError as exc:
+        if "[404]" not in str(exc):
+            raise
+
+
+def trigger_deploy(service_id: str, api_key: str) -> str:
+    result = _request("POST", f"/services/{service_id}/deploys", api_key, {"clearCache": "do_not_clear"})
+    if isinstance(result, dict):
+        return str(result.get("id", "unknown"))
+    return "unknown"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dry-run", action="store_true", help="validate only, call no APIs")
+    parser.add_argument("--bridge-auth-only", action="store_true", help="synchronize only SECRET_KEY and BRIDGE_API_KEY from the protected BRIDGE_API_KEY source")
+    parser.add_argument("--no-deploy", action="store_true", help="update env vars but skip redeploy")
+    args = parser.parse_args(argv)
+
+    env = dict(os.environ)
+    try:
+        values = collect_bridge_auth(env) if args.bridge_auth_only else collect_secrets(env)
+    except RenderSyncError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    # Never print values - only key names.
+    print("secrets prepared:", ", ".join(sorted(values)))
+
+    if args.dry_run:
+        print("dry run: no Render API calls made")
+        return 0
+
+    api_key = env.get("RENDER_API_KEY")
+    service_id = env.get("RENDER_SERVICE_ID")
+    if not api_key or not service_id:
+        print("error: RENDER_API_KEY and RENDER_SERVICE_ID must be set", file=sys.stderr)
+        return 1
+
+    try:
+        put_env_vars(service_id, api_key, values)
+        print(f"env vars synced to {service_id}")
+        if not args.no_deploy:
+            print(f"deploy triggered: {trigger_deploy(service_id, api_key)}")
+    except RenderSyncError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
