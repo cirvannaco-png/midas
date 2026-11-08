@@ -1,14 +1,14 @@
 # Integrated trading architecture audit
 
 Audit baseline: Midas root EA source plus the pinned Midas-touch2 backend snapshot
-at upstream commit 77b180f97855a315d8b62396a50dff8a44643e19.
+at upstream commit 52d737237c08f36d668853312f643cb74d4548da.
 
 This is an implementation audit, not a profitability certification.
 
 ## 0. Source reconciliation
 
 The imported backend snapshot was compared path-for-path and blob-for-blob
-against upstream main at the recorded commit: 494 upstream files, 494 snapshot
+against upstream main at the recorded commit: 495 upstream files, 495 snapshot
 files, zero missing paths, zero content differences, and zero extra paths.
 
 The root EA source was not overwritten. Comparing the two EA source trees
@@ -66,6 +66,8 @@ forcing them into trend or range.
    its authority.
 5. Keep the existing router observable in shadow mode during ablations. Do not
    add new hard gates or change default weights until locked OOS evidence passes.
+6. The research tooling now accepts an exact --regime filter in standard and
+   rolling walk-forward reports, in addition to symbol and strategy filters.
 
 ## 2. Portfolio-wide risk and margin
 
@@ -137,14 +139,21 @@ portfolio_key + broker_position_id
 
 Reject conflicting strategy/regime lineage for one position. Partial closes
 must contribute cashflows to the same position outcome and never become
-independent wins. Report strategy-by-regime metrics from completed positions.
+independent wins. Report symbol × strategy × regime metrics from completed
+positions. The refreshed position_ledger_metrics.py now accepts these metadata
+columns, collapses partial exits first, and rejects conflicting lineage. The
+tester CSV does not yet supply strategy/regime automatically; a canonical
+position_id -> execution-ledger leg -> signal metadata export/join remains
+required before the report is considered fully attributed.
 
 ## 4. Walk-forward validation and promotion
 
 The backend snapshot includes strict walk_forward.py, oos_firewall.py,
 position_ledger_metrics.py, regime_allocation.py, cost-stress and matched
-variant tooling. These are useful validation components, not evidence that
-the requested integrated strategy has already passed validation.
+variant tooling. The refreshed tooling can filter by strategy and regime and
+report completed-position metrics by symbol × strategy × regime. These are
+validation capabilities, not evidence that the requested integrated strategy
+has already passed validation.
 
 Required promotion protocol:
 
@@ -164,6 +173,16 @@ Required promotion protocol:
 7. Promote one policy change at a time. Keep the previous policy as champion
    and reject changes that only work in one symbol or market window.
 
+## 5. Tester evidence timestamp integrity
+
+The native tester exporter now requires an explicit, verified historical broker
+server UTC offset. Its default 99999 sentinel disables evidence export until
+the offset is supplied. Exports use ISO-8601 timestamps with the explicit
+offset and record timestamp basis in metadata; they no longer append Z to
+broker-server wall-clock values. Split test runs at server timezone or DST
+transitions. This improves evidence provenance but does not validate a broker
+or any strategy.
+
 ## Release status
 
 - Regime-first routing: implemented; independent family validation remains.
@@ -171,6 +190,7 @@ Required promotion protocol:
   cross-magic consolidation remain.
 - Strategy/regime lineage: signal-level fields exist; per-position attribution
   across multi-leg executions needs a canonical join and tests.
-- Walk-forward tooling: present; integrated multi-instrument locked-OOS
-  evidence is not yet certified.
+- Walk-forward tooling: regime-scoped filters and completed-position
+  symbol/strategy/regime reports are implemented; enriched lineage export and
+  integrated multi-instrument locked-OOS evidence are not yet certified.
 - Live trading promotion: not approved by this audit.
