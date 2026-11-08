@@ -1,7 +1,7 @@
 // MidasTouch2 single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@519df19d7199537bd7e2cc63d2020c4357e31fd1
+// Staged EA source snapshot: cirvannaco-png/midas@ab11e4cc9d7e70d95a01303cbccd71d9bad5d5a6
 // Modular source is preserved under development/EA/.
 // Regenerate with: python scripts/build_single_file.py
 // Do not hand-edit this generated file.
@@ -7683,6 +7683,110 @@ bool ValidateAccountRiskLimits(const AccountRiskLimits &limits,string &reason)
    return true;
   }
 
+// Gold in the small-account profile has an absolute cash-risk exception.
+// The KES budget is converted to account currency by the EA before these pure
+// policy helpers are called. This keeps the 20% profile intact for other assets
+// while preventing Gold from exceeding the operator's separate KES stop-risk cap.
+bool IsGoldRiskLimitedSymbol(const string symbol)
+  {
+   string normalized=symbol;
+   StringToUpper(normalized);
+   return (StringFind(normalized,"XAU")>=0 || StringFind(normalized,"GOLD")>=0);
+  }
+
+bool ResolveKESConversionFactorFromQuote(const double bid,
+                                           const double ask,
+                                           const bool directKESBase,
+                                           const datetime tickTime,
+                                           const datetime now,
+                                           const int maximumAgeSeconds,
+                                           double &accountCurrencyPerKES)
+  {
+   accountCurrencyPerKES=0.0;
+   if(tickTime<=0 || now<tickTime || maximumAgeSeconds<1 ||
+      (long)now-(long)tickTime>maximumAgeSeconds)
+      return false;
+
+   double factor=0.0;
+   if(directKESBase)
+     {
+      // KES/XXX bid = account-currency units received for one KES.
+      if(!MathIsValidNumber(bid) || bid<=0.0) return false;
+      factor=bid;
+     }
+   else
+     {
+      // XXX/KES ask = KES required to buy one account-currency unit.
+      if(!MathIsValidNumber(ask) || ask<=0.0) return false;
+      factor=1.0/ask;
+     }
+
+   if(!MathIsValidNumber(factor) || factor<=0.0) return false;
+   accountCurrencyPerKES=factor;
+   return true;
+  }
+
+bool ResolveRiskPercentWithCashCap(const double equity,
+                                   const double requestedRiskPercent,
+                                   const double goldCapMoney,
+                                   const bool isGold,
+                                   double &effectiveRiskPercent,
+                                   string &reason)
+  {
+   effectiveRiskPercent=0.0;
+   reason="";
+   if(!MathIsValidNumber(equity) || equity<=0.0 ||
+      !MathIsValidNumber(requestedRiskPercent) || requestedRiskPercent<=0.0)
+     {
+      reason="equity and requested risk percent must be finite and positive";
+      return false;
+     }
+
+   effectiveRiskPercent=requestedRiskPercent;
+   if(!isGold) return true;
+
+   if(!MathIsValidNumber(goldCapMoney) || goldCapMoney<=0.0)
+     {
+      effectiveRiskPercent=0.0;
+      reason="Gold KES cash-risk cap is unavailable or invalid";
+      return false;
+     }
+
+   double cashCapPercent=goldCapMoney/equity*100.0;
+   if(!MathIsValidNumber(cashCapPercent) || cashCapPercent<=0.0)
+     {
+      effectiveRiskPercent=0.0;
+      reason="Gold cash-risk cap could not be converted to an equity percentage";
+      return false;
+     }
+
+   effectiveRiskPercent=MathMin(requestedRiskPercent,cashCapPercent);
+   if(effectiveRiskPercent<=0.0)
+     {
+      reason="effective Gold risk budget is zero";
+      return false;
+     }
+   return true;
+  }
+
+bool SmallAccountRiskFloorSatisfied(const double plannedRiskPercent,
+                                    const double configuredMinimumPercent,
+                                    const bool goldCashCapApplies)
+  {
+   if(!MathIsValidNumber(plannedRiskPercent) || plannedRiskPercent<=0.0)
+      return false;
+   if(goldCashCapApplies) return true;
+   return (MathIsValidNumber(configuredMinimumPercent) &&
+           plannedRiskPercent+0.000001>=configuredMinimumPercent);
+  }
+
+bool GoldStopRiskWithinCashCap(const double proposedRiskMoney,const double goldCapMoney)
+  {
+   return (MathIsValidNumber(proposedRiskMoney) && proposedRiskMoney>0.0 &&
+           MathIsValidNumber(goldCapMoney) && goldCapMoney>0.0 &&
+           proposedRiskMoney<=goldCapMoney+0.000001);
+  }
+
 // Select exactly one complete profile. The caller constructs all three from
 // the EA inputs and validates the selected profile before any order routing.
 // Global account-wide RiskGuard persistence remains account-scoped across restarts.
@@ -14039,7 +14143,7 @@ input double InpMinConfidenceSignal=58.0;
 input double InpFullRiskConfidence=85.0;
 input int InpMaxSpreadPoints=0;
 input group "Account Risk Profile"
-input ENUM_ACCOUNT_RISK_PROFILE InpAccountRiskProfile=ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT; // conservative small-account preset is the default
+input ENUM_ACCOUNT_RISK_PROFILE InpAccountRiskProfile=ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT; // selected small-account profile; Gold uses the separate KES cash-risk cap
 
 input group "Execution — Legacy Risk Inputs"
 input bool InpUseMarketOrders=true;
@@ -14077,7 +14181,7 @@ input int InpMaxPositionsPerGroup=3;
 // gaps, slippage, commission and swaps. These are not profit guarantees.
 // The EA rejects a trade if broker minimum volume would exceed its budget.
 input group "Risk Profile — Small Account (high-risk; validate on demo first)"
-input double InpSmallMinimumRiskPercentPerTrade=15.0;
+input double InpSmallMinimumRiskPercentPerTrade=15.0; // Applies to non-Gold small-account trades; the KES Gold cash cap is the stricter exception.
 input double InpSmallRiskPercentPerTrade=20.0; // Target; hard cap is shared with lot sizing
 input int    InpSmallMaxOpenTrades=3;           // Ceiling; runtime admits one initially and expands conditionally
 input double InpSmallMaxDailyLossPercent=25.0;
@@ -14085,6 +14189,9 @@ input double InpSmallMaxDrawdownPercent=35.0;
 input double InpSmallDeriskStartPercent=10.0;
 input double InpSmallDeriskFloor=0.75;          // 20% * 0.75 = 15% at the configured drawdown-de-risk floor
 input double InpSmallMaxPortfolioRiskPercent=20.0;
+input double InpSmallGoldMaxStopRiskKES=7.50; // Hard per-signal Gold stop-risk ceiling; converted into account currency.
+input double InpAccountCurrencyPerKES=0.0; // Strategy Tester fallback only: account-currency units per KES; 0 requires a configured KES account.
+input int    InpKESConversionMaxQuoteAgeSeconds=3600; // Live broker FX conversion must be this fresh or Gold entries fail closed.
 input int    InpSmallMaxPositionsPerSymbol=3;
 input int    InpSmallMaxPositionsPerGroup=3;
 input bool   InpSmallAccountProfileConfigured=true; // Requested profile values; production profitability remains unverified
@@ -14182,6 +14289,9 @@ bool UpdateLedgerRiskForPosition(const ulong positionIdentifier,const string dir
 bool IsOrderBuyDirection(const ENUM_ORDER_TYPE orderType);
 int EffectiveMaxOpenTrades();
 bool SmallAccountRiskAdmission(bool reduceRisk,string &reasonOut);
+bool ResolveSmallAccountOrderRisk(double &effectiveRiskPercent,double &goldCashCapMoney,string &reasonOut);
+bool ResolveGoldCashCapInAccountCurrency(double &capMoney,string &reasonOut);
+bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,string &quoteSymbol,string &reasonOut);
 
 void ConfigureAccountRiskLimits(AccountRiskLimits &limits,
                                  ENUM_ACCOUNT_RISK_PROFILE profile,
@@ -14643,6 +14753,13 @@ bool ResolveSelectedAccountRiskProfile()
   {
    if(InpAccountRiskProfile==ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT)
      {
+      if(!MathIsValidNumber(InpSmallGoldMaxStopRiskKES) || InpSmallGoldMaxStopRiskKES<=0.0 ||
+         !MathIsValidNumber(InpAccountCurrencyPerKES) || InpAccountCurrencyPerKES<0.0 ||
+         InpKESConversionMaxQuoteAgeSeconds<1)
+        {
+         Print("MedisTouch: small-account Gold cash-risk cap/conversion settings are invalid.");
+         return false;
+        }
       if(!MathIsValidNumber(InpSmallMinimumRiskPercentPerTrade) ||
          InpSmallMinimumRiskPercentPerTrade<MIDAS_SMALL_ACCOUNT_MIN_RISK_PERCENT_PER_TRADE ||
          InpSmallMinimumRiskPercentPerTrade>InpSmallRiskPercentPerTrade ||
@@ -14819,7 +14936,7 @@ void OnTick(){g_testerDealExport.ObserveSpread(_Symbol);g_monitor.OnTickCheck();
       g_topDownMTF.AdjustSetup(sellSetup);
       if(InpLogSignals) g_execAudit.Log("MTF_CONTEXT",g_topDownMTF.Summary());
      }
-   TradeSetup chosen;ZeroMemory(chosen);double delta=buySetup.confidence-sellSetup.confidence;if(buySetup.active&&sellSetup.active){if(delta>InpMinDirectionalAdvantage){if(g_risk.ValidateSetup(buySetup,InpMinRiskReward,InpMaxSLDistanceATR,atr))chosen=buySetup;}else if(-delta>InpMinDirectionalAdvantage){if(g_risk.ValidateSetup(sellSetup,InpMinRiskReward,InpMaxSLDistanceATR,atr))chosen=sellSetup;}else{g_execAudit.Log("DIRECTIONAL_CONFLICT",StringFormat("BUY/SELL confidence difference %.3f does not exceed required directional advantage %.3f; neither side selected",MathAbs(delta),InpMinDirectionalAdvantage));}}else if(buySetup.active){if(g_risk.ValidateSetup(buySetup,InpMinRiskReward,InpMaxSLDistanceATR,atr))chosen=buySetup;}else if(sellSetup.active){if(g_risk.ValidateSetup(sellSetup,InpMinRiskReward,InpMaxSLDistanceATR,atr))chosen=sellSetup;}if(!chosen.active||chosen.creation_time==g_lastLoggedTime)return;g_lastLoggedTime=chosen.creation_time;chosen.calibrated_probability=g_tracker.GetCalibratedProbability(chosen.confidence,chosen.calibration_sample,chosen.calibration_has_enough_data);if(InpLogSignals){ENUM_TREND_STATE t=g_trendCtx.trend.GetCurrentTrend();g_logger.LogSetup(chosen,_Symbol,InpFVGTF,EnumToString(t));}TradeDecisionRecord decision=g_router.Decide(chosen);g_execAudit.Log("ACCURACY_POLICY_V3_SHADOW",StringFormat("%s;router_action=%s;router_reason=%s",AccuracyPolicyV3ShadowSummary(chosen),TradePolicyToString(decision.action),decision.reason),decision.decision_id);g_execAudit.Log("DECISION",StringFormat("automated candidate action=%s confidence=%.1f reason=%s",TradePolicyToString(decision.action),decision.confidence,decision.reason),decision.decision_id,0,0.0,ResolveExecutionEntry(chosen),chosen.stop_loss,chosen.final_tp);decision.timeframe=_Period;decision.decision_schema_version=InpDecisionSchemaVersion;decision.strategy_version=InpStrategyVersion;decision.model_version=InpModelVersion;decision.calibration_version=InpCalibrationVersion;decision.feature_schema_version=InpFeatureSchemaVersion;decision.environment_schema_version=InpEnvironmentSchemaVersion;decision.weight_version=InpWeightSetVersion;decision.environment_key=g_environmentMemory.Key(chosen.reasons);decision.spread_points=chosen.reasons.spread_points;decision.decision_fingerprint=DecisionFingerprintFor(decision);if(InpTrackOutcomes)g_tracker.AddSetup(chosen,decision.decision_id,decision.decision_fingerprint);if(!decision.valid||decision.action==POLICY_IGNORE)return;if(!g_store.Save(decision)){PrintFormat("MedisTouch EA: decision #%I64d rejected — durable DecisionStore write failed.",decision.decision_id);return;}if(decision.action==POLICY_EXECUTE_ONLY||decision.action==POLICY_EXECUTE_AND_SIGNAL){string opposingDirectionReason;if((InpRequireExecutionLedger && !g_executionLedger.Ready()) || (g_executionLedger.Ready() && !g_executionLedgerHealthy)){g_execAudit.Log("EXECUTION_LEDGER_NOT_READY","automated trade blocked until bridge admission and broker reconciliation are healthy",decision.decision_id);}else if(IsNettingOrExchangeAccount() && HasAnyChartSymbolExposure()){g_execAudit.Log("AUTOMATED_BLOCKED_NETTING_EXPOSURE",StringFormat("decision #%I64d suppressed: same-symbol position or pending order already exists on netting/exchange account",decision.decision_id),decision.decision_id);}else if(HasForeignChartSymbolExposure()){g_execAudit.Log("AUTOMATED_BLOCKED_FOREIGN_EXPOSURE",StringFormat("decision #%I64d suppressed: a manual/other-EA position or pending order on this symbol is outside this instance's risk-attribution boundary",decision.decision_id),decision.decision_id);}else if(!CanOpenDirectionWithExposure(decision.setup.type,opposingDirectionReason)){g_execAudit.Log("AUTOMATED_BLOCKED_OPPOSING_EXPOSURE",StringFormat("decision #%I64d suppressed: %s",decision.decision_id,opposingDirectionReason),decision.decision_id);}else{string smallRiskReason;if(!SmallAccountRiskAdmission(decision.reduce_risk,smallRiskReason)){g_execAudit.Log("AUTOMATED_BLOCKED_SMALL_ACCOUNT_RISK_ADMISSION",smallRiskReason,decision.decision_id);return;}int availableSlots=EffectiveMaxOpenTrades()-g_orders.OpenCount();if(availableSlots<0)availableSlots=0;if(availableSlots==0){g_execAudit.Log("AUTOMATED_BLOCKED_ADAPTIVE_OPEN_TRADE_CAP",StringFormat("open=%d adaptive-cap=%d; expansion requires every existing position to be profitable with a break-even-or-better stop",g_orders.OpenCount(),EffectiveMaxOpenTrades()),decision.decision_id);return;}MultiTradePlan plan;bool planOk=g_multiTrade.Build(decision.setup,availableSlots,plan);if(!planOk){PrintFormat("MedisTouch EA: decision #%I64d rejected — multi-trade plan construction failed.",decision.decision_id);return;}double entry=ResolveExecutionEntry(chosen);double legLots[3];double legRisk[3];for(int leg=0;leg<3;leg++){legLots[leg]=0.0;legRisk[leg]=0.0;}bool sizingOk=true;for(int leg=0;leg<plan.legCount;leg++){double fraction=plan.riskFraction[leg];bool exceeded=false;legLots[leg]=g_risk.CalculateLotSize(_Symbol,g_activeRiskLimits.riskPercentPerTrade*fraction,entry,chosen.stop_loss,decision.reduce_risk,InpAllowMinLotOverride,exceeded,g_riskGuard.SizeMultiplier());if(legLots[leg]<=0.0){sizingOk=false;break;}legRisk[leg]=g_risk.RiskAmountForLots(_Symbol,legLots[leg],entry,chosen.stop_loss);}if(!sizingOk){PrintFormat("MedisTouch EA: decision #%I64d skipped — one or more execution legs cannot satisfy broker lot/risk constraints.",decision.decision_id);return;}double totalProposedRisk=0.0;for(int leg=0;leg<plan.legCount;leg++)totalProposedRisk+=legRisk[leg];if(g_activeRiskLimits.profile==ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT){double sizingEquity=AccountInfoDouble(ACCOUNT_EQUITY);double achievedRiskPercent=(sizingEquity>0.0?totalProposedRisk/sizingEquity*100.0:0.0);if(sizingEquity<=0.0||achievedRiskPercent+0.000001<InpSmallMinimumRiskPercentPerTrade){g_execAudit.Log("AUTOMATED_BLOCKED_BELOW_MINIMUM_RISK",StringFormat("combined execution plan yields %.2f%% planned risk, below configured minimum %.2f%%",achievedRiskPercent,InpSmallMinimumRiskPercentPerTrade),decision.decision_id,0,0.0,entry,chosen.stop_loss,chosen.final_tp);return;}}string block;if(!g_portfolio.AllowNewTradeBatch(_Symbol,totalProposedRisk,plan.legCount,block)){PrintFormat("MedisTouch EA: decision #%I64d blocked — %s",decision.decision_id,block);return;}ulong tickets[3];bool submittedAny=false;double maxDeviation=InpMaxEntryDeviationATR*atr;for(int leg=0;leg<plan.legCount;leg++){TradeDecisionRecord legDecision=decision;legDecision.setup.final_tp=plan.target[leg];legDecision.reason+=StringFormat("; multi-trade leg %d/%d (%s)",leg+1,plan.legCount,plan.label[leg]);string ledgerRequestId="";if(!PrepareLedgerForSubmit(legDecision,leg,legRisk[leg],atr,ledgerRequestId)){g_execAudit.Log("AUTOMATED_LEDGER_BLOCKED","bridge did not acknowledge pre-send reservation; this leg was not sent",decision.decision_id,0,legLots[leg],entry,chosen.stop_loss,plan.target[leg]);continue;}ulong ticket=0;if(g_orders.Submit(legDecision,legLots[leg],InpUseMarketOrders,maxDeviation,ticket,leg)){submittedAny=true;tickets[leg]=ticket;if(StringLen(ledgerRequestId)>0)MarkLedgerSubmissionAccepted(ledgerRequestId);if(!g_store.SaveExecution(decision.decision_id,legLots[leg],ticket,leg,plan.target[leg])){PrintFormat("CRITICAL: decision #%I64d leg %d executed but execution record was not durably persisted.",decision.decision_id,leg);g_execAudit.Log("CRITICAL_EXECUTION_RECORD_FAILURE","automated order submitted but execution persistence failed",decision.decision_id,ticket,legLots[leg],entry,chosen.stop_loss,plan.target[leg]);}else g_execAudit.Log("ORDER_SUBMITTED",StringFormat("automated leg %d/%d",leg+1,plan.legCount),decision.decision_id,ticket,legLots[leg],entry,chosen.stop_loss,plan.target[leg]);}else{if(StringLen(ledgerRequestId)>0)MarkLedgerSubmissionAmbiguous(ledgerRequestId);g_monitor.NotifyBrokerReject();g_execAudit.Log("ORDER_REJECTED","automated broker/order-manager submission failed; ledger reservation retained for broker reconciliation",decision.decision_id,0,legLots[leg],entry,chosen.stop_loss,plan.target[leg]);}}if(!submittedAny)PrintFormat("MedisTouch EA: decision #%I64d rejected by broker on every requested execution leg.",decision.decision_id);}}if(decision.action==POLICY_SIGNAL_ONLY||decision.action==POLICY_EXECUTE_AND_SIGNAL){g_publisher.Publish(decision);g_lifecycleDecisionId=decision.decision_id;g_lifecycleCreationTime=chosen.creation_time;g_lifecycleSetup=chosen;g_lifecycleStatus="valid";}}
+   TradeSetup chosen;ZeroMemory(chosen);double delta=buySetup.confidence-sellSetup.confidence;if(buySetup.active&&sellSetup.active){if(delta>InpMinDirectionalAdvantage){if(g_risk.ValidateSetup(buySetup,InpMinRiskReward,InpMaxSLDistanceATR,atr))chosen=buySetup;}else if(-delta>InpMinDirectionalAdvantage){if(g_risk.ValidateSetup(sellSetup,InpMinRiskReward,InpMaxSLDistanceATR,atr))chosen=sellSetup;}else{g_execAudit.Log("DIRECTIONAL_CONFLICT",StringFormat("BUY/SELL confidence difference %.3f does not exceed required directional advantage %.3f; neither side selected",MathAbs(delta),InpMinDirectionalAdvantage));}}else if(buySetup.active){if(g_risk.ValidateSetup(buySetup,InpMinRiskReward,InpMaxSLDistanceATR,atr))chosen=buySetup;}else if(sellSetup.active){if(g_risk.ValidateSetup(sellSetup,InpMinRiskReward,InpMaxSLDistanceATR,atr))chosen=sellSetup;}if(!chosen.active||chosen.creation_time==g_lastLoggedTime)return;g_lastLoggedTime=chosen.creation_time;chosen.calibrated_probability=g_tracker.GetCalibratedProbability(chosen.confidence,chosen.calibration_sample,chosen.calibration_has_enough_data);if(InpLogSignals){ENUM_TREND_STATE t=g_trendCtx.trend.GetCurrentTrend();g_logger.LogSetup(chosen,_Symbol,InpFVGTF,EnumToString(t));}TradeDecisionRecord decision=g_router.Decide(chosen);g_execAudit.Log("ACCURACY_POLICY_V3_SHADOW",StringFormat("%s;router_action=%s;router_reason=%s",AccuracyPolicyV3ShadowSummary(chosen),TradePolicyToString(decision.action),decision.reason),decision.decision_id);g_execAudit.Log("DECISION",StringFormat("automated candidate action=%s confidence=%.1f reason=%s",TradePolicyToString(decision.action),decision.confidence,decision.reason),decision.decision_id,0,0.0,ResolveExecutionEntry(chosen),chosen.stop_loss,chosen.final_tp);decision.timeframe=_Period;decision.decision_schema_version=InpDecisionSchemaVersion;decision.strategy_version=InpStrategyVersion;decision.model_version=InpModelVersion;decision.calibration_version=InpCalibrationVersion;decision.feature_schema_version=InpFeatureSchemaVersion;decision.environment_schema_version=InpEnvironmentSchemaVersion;decision.weight_version=InpWeightSetVersion;decision.environment_key=g_environmentMemory.Key(chosen.reasons);decision.spread_points=chosen.reasons.spread_points;decision.decision_fingerprint=DecisionFingerprintFor(decision);if(InpTrackOutcomes)g_tracker.AddSetup(chosen,decision.decision_id,decision.decision_fingerprint);if(!decision.valid||decision.action==POLICY_IGNORE)return;if(!g_store.Save(decision)){PrintFormat("MedisTouch EA: decision #%I64d rejected — durable DecisionStore write failed.",decision.decision_id);return;}if(decision.action==POLICY_EXECUTE_ONLY||decision.action==POLICY_EXECUTE_AND_SIGNAL){string opposingDirectionReason;if((InpRequireExecutionLedger && !g_executionLedger.Ready()) || (g_executionLedger.Ready() && !g_executionLedgerHealthy)){g_execAudit.Log("EXECUTION_LEDGER_NOT_READY","automated trade blocked until bridge admission and broker reconciliation are healthy",decision.decision_id);}else if(IsNettingOrExchangeAccount() && HasAnyChartSymbolExposure()){g_execAudit.Log("AUTOMATED_BLOCKED_NETTING_EXPOSURE",StringFormat("decision #%I64d suppressed: same-symbol position or pending order already exists on netting/exchange account",decision.decision_id),decision.decision_id);}else if(HasForeignChartSymbolExposure()){g_execAudit.Log("AUTOMATED_BLOCKED_FOREIGN_EXPOSURE",StringFormat("decision #%I64d suppressed: a manual/other-EA position or pending order on this symbol is outside this instance's risk-attribution boundary",decision.decision_id),decision.decision_id);}else if(!CanOpenDirectionWithExposure(decision.setup.type,opposingDirectionReason)){g_execAudit.Log("AUTOMATED_BLOCKED_OPPOSING_EXPOSURE",StringFormat("decision #%I64d suppressed: %s",decision.decision_id,opposingDirectionReason),decision.decision_id);}else{string smallRiskReason;if(!SmallAccountRiskAdmission(decision.reduce_risk,smallRiskReason)){g_execAudit.Log("AUTOMATED_BLOCKED_SMALL_ACCOUNT_RISK_ADMISSION",smallRiskReason,decision.decision_id);return;}double effectiveRiskPercent=g_activeRiskLimits.riskPercentPerTrade;double goldCashCapMoney=0.0;string riskBudgetReason="";if(!ResolveSmallAccountOrderRisk(effectiveRiskPercent,goldCashCapMoney,riskBudgetReason)){g_execAudit.Log("AUTOMATED_BLOCKED_GOLD_CASH_RISK_CAP",riskBudgetReason,decision.decision_id);return;}int availableSlots=EffectiveMaxOpenTrades()-g_orders.OpenCount();if(availableSlots<0)availableSlots=0;if(availableSlots==0){g_execAudit.Log("AUTOMATED_BLOCKED_ADAPTIVE_OPEN_TRADE_CAP",StringFormat("open=%d adaptive-cap=%d; expansion requires every existing position to be profitable with a break-even-or-better stop",g_orders.OpenCount(),EffectiveMaxOpenTrades()),decision.decision_id);return;}MultiTradePlan plan;bool planOk=g_multiTrade.Build(decision.setup,availableSlots,plan);if(!planOk){PrintFormat("MedisTouch EA: decision #%I64d rejected — multi-trade plan construction failed.",decision.decision_id);return;}double entry=ResolveExecutionEntry(chosen);double maxDeviation=MathMax(0.0,InpMaxEntryDeviationATR*atr);double riskEntry=entry;if(goldCashCapMoney>0.0&&maxDeviation>0.0){riskEntry=(decision.setup.type==ORDER_TYPE_BUY?entry+maxDeviation:entry-maxDeviation);if(riskEntry<=0.0){g_execAudit.Log("AUTOMATED_BLOCKED_GOLD_CASH_RISK_CAP","worst permitted Gold fill price is invalid",decision.decision_id);return;}}double legLots[3];double legRisk[3];for(int leg=0;leg<3;leg++){legLots[leg]=0.0;legRisk[leg]=0.0;}bool sizingOk=true;for(int leg=0;leg<plan.legCount;leg++){double fraction=plan.riskFraction[leg];bool exceeded=false;legLots[leg]=g_risk.CalculateLotSize(_Symbol,effectiveRiskPercent*fraction,riskEntry,chosen.stop_loss,decision.reduce_risk,InpAllowMinLotOverride,exceeded,g_riskGuard.SizeMultiplier());if(legLots[leg]<=0.0){sizingOk=false;break;}legRisk[leg]=g_risk.RiskAmountForLots(_Symbol,legLots[leg],riskEntry,chosen.stop_loss);}if(!sizingOk){PrintFormat("MedisTouch EA: decision #%I64d skipped — one or more execution legs cannot satisfy broker lot/risk constraints.",decision.decision_id);return;}double totalProposedRisk=0.0;for(int leg=0;leg<plan.legCount;leg++)totalProposedRisk+=legRisk[leg];if(g_activeRiskLimits.profile==ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT){double sizingEquity=AccountInfoDouble(ACCOUNT_EQUITY);double achievedRiskPercent=(sizingEquity>0.0?totalProposedRisk/sizingEquity*100.0:0.0);if(sizingEquity<=0.0){g_execAudit.Log("AUTOMATED_BLOCKED_BELOW_MINIMUM_RISK","account equity is invalid",decision.decision_id,0,0.0,entry,chosen.stop_loss,chosen.final_tp);return;}if(goldCashCapMoney>0.0){if(!GoldStopRiskWithinCashCap(totalProposedRisk,goldCashCapMoney)){g_execAudit.Log("AUTOMATED_BLOCKED_GOLD_CASH_RISK_CAP",StringFormat("combined multi-leg Gold stop risk %.2f exceeds account-currency KES cap %.2f",totalProposedRisk,goldCashCapMoney),decision.decision_id,0,0.0,entry,chosen.stop_loss,chosen.final_tp);return;}}else if(achievedRiskPercent+0.000001<InpSmallMinimumRiskPercentPerTrade){g_execAudit.Log("AUTOMATED_BLOCKED_BELOW_MINIMUM_RISK",StringFormat("combined execution plan yields %.2f%% planned risk, below configured minimum %.2f%%",achievedRiskPercent,InpSmallMinimumRiskPercentPerTrade),decision.decision_id,0,0.0,entry,chosen.stop_loss,chosen.final_tp);return;}}string block;if(!g_portfolio.AllowNewTradeBatch(_Symbol,totalProposedRisk,plan.legCount,block)){PrintFormat("MedisTouch EA: decision #%I64d blocked — %s",decision.decision_id,block);return;}ulong tickets[3];bool submittedAny=false;for(int leg=0;leg<plan.legCount;leg++){TradeDecisionRecord legDecision=decision;legDecision.setup.final_tp=plan.target[leg];legDecision.reason+=StringFormat("; multi-trade leg %d/%d (%s)",leg+1,plan.legCount,plan.label[leg]);string ledgerRequestId="";if(!PrepareLedgerForSubmit(legDecision,leg,legRisk[leg],atr,ledgerRequestId)){g_execAudit.Log("AUTOMATED_LEDGER_BLOCKED","bridge did not acknowledge pre-send reservation; this leg was not sent",decision.decision_id,0,legLots[leg],entry,chosen.stop_loss,plan.target[leg]);continue;}ulong ticket=0;if(g_orders.Submit(legDecision,legLots[leg],InpUseMarketOrders,maxDeviation,ticket,leg)){submittedAny=true;tickets[leg]=ticket;if(StringLen(ledgerRequestId)>0)MarkLedgerSubmissionAccepted(ledgerRequestId);if(!g_store.SaveExecution(decision.decision_id,legLots[leg],ticket,leg,plan.target[leg])){PrintFormat("CRITICAL: decision #%I64d leg %d executed but execution record was not durably persisted.",decision.decision_id,leg);g_execAudit.Log("CRITICAL_EXECUTION_RECORD_FAILURE","automated order submitted but execution persistence failed",decision.decision_id,ticket,legLots[leg],entry,chosen.stop_loss,plan.target[leg]);}else g_execAudit.Log("ORDER_SUBMITTED",StringFormat("automated leg %d/%d",leg+1,plan.legCount),decision.decision_id,ticket,legLots[leg],entry,chosen.stop_loss,plan.target[leg]);}else{if(StringLen(ledgerRequestId)>0)MarkLedgerSubmissionAmbiguous(ledgerRequestId);g_monitor.NotifyBrokerReject();g_execAudit.Log("ORDER_REJECTED","automated broker/order-manager submission failed; ledger reservation retained for broker reconciliation",decision.decision_id,0,legLots[leg],entry,chosen.stop_loss,plan.target[leg]);}}if(!submittedAny)PrintFormat("MedisTouch EA: decision #%I64d rejected by broker on every requested execution leg.",decision.decision_id);}}if(decision.action==POLICY_SIGNAL_ONLY||decision.action==POLICY_EXECUTE_AND_SIGNAL){g_publisher.Publish(decision);g_lifecycleDecisionId=decision.decision_id;g_lifecycleCreationTime=chosen.creation_time;g_lifecycleSetup=chosen;g_lifecycleStatus="valid";}}
 // Persistent per-symbol/per-magic emergency latch. A normal terminal restart
 // does not silently re-enable order entry after the operator presses STOP.
 string EmergencyStopGlobalKey()
@@ -14954,6 +15071,132 @@ int EffectiveMaxOpenTrades()
    return tracked+1;
   }
 
+bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,string &quoteSymbol,string &reasonOut)
+  {
+   rate=0.0;
+   quoteSymbol="";
+   reasonOut="";
+   if(accountCurrency=="KES")
+     {
+      rate=1.0;
+      quoteSymbol="account currency KES";
+      return true;
+     }
+
+   // Strategy Tester agents do not reliably expose synchronized cross-symbol
+   // ticks. Require an explicit, operator-supplied conversion factor there.
+   if((bool)MQLInfoInteger(MQL_TESTER))
+     {
+      if(!MathIsValidNumber(InpAccountCurrencyPerKES) || InpAccountCurrencyPerKES<=0.0)
+        {
+         reasonOut="Strategy Tester Gold risk cap requires InpAccountCurrencyPerKES > 0 (account-currency units per KES); no rate is guessed";
+         return false;
+        }
+      rate=InpAccountCurrencyPerKES;
+      quoteSymbol="Strategy Tester configured conversion";
+      return true;
+     }
+
+   int maxAge=MathMax(1,InpKESConversionMaxQuoteAgeSeconds);
+   datetime now=TimeTradeServer();
+   if(now<=0) now=TimeCurrent();
+
+   // Prefer KES/account-currency direct quotes, then invert account/KES.
+   // Scan all known terminal symbols so broker suffixes/prefixes are supported.
+   for(int direction=0;direction<2;direction++)
+     {
+      int total=SymbolsTotal(false);
+      for(int i=0;i<total;i++)
+        {
+         string candidate=SymbolName(i,false);
+         if(StringLen(candidate)<6) continue;
+         string normalized=candidate;
+         StringToUpper(normalized);
+         int nameLength=StringLen(normalized);
+         for(int offset=0;offset<=nameLength-6;offset++)
+           {
+            string baseCurrency=StringSubstr(normalized,offset,3);
+            string quoteCurrency=StringSubstr(normalized,offset+3,3);
+            bool direct=(baseCurrency=="KES" && quoteCurrency==accountCurrency);
+            bool inverse=(baseCurrency==accountCurrency && quoteCurrency=="KES");
+            if((direction==0 && !direct) || (direction==1 && !inverse)) continue;
+            if(!SymbolSelect(candidate,true)) continue;
+
+            MqlTick tick;
+            if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
+            long age=(long)now-(long)tick.time;
+            if(age<0 || age>maxAge) continue;
+
+            double candidateRate=0.0;
+            if(!ResolveKESConversionFactorFromQuote(tick.bid,tick.ask,direct,
+                                                    tick.time,now,maxAge,candidateRate))
+               continue;
+
+            rate=candidateRate;
+            quoteSymbol=candidate;
+            return true;
+           }
+        }
+     }
+
+   reasonOut=StringFormat("no fresh broker KES/%s conversion quote found (maximum age %d seconds); Gold entries are blocked",
+                          accountCurrency,maxAge);
+   return false;
+  }
+
+bool ResolveGoldCashCapInAccountCurrency(double &capMoney,string &reasonOut)
+  {
+   capMoney=0.0;
+   reasonOut="";
+   if(!MathIsValidNumber(InpSmallGoldMaxStopRiskKES) || InpSmallGoldMaxStopRiskKES<=0.0)
+     {
+      reasonOut="InpSmallGoldMaxStopRiskKES must be finite and positive";
+      return false;
+     }
+
+   string accountCurrency=AccountInfoString(ACCOUNT_CURRENCY);
+   StringToUpper(accountCurrency);
+   double accountCurrencyPerKES=0.0;
+   string quoteSymbol="";
+   if(!ResolveLiveKESPerAccountCurrency(accountCurrency,accountCurrencyPerKES,quoteSymbol,reasonOut))
+      return false;
+
+   capMoney=InpSmallGoldMaxStopRiskKES*accountCurrencyPerKES;
+   if(!MathIsValidNumber(capMoney) || capMoney<=0.0)
+     {
+      capMoney=0.0;
+      reasonOut="KES Gold stop-risk cap conversion returned an invalid account-currency amount";
+      return false;
+     }
+   PrintFormat("Midas small-account Gold risk cap: KES %.2f = %.8f %s via %s",
+               InpSmallGoldMaxStopRiskKES,capMoney,accountCurrency,quoteSymbol);
+   return true;
+  }
+
+bool ResolveSmallAccountOrderRisk(double &effectiveRiskPercent,double &goldCashCapMoney,string &reasonOut)
+  {
+   effectiveRiskPercent=g_activeRiskLimits.riskPercentPerTrade;
+   goldCashCapMoney=0.0;
+   reasonOut="";
+   if(g_activeRiskLimits.profile!=ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT ||
+      !IsGoldRiskLimitedSymbol(_Symbol))
+      return true;
+
+   double equity=AccountInfoDouble(ACCOUNT_EQUITY);
+   if(!MathIsValidNumber(equity) || equity<=0.0)
+     {
+      reasonOut="small-account Gold risk blocked: account equity is invalid";
+      return false;
+     }
+   if(!ResolveGoldCashCapInAccountCurrency(goldCashCapMoney,reasonOut))
+      return false;
+
+   if(!ResolveRiskPercentWithCashCap(equity,g_activeRiskLimits.riskPercentPerTrade,
+                                     goldCashCapMoney,true,effectiveRiskPercent,reasonOut))
+      return false;
+   return true;
+  }
+
 bool SmallAccountRiskAdmission(bool reduceRisk,string &reasonOut)
   {
    reasonOut="";
@@ -14964,13 +15207,22 @@ bool SmallAccountRiskAdmission(bool reduceRisk,string &reasonOut)
    if(!MathIsValidNumber(equity) || equity<=0.0)
      { reasonOut="small-account risk admission blocked: account equity is invalid"; return false; }
 
-   double requestedRisk=g_activeRiskLimits.riskPercentPerTrade;
+   double baseRiskPercent=0.0;
+   double goldCashCapMoney=0.0;
+   if(!ResolveSmallAccountOrderRisk(baseRiskPercent,goldCashCapMoney,reasonOut))
+     {
+      reasonOut="small-account risk admission blocked: "+reasonOut;
+      return false;
+     }
+
+   double requestedRisk=baseRiskPercent;
    if(reduceRisk) requestedRisk*=0.5;
    requestedRisk*=g_riskGuard.SizeMultiplier();
-   if(!MathIsValidNumber(requestedRisk) ||
-      requestedRisk+0.000001<InpSmallMinimumRiskPercentPerTrade)
+   bool goldCashCapApplies=(goldCashCapMoney>0.0);
+   if(!SmallAccountRiskFloorSatisfied(requestedRisk,InpSmallMinimumRiskPercentPerTrade,
+                                      goldCashCapApplies))
      {
-      reasonOut=StringFormat("risk reduction would take planned risk %.2f%% below the configured %.2f%% minimum; trade skipped rather than silently violating the minimum",
+      reasonOut=StringFormat("risk reduction would take planned risk %.4f%% below the configured %.2f%% minimum; trade skipped rather than silently violating the minimum",
                              requestedRisk,InpSmallMinimumRiskPercentPerTrade);
       return false;
      }
@@ -15315,17 +15567,56 @@ void ManualMarketEntry(bool isBuy)
       g_execAudit.Log("MANUAL_BLOCKED_SMALL_ACCOUNT_RISK_ADMISSION",smallRiskReason,decision.decision_id,0,0.0,entry,setup.stop_loss,setup.final_tp);
       return;
      }
-   double lots=g_risk.CalculateLotSize(_Symbol,g_activeRiskLimits.riskPercentPerTrade,entry,setup.stop_loss,
+   double effectiveRiskPercent=g_activeRiskLimits.riskPercentPerTrade;
+   double goldCashCapMoney=0.0;
+   string riskBudgetReason="";
+   if(!ResolveSmallAccountOrderRisk(effectiveRiskPercent,goldCashCapMoney,riskBudgetReason))
+     {
+      g_execAudit.Log("MANUAL_BLOCKED_GOLD_CASH_RISK_CAP",side+" rejected: "+riskBudgetReason,
+                      decision.decision_id,0,0.0,entry,setup.stop_loss,setup.final_tp);
+      return;
+     }
+   double maxDeviation=MathMax(0.0,InpMaxEntryDeviationATR*atr);
+   double riskEntry=entry;
+   if(goldCashCapMoney>0.0 && maxDeviation>0.0)
+     {
+      riskEntry=(isBuy ? entry+maxDeviation : entry-maxDeviation);
+      if(riskEntry<=0.0)
+        {
+         g_execAudit.Log("MANUAL_BLOCKED_GOLD_CASH_RISK_CAP",
+                         "worst permitted Gold fill price is invalid",
+                         decision.decision_id,0,0.0,entry,setup.stop_loss,setup.final_tp);
+         return;
+        }
+     }
+   double lots=g_risk.CalculateLotSize(_Symbol,effectiveRiskPercent,riskEntry,setup.stop_loss,
                                       decision.reduce_risk,InpAllowMinLotOverride,exceededMinLot,
                                       g_riskGuard.SizeMultiplier());
    if(lots<=0.0)
      { g_execAudit.Log("MANUAL_BLOCKED",side+" rejected: broker lot/risk sizing returned zero",decision.decision_id,0,0.0,entry,setup.stop_loss,setup.final_tp); return; }
-   double proposedRisk=g_risk.RiskAmountForLots(_Symbol,lots,entry,setup.stop_loss);
+   double proposedRisk=g_risk.RiskAmountForLots(_Symbol,lots,riskEntry,setup.stop_loss);
    if(g_activeRiskLimits.profile==ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT)
      {
       double sizingEquity=AccountInfoDouble(ACCOUNT_EQUITY);
       double achievedRiskPercent=(sizingEquity>0.0?proposedRisk/sizingEquity*100.0:0.0);
-      if(sizingEquity<=0.0 || achievedRiskPercent+0.000001<InpSmallMinimumRiskPercentPerTrade)
+      if(sizingEquity<=0.0)
+        {
+         g_execAudit.Log("MANUAL_BLOCKED_BELOW_MINIMUM_RISK","account equity is invalid",
+                         decision.decision_id,0,lots,entry,setup.stop_loss,setup.final_tp);
+         return;
+        }
+      if(goldCashCapMoney>0.0)
+        {
+         if(!GoldStopRiskWithinCashCap(proposedRisk,goldCashCapMoney))
+           {
+            g_execAudit.Log("MANUAL_BLOCKED_GOLD_CASH_RISK_CAP",
+                            StringFormat("Gold stop risk %.2f exceeds account-currency KES cap %.2f",
+                                         proposedRisk,goldCashCapMoney),
+                            decision.decision_id,0,lots,entry,setup.stop_loss,setup.final_tp);
+            return;
+           }
+        }
+      else if(achievedRiskPercent+0.000001<InpSmallMinimumRiskPercentPerTrade)
         {
          g_execAudit.Log("MANUAL_BLOCKED_BELOW_MINIMUM_RISK",
                          StringFormat("broker volume step yields %.2f%% planned risk, below configured minimum %.2f%%",
@@ -15346,7 +15637,6 @@ void ManualMarketEntry(bool isBuy)
    if(!PrepareLedgerForSubmit(decision,0,proposedRisk,atr,ledgerRequestId))
      { g_execAudit.Log("MANUAL_BLOCKED",side+" rejected: bridge reservation or SENT state was not acknowledged",decision.decision_id,0,lots,entry,setup.stop_loss,setup.final_tp); return; }
    ulong ticket=0;
-   double maxDeviation=InpMaxEntryDeviationATR*atr;
    if(!g_orders.Submit(decision,lots,true,maxDeviation,ticket,0))
      {
       if(StringLen(ledgerRequestId)>0) MarkLedgerSubmissionAmbiguous(ledgerRequestId);
