@@ -127,6 +127,40 @@ int OnInit()
       legacy,smallAccount,propFirm,selected,reason),
       "profile fails closed when per-symbol positions exceed max open trades");
 
+   // Gold cash-risk exception: the $7.50 KES-equivalent ceiling
+   // supersedes the general 15% small-account minimum only for Gold.
+   double effectiveRisk=0.0;
+   reason="";
+   AssertTrue(IsGoldRiskLimitedSymbol("XAUUSD.a") &&
+      IsGoldRiskLimitedSymbol("GOLDmicro") &&
+      !IsGoldRiskLimitedSymbol("EURUSD"),
+      "Gold symbols are identified without classifying ordinary FX pairs");
+
+   AssertTrue(ResolveRiskPercentWithCashCap(1500.0,20.0,7.50,true,
+      effectiveRisk,reason) && MathAbs(effectiveRisk-0.50)<0.000001,
+      "KES 7.50 cash cap limits a KES 1,500 Gold account to 0.50% risk");
+
+   reason="";
+   AssertTrue(ResolveRiskPercentWithCashCap(1500.0,20.0,7.50,false,
+      effectiveRisk,reason) && MathAbs(effectiveRisk-20.0)<0.000001,
+      "Gold-specific cap does not change the 20% small-account profile for other assets");
+
+   AssertTrue(SmallAccountRiskFloorSatisfied(0.50,15.0,true),
+      "Gold cash-risk exception permits a safe capped budget below the general minimum");
+   AssertTrue(!SmallAccountRiskFloorSatisfied(0.50,15.0,false),
+      "non-Gold small-account trades still obey the configured minimum risk floor");
+   AssertTrue(!SmallAccountRiskFloorSatisfied(0.0,15.0,true),
+      "Gold exception never permits a zero or invalid budget");
+
+   AssertTrue(GoldStopRiskWithinCashCap(7.49,7.50),
+      "Gold stop risk below the KES cash cap is accepted");
+   AssertTrue(GoldStopRiskWithinCashCap(7.50,7.50),
+      "Gold stop risk exactly at the KES cash cap is accepted");
+   AssertTrue(!GoldStopRiskWithinCashCap(7.51,7.50),
+      "Gold stop risk above the KES cash cap is rejected");
+   AssertTrue(!GoldStopRiskWithinCashCap(7.50,0.0),
+      "missing Gold cash cap fails closed");
+
    PrintFormat("AccountRiskProfilePolicy tests: %d failure(s)",failures);
    return failures==0 ? INIT_SUCCEEDED : INIT_FAILED;
   }
