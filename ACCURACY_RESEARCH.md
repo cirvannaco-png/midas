@@ -114,7 +114,7 @@ On an account with KSh 1,500 equity, that is KSh 300 target stop risk per ordina
 
 The earlier source audit found no separate Gold cash-risk ceiling. That gap has since been addressed in the current staging implementation:
 
-- Small-account Gold symbols (`XAU*` or names containing `GOLD`) use a hard maximum of **KES 7.50 stop risk per signal**, while the selected 20% small-account profile is preserved for other instruments.
+- Gold symbols (`XAU*` or names containing `GOLD`) use an **absolute maximum of KES 7.50 stop risk per signal across all account-risk profiles**; non-Gold instruments retain the selected profile's independent settings.
 - Live/demo conversion requires a fresh broker KES/account-currency FX quote (direct or inverse). A missing or stale quote blocks Gold entries.
 - In Strategy Tester, non-KES accounts must provide `InpAccountCurrencyPerKES` (account-currency units per KES); the EA does not invent a conversion rate.
 - Automated multi-leg entries are checked against the aggregate signal cash-risk ceiling; manual chart orders are checked against the same cap.
@@ -125,13 +125,13 @@ The current 20% profile remains high-risk for non-Gold instruments: 20% target r
 
 ## Implemented Gold cash-risk exception — 2026-11-08
 
-The current staging EA now implements the previously documented KES 7.50 Gold stop-risk ceiling for the small-account profile:
+The current staging EA now implements the KES 7.50 Gold stop-risk ceiling across all account-risk profiles:
 
 - It applies to symbols containing `XAU` or `GOLD` and caps the **combined risk of one signal**, not each individual leg. Automated multi-leg orders and manual chart orders use the same budget.
-- For a KES-denominated account, the cap is KES 7.50 directly. For other live/demo account currencies, the EA scans available broker symbols for direct KES/account-currency or inverse account-currency/KES pairs. It uses the direct quote bid or inverse quote ask, requires a tick no older than `InpKESConversionMaxQuoteAgeSeconds` (default 3,600 seconds), and rejects Gold entries when no usable quote exists.
+- For a KES-denominated account, the cap is KES 7.50 directly. For other live/demo account currencies, the EA scans available broker symbols for direct KES/account-currency or inverse account-currency/KES pairs. It uses the direct quote bid or inverse quote ask, requires a tick no older than `InpKESConversionMaxQuoteAgeSeconds` (default 300 seconds / five minutes), and rejects Gold entries when no usable quote exists.
 - In Strategy Tester, a non-KES account must explicitly set `InpAccountCurrencyPerKES` (account-currency units per one KES). The default is zero, which deliberately fails closed rather than guessing an exchange rate.
 - Gold sizing uses the adverse edge of the configured `InpMaxEntryDeviationATR` band when calculating stop risk, then checks the actual proposed volume against the converted account-currency cap. Broker volume is rounded down; a minimum lot that still exceeds KES 7.50 is rejected.
-- The existing 20% small-account profile remains unchanged for non-Gold instruments. Its 20% target/15% minimum/25% daily loss/35% drawdown/20% portfolio open-risk settings remain high-risk and are not endorsed for live use.
+- The existing 20% small-account profile remains unchanged for non-Gold instruments; the Gold cash cap cannot be bypassed by selecting legacy or prop-firm profiles. Its 20% target/15% minimum/25% daily loss/35% drawdown/20% portfolio open-risk settings remain high-risk and are not endorsed for live use.
 
 Pure policy tests now cover Gold symbol recognition, preservation of non-Gold risk, conversion of KES cash cap to an equity risk percentage, direct/inverse FX quote math, stale/future/zero quote rejection, and cash-cap boundary behavior. The current GitHub workflow compiles both the consolidated EA and the dedicated `AccountRiskProfilePolicy.mq5` test source, then launches the script in a portable MT5 terminal. On workflow run [42513414813](https://github.com/cirvannaco-png/midas/actions/runs/42513414813), the script wrote `failures=0`. This is runtime execution of the pure policy assertions in an offline terminal with no account credentials or trading enabled; it is not broker-demo validation of live KES quotes, Gold contract calculations or order fills.
 
