@@ -38,6 +38,12 @@ Do not carry this override into demo or live-candidate operation. Those environm
 
 The default objective is three qualified, fully closed winning trades per weekday, each meeting the configured minimum realized-R threshold (default 0.25R). It does not force an entry, lower filters, or promise three opportunities. Preserve configured risk limits and distinguish entry count, position-level outcomes, and close-deal records when evaluating results.
 
+## High-risk small-account profile — release blocker
+
+The shipped default small-account profile currently targets 20% stop risk per trade, enforces a 15% minimum, allows 25% daily loss, 35% peak drawdown and 20% portfolio open risk. On KSh 1,500 equity this corresponds to KSh 300 planned stop risk per ordinary trade and KSh 375 daily-loss allowance. This is an aggressive profile, not a conservative small-account setting.
+
+The risk engine rounds volume down and rejects a broker-minimum lot when that minimum itself exceeds the selected percentage risk budget. However, there is not yet a separate Gold minimum-volume stop-risk ceiling of KSh 7.50. Do not assume that check exists. Before demo/live use, reconcile the small-account percentages and Gold cash-risk ceiling against the real broker account currency and Gold contract specification, then test minimum/maximum volume and stop calculations in demo. Do not infer a KSh-to-USD conversion or silently change the requested risk profile.
+
 ## Required validation
 
 - Python source generator check and structural/safety validator.
