@@ -1,7 +1,7 @@
 // MidasTouch2 single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@ca8efc7c807035cf40e1e4ee2b3718bbdf6d57f6
+// Staged EA source snapshot: cirvannaco-png/midas@dabcc261e55b0a1bf20d37c9c0f5efd4ac8a174b
 // Modular source is preserved under development/EA/.
 // Regenerate with: python scripts/build_single_file.py
 // Do not hand-edit this generated file.
