@@ -168,7 +168,7 @@ input double InpMinConfidenceSignal=58.0;
 input double InpFullRiskConfidence=85.0;
 input int InpMaxSpreadPoints=0;
 input group "Account Risk Profile"
-input ENUM_ACCOUNT_RISK_PROFILE InpAccountRiskProfile=ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT; // conservative small-account preset is the default
+input ENUM_ACCOUNT_RISK_PROFILE InpAccountRiskProfile=ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT; // selected small-account profile; Gold uses the separate KES cash-risk cap
 
 input group "Execution — Legacy Risk Inputs"
 input bool InpUseMarketOrders=true;
