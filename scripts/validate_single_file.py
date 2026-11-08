@@ -48,6 +48,7 @@ def main():
         "entry admission requires health and reconciliation":r'bool\s+AdmissionReady\s*\(\)\s*const\s*\{\s*return\s*\(m_ready\s*&&\s*m_healthVerified\s*&&\s*m_admissionHealthy\)\s*;\s*\}',
         "reconciliation alone reopens an authenticated healthy ledger":r'void\s+MarkReconciled\s*\(\)\s*\{\s*m_admissionHealthy\s*=\s*\(m_ready\s*&&\s*m_healthVerified\)\s*;\s*\}',
         "transport failure invalidates health and admission":r'm_healthVerified\s*=\s*false\s*;\s*m_admissionHealthy\s*=\s*false\s*;\s*PrintFormat\("Midas execution ledger: POST',
+        "startup probes configured ledger before testing admission":r'if\s*\(InpEnableExecution\s*&&\s*g_executionLedger\.Ready\(\)\s*\)[\s\S]{0,450}g_executionLedgerHealthy\s*=\s*g_executionLedger\.CheckHealth\(\)\s*&&\s*ReconcileBrokerStateSnapshot\(\)[\s\S]{0,150}g_executionLedger\.MarkReconciled\(\)',
         "recovery requires health and reconciliation":r'if\s*\(!\(bool\)MQLInfoInteger\(MQL_TESTER\)[\s\S]{0,700}g_executionLedgerHealthy\s*=\s*g_executionLedger\.CheckHealth\(\)\s*&&\s*ReconcileBrokerStateSnapshot\(\)',
         "retry time persisted before retry":r'g_lastLedgerReconcileAttempt\s*=\s*localNow\s*;',
         "three qualified winning trades target":r'input\s+int\s+InpMinimumQualifiedTradesPerDay\s*=\s*3\s*;',
