@@ -79,12 +79,36 @@ jobs:
           $warnings = [int]$match.Groups[2].Value
           Write-Host "MetaEditor: $errors errors, $warnings warnings"
           if ($errors -ne 0 -or $warnings -ne 0) { throw "Release compile gate requires zero errors and zero warnings; found $errors errors and $warnings warnings." }
+
+          # Compile the pure account-risk policy test as a second MQL5 source.
+          # Its relative include tree is preserved so MetaEditor checks the exact policy header.
+          $policyTestRoot = Join-Path $target "policy-tests"
+          $policyTestDir = Join-Path $policyTestRoot "tests"
+          $policyIncludeDir = Join-Path $policyTestRoot "includes\Portfolio"
+          New-Item -ItemType Directory -Force -Path $policyTestDir, $policyIncludeDir | Out-Null
+          Copy-Item "development/EA/tests/AccountRiskProfilePolicy.mq5" (Join-Path $policyTestDir "AccountRiskProfilePolicy.mq5") -Force
+          Copy-Item "development/EA/includes/Portfolio/AccountRiskProfilePolicy.mqh" (Join-Path $policyIncludeDir "AccountRiskProfilePolicy.mqh") -Force
+          $policyTestSource = Join-Path $policyTestDir "AccountRiskProfilePolicy.mq5"
+          $policyTestLog = Join-Path $policyTestDir "AccountRiskProfilePolicy.log"
+          $policyCompileArg = '/compile:"' + $policyTestSource + '"'
+          $policyProc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($policyCompileArg, $includeArg, "/log") -Wait -PassThru
+          if (-not (Test-Path $policyTestLog)) { throw "Risk-policy test compile log missing; process exit $($policyProc.ExitCode)" }
+          $policyContent = Get-Content $policyTestLog -Raw -Encoding Unicode
+          $policyMatch = [regex]::Match($policyContent, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
+          if (-not $policyMatch.Success) { throw "Cannot parse risk-policy test compile result: $policyContent" }
+          $policyErrors = [int]$policyMatch.Groups[1].Value
+          $policyWarnings = [int]$policyMatch.Groups[2].Value
+          Write-Host "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings"
+          if ($policyErrors -ne 0 -or $policyWarnings -ne 0) { throw "Risk-policy test source must compile with zero errors and warnings." }
+
           $ex5 = Join-Path $target "MidasTouch2.ex5"
           if (-not (Test-Path $ex5)) { throw "Compiled EX5 not produced" }
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Copy-Item $ex5 artifacts/MidasTouch2.ex5 -Force
           Copy-Item $log artifacts/MidasTouch2.MetaEditor.log -Force
+          Copy-Item $policyTestLog artifacts/AccountRiskProfilePolicy.MetaEditor.log -Force
           "MetaEditor result: $errors errors, $warnings warnings" | Out-File artifacts/compile-summary.txt -Encoding utf8
+          "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings" | Out-File artifacts/policy-test-compile-summary.txt -Encoding utf8
       - name: Upload MetaEditor artifacts
         if: always()
         uses: actions/upload-artifact@v4
