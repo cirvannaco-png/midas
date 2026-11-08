@@ -81,6 +81,38 @@ bool IsGoldRiskLimitedSymbol(const string symbol)
    return (StringFind(normalized,"XAU")>=0 || StringFind(normalized,"GOLD")>=0);
   }
 
+bool ResolveKESConversionFactorFromQuote(const double bid,
+                                           const double ask,
+                                           const bool directKESBase,
+                                           const datetime tickTime,
+                                           const datetime now,
+                                           const int maximumAgeSeconds,
+                                           double &accountCurrencyPerKES)
+  {
+   accountCurrencyPerKES=0.0;
+   if(tickTime<=0 || now<tickTime || maximumAgeSeconds<1 ||
+      (long)now-(long)tickTime>maximumAgeSeconds)
+      return false;
+
+   double factor=0.0;
+   if(directKESBase)
+     {
+      // KES/XXX bid = account-currency units received for one KES.
+      if(!MathIsValidNumber(bid) || bid<=0.0) return false;
+      factor=bid;
+     }
+   else
+     {
+      // XXX/KES ask = KES required to buy one account-currency unit.
+      if(!MathIsValidNumber(ask) || ask<=0.0) return false;
+      factor=1.0/ask;
+     }
+
+   if(!MathIsValidNumber(factor) || factor<=0.0) return false;
+   accountCurrencyPerKES=factor;
+   return true;
+  }
+
 bool ResolveRiskPercentWithCashCap(const double equity,
                                    const double requestedRiskPercent,
                                    const double goldCapMoney,
