@@ -56,7 +56,20 @@ def main():
         "daily counter accepts only fully closed positive qualifying R on weekdays":r'void\s+OnQualifiedClose\(datetime\s+at,double\s+realizedR,ulong\s+positionId\)\s*\{[\s\S]{0,320}realizedR\s*<=\s*0\.0[\s\S]{0,100}realizedR\s*\+\s*1e-9\s*<\s*m_minQualifiedR[\s\S]{0,100}!IsWeekday\(at\)',
         "daily counter called only after complete qualified position finalization":r'if\s*\(tracked\s*&&\s*!stillOpen\s*&&\s*g_tracker\.LastFinalizedQualified\(\)\)\s*g_dailyTradeTarget\.OnQualifiedClose',
         "daily target reports no forced entries":r'continuing normal setup search, no entries forced',
-        "daily objective does not gate setup evaluation":r'g_dailyTradeTarget\.LogSearchProgress\(\);[\s\S]{0,350}TradeSetup\s+buySetup\s*=\s*g_decision\.GenerateBuySetup\(\)'
+        "daily objective does not gate setup evaluation":r'g_dailyTradeTarget\.LogSearchProgress\(\);[\s\S]{0,350}TradeSetup\s+buySetup\s*=\s*g_decision\.GenerateBuySetup\(\)',
+        "KES Gold stop-risk input defaults to 7.50":r'input\s+double\s+InpSmallGoldMaxStopRiskKES\s*=\s*7\.50\s*;',
+        "Strategy Tester FX conversion requires explicit input":r'if\s*\(\(bool\)MQLInfoInteger\(MQL_TESTER\)\)[\s\S]{0,350}InpAccountCurrencyPerKES\s*<=\s*0\.0[\s\S]{0,180}return\s+false',
+        "live FX conversion scans direct and inverse KES pairs":r'for\s*\(int\s+direction\s*=\s*0\s*;\s*direction\s*<\s*2[\s\S]{0,1500}bool\s+direct\s*=\s*\(baseCurrency\s*==\s*"KES"[\s\S]{0,250}bool\s+inverse\s*=\s*\(baseCurrency\s*==\s*accountCurrency[\s\S]{0,500}SymbolInfoTick\(candidate,tick\)',
+        "live conversion quotes must be fresh":r'age\s*=\s*\(long\)now\s*-\s*\(long\)tick\.time\s*;[\s\S]{0,100}age\s*>\s*maxAge',
+        "Gold risk percent is capped by KES-derived account money":r'ResolveRiskPercentWithCashCap\(equity,g_activeRiskLimits\.riskPercentPerTrade[\s\S]{0,160}goldCashCapMoney,true,effectiveRiskPercent',
+        "Gold exception is isolated from other symbols":r'!IsGoldRiskLimitedSymbol\(_Symbol\)',
+        "automated sizing uses capped risk percent":r'CalculateLotSize\(_Symbol,effectiveRiskPercent\*fraction',
+        "automated multi-leg risk is capped as one signal":r'GoldStopRiskWithinCashCap\(totalProposedRisk,goldCashCapMoney\)',
+        "manual sizing uses capped risk percent":r'CalculateLotSize\(_Symbol,effectiveRiskPercent,entry,setup\.stop_loss',
+        "manual Gold cash risk is capped":r'GoldStopRiskWithinCashCap\(proposedRisk,goldCashCapMoney\)',
+        "Gold cap exception does not bypass zero-risk rejection":r'bool\s+SmallAccountRiskFloorSatisfied[\s\S]{0,280}plannedRiskPercent\s*<=\s*0\.0[\s\S]{0,100}if\s*\(goldCashCapApplies\)',
+        "Gold policy tests cover KES 7.50":r'GoldStopRiskWithinCashCap\(7\.51,7\.50\)',
+        "Gold policy tests retain non-Gold risk":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,false'
     }
     for name,pattern in bridge_checks.items():
         if not re.search(pattern,raw): fail.append("bridge/control regression: "+name)
