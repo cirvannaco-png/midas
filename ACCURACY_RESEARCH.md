@@ -112,9 +112,15 @@ A source audit of the selected default `ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT` foun
 
 On an account with KSh 1,500 equity, that is KSh 300 target stop risk per ordinary trade, KSh 225 minimum accepted planned risk, KSh 375 daily-loss limit and KSh 525 drawdown limit. These are very aggressive settings. They are not equivalent to a 0.5% trade-risk policy.
 
-The lot-sizing engine does correctly round down to the broker's volume step and refuses to raise an undersized request to the broker minimum; the `InpAllowMinLotOverride` input is retained for compatibility but does not override that hard rejection. However, the current source does **not** implement a separate explicit Gold minimum-volume stop-risk ceiling of KSh 7.50. It instead sizes toward the selected account risk budget (and refuses only when the broker minimum lot exceeds that much larger configured budget).
+The earlier source audit found no separate Gold cash-risk ceiling. That gap has since been addressed in the current staging implementation:
 
-This is a production blocker. The 20% profile and KSh 7.50 Gold-minimum-lot constraint must be made coherent using the actual broker account currency and symbol contract specifications. No currency conversion, broker symbol mapping, or user-selected account currency should be guessed. Do not trade this small-account profile live until the risk policy is explicitly reconciled and verified in broker demo. The existing 20% profile is documented, not endorsed as safe.
+- Small-account Gold symbols (`XAU*` or names containing `GOLD`) use a hard maximum of **KES 7.50 stop risk per signal**, while the selected 20% small-account profile is preserved for other instruments.
+- Live/demo conversion requires a fresh broker KES/account-currency FX quote (direct or inverse). A missing or stale quote blocks Gold entries.
+- In Strategy Tester, non-KES accounts must provide `InpAccountCurrencyPerKES` (account-currency units per KES); the EA does not invent a conversion rate.
+- Automated multi-leg entries are checked against the aggregate signal cash-risk ceiling; manual chart orders are checked against the same cap.
+- The broker minimum lot is still rejected when its calculated stop risk exceeds the cap.
+
+The current 20% profile remains high-risk for non-Gold instruments: 20% target risk, 15% minimum, 25% daily-loss limit, 35% drawdown limit and 20% portfolio open risk. These values are preserved from the selected profile, not endorsed as prudent. Broker-specific contract, account-currency conversion and actual KSh 7.50 stop-loss behavior still require demo verification before live use.
 
 ## Next research steps
 
