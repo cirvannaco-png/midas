@@ -20,7 +20,7 @@ Production/demo EA inputs must include:
 - `InpBridgeApiKey`: the key matching the bridge's `X-API-Key` configuration.
 - `InpRequireExecutionLedger=true`: required for all demo/forward and live-candidate runs.
 
-The MT5 terminal must allow-list the HTTPS bridge origin in **Tools → Options → Expert Advisors → Allow WebRequest for listed URL**. Startup must show a successful authenticated `GET /execution-ledger/health` check and subsequent complete broker/history reconciliation. A green bridge health response alone does not complete reconciliation.
+The MT5 terminal must allow-list the HTTPS bridge origin in **Tools → Options → Expert Advisors → Allow WebRequest for listed URL**. Startup must show a successful authenticated `GET /execution-ledger/health` check with both `execution_ledger=ready` and `ledger_schema=ready` and subsequent complete broker/history reconciliation. A green bridge health response alone does not complete reconciliation.
 
 The bridge is separate from the EA: FastAPI/PostgreSQL stores execution intent and evidence; the EA remains the only component that submits broker orders. The bridge never places or retries a broker order.
 
