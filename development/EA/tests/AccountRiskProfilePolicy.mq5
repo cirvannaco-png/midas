@@ -145,6 +145,16 @@ void OnStart()
       effectiveRisk,reason) && MathAbs(effectiveRisk-20.0)<0.000001,
       "Gold-specific cap does not change the 20% small-account profile for other assets");
 
+   reason="";
+   AssertTrue(ResolveRiskPercentWithCashCap(1500.0,1.0,7.50,true,
+      effectiveRisk,reason) && MathAbs(effectiveRisk-0.50)<0.000001,
+      "Gold cash cap also constrains a legacy/prop profile when its risk target is higher");
+
+   reason="";
+   AssertTrue(ResolveRiskPercentWithCashCap(1500.0,0.25,7.50,true,
+      effectiveRisk,reason) && MathAbs(effectiveRisk-0.25)<0.000001,
+      "Gold cash cap never increases a lower selected profile risk target");
+
    AssertTrue(SmallAccountRiskFloorSatisfied(0.50,15.0,true),
       "Gold cash-risk exception permits a safe capped budget below the general minimum");
    AssertTrue(!SmallAccountRiskFloorSatisfied(0.50,15.0,false),
