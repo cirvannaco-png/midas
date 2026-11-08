@@ -44,6 +44,12 @@ For demo/forward validation, restore `InpRequireExecutionLedger=true`, configure
 
 The default target is **three qualified closed winning trades per weekday**, with each counted result meeting the configured minimum realized-R threshold (default 0.25R). This is an objective and reporting mechanism, not an entry quota: the EA must never manufacture or force trades to meet it.
 
+## Small-account Gold stop-risk exception
+
+The selected small-account profile preserves its configured 20% trade-risk target for non-Gold instruments. Gold symbols (`XAU*` or names containing `GOLD`) have a separate hard maximum of **KES 7.50 stop risk per signal**, including the combined risk of all legs in an automated multi-leg entry. The EA converts KES to account currency using a fresh broker FX quote; if the quote is missing/stale, or minimum broker volume would exceed the cap, the order is rejected. For non-KES Strategy Tester accounts, set `InpAccountCurrencyPerKES` explicitly (account-currency units per KES); there is no guessed FX rate. Manual chart orders use the same cap.
+
+The 20% small-account profile remains high-risk for non-Gold instruments and is not a live-trading recommendation. Resolve broker contract, symbol and account-currency settings in demo before any live use.
+
 ## Release gates
 
 A release requires all of the following evidence:
