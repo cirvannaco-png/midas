@@ -37,7 +37,19 @@ def ranges_for_classes(code):
     return ranges
 def main():
     if not EA.is_file(): raise SystemExit("FAIL: MidasTouch2.mq5 missing")
-    code=mask(EA.read_text(encoding="utf-8-sig")); fail=[]
+    raw=EA.read_text(encoding="utf-8-sig")
+    code=mask(raw); fail=[]
+    bridge_checks={
+        "authenticated execution-ledger health request":r'WebRequest\s*\(\s*"GET"\s*,\s*m_baseUrl\s*\+\s*"/execution-ledger/health"',
+        "exact execution_ledger readiness token":r'readinessToken\s*=\s*CharToString\(34\)\s*\+\s*"execution_ledger"\s*\+\s*CharToString\(34\)\s*\+\s*":"\s*\+\s*CharToString\(34\)\s*\+\s*"ready"\s*\+\s*CharToString\(34\)',
+        "Strategy Tester WebRequest guard":r'bool\s+CheckHealth\s*\(\s*\)\s*\{[\s\S]{0,700}MQLInfoInteger\(MQL_TESTER\)',
+        "recovery requires health and reconciliation":r'if\s*\(!\(bool\)MQLInfoInteger\(MQL_TESTER\)[\s\S]{0,700}g_executionLedgerHealthy\s*=\s*g_executionLedger\.CheckHealth\(\)\s*&&\s*ReconcileBrokerStateSnapshot\(\)',
+        "retry time persisted before retry":r'g_lastLedgerReconcileAttempt\s*=\s*localNow\s*;',
+        "three qualified winning trades target":r'input\s+int\s+InpMinimumQualifiedTradesPerDay\s*=\s*3\s*;',
+        "minimum qualifying result threshold":r'input\s+double\s+InpMinimumQualifiedTradeR\s*=\s*0\.25\s*;'
+    }
+    for name,pattern in bridge_checks.items():
+        if not re.search(pattern,raw): fail.append("bridge/control regression: "+name)
     if re.search(r'^\s*#include\s*"',code,re.MULTILINE): fail.append("custom quoted include remains")
     system=re.findall(r'^\s*#include\s*<([^>]+)>',code,re.MULTILINE)
     if not system: fail.append("standard MQL5 library include missing")
