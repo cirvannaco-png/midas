@@ -52,7 +52,11 @@ def main():
         "recovery requires health and reconciliation":r'if\s*\(!\(bool\)MQLInfoInteger\(MQL_TESTER\)[\s\S]{0,700}g_executionLedgerHealthy\s*=\s*g_executionLedger\.CheckHealth\(\)\s*&&\s*ReconcileBrokerStateSnapshot\(\)',
         "retry time persisted before retry":r'g_lastLedgerReconcileAttempt\s*=\s*localNow\s*;',
         "three qualified winning trades target":r'input\s+int\s+InpMinimumQualifiedTradesPerDay\s*=\s*3\s*;',
-        "minimum qualifying result threshold":r'input\s+double\s+InpMinimumQualifiedTradeR\s*=\s*0\.25\s*;'
+        "minimum qualifying result threshold":r'input\s+double\s+InpMinimumQualifiedTradeR\s*=\s*0\.25\s*;',
+        "daily counter accepts only fully closed positive qualifying R on weekdays":r'void\s+OnQualifiedClose\(datetime\s+at,double\s+realizedR,ulong\s+positionId\)\s*\{[\s\S]{0,320}realizedR\s*<=\s*0\.0[\s\S]{0,100}realizedR\s*\+\s*1e-9\s*<\s*m_minQualifiedR[\s\S]{0,100}!IsWeekday\(at\)',
+        "daily counter called only after complete qualified position finalization":r'if\s*\(tracked\s*&&\s*!stillOpen\s*&&\s*g_tracker\.LastFinalizedQualified\(\)\)\s*g_dailyTradeTarget\.OnQualifiedClose',
+        "daily target reports no forced entries":r'continuing normal setup search, no entries forced',
+        "daily objective does not gate setup evaluation":r'g_dailyTradeTarget\.LogSearchProgress\(\);[\s\S]{0,350}TradeSetup\s+buySetup\s*=\s*g_decision\.GenerateBuySetup\(\)'
     }
     for name,pattern in bridge_checks.items():
         if not re.search(pattern,raw): fail.append("bridge/control regression: "+name)
