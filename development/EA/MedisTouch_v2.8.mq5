@@ -214,6 +214,9 @@ input double InpSmallMaxDrawdownPercent=35.0;
 input double InpSmallDeriskStartPercent=10.0;
 input double InpSmallDeriskFloor=0.75;          // 20% * 0.75 = 15% at the configured drawdown-de-risk floor
 input double InpSmallMaxPortfolioRiskPercent=20.0;
+input double InpSmallGoldMaxStopRiskKES=7.50; // Hard per-signal Gold stop-risk ceiling; converted into account currency.
+input double InpAccountCurrencyPerKES=0.0; // Strategy Tester fallback only: account-currency units per KES; 0 requires a configured KES account.
+input int    InpKESConversionMaxQuoteAgeSeconds=3600; // Live broker FX conversion must be this fresh or Gold entries fail closed.
 input int    InpSmallMaxPositionsPerSymbol=3;
 input int    InpSmallMaxPositionsPerGroup=3;
 input bool   InpSmallAccountProfileConfigured=true; // Requested profile values; production profitability remains unverified
@@ -311,6 +314,9 @@ bool UpdateLedgerRiskForPosition(const ulong positionIdentifier,const string dir
 bool IsOrderBuyDirection(const ENUM_ORDER_TYPE orderType);
 int EffectiveMaxOpenTrades();
 bool SmallAccountRiskAdmission(bool reduceRisk,string &reasonOut);
+bool ResolveSmallAccountOrderRisk(double &effectiveRiskPercent,double &goldCashCapMoney,string &reasonOut);
+bool ResolveGoldCashCapInAccountCurrency(double &capMoney,string &reasonOut);
+bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,string &quoteSymbol,string &reasonOut);
 
 void ConfigureAccountRiskLimits(AccountRiskLimits &limits,
                                  ENUM_ACCOUNT_RISK_PROFILE profile,
@@ -772,6 +778,13 @@ bool ResolveSelectedAccountRiskProfile()
   {
    if(InpAccountRiskProfile==ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT)
      {
+      if(!MathIsValidNumber(InpSmallGoldMaxStopRiskKES) || InpSmallGoldMaxStopRiskKES<=0.0 ||
+         !MathIsValidNumber(InpAccountCurrencyPerKES) || InpAccountCurrencyPerKES<0.0 ||
+         InpKESConversionMaxQuoteAgeSeconds<1)
+        {
+         Print("MedisTouch: small-account Gold cash-risk cap/conversion settings are invalid.");
+         return false;
+        }
       if(!MathIsValidNumber(InpSmallMinimumRiskPercentPerTrade) ||
          InpSmallMinimumRiskPercentPerTrade<MIDAS_SMALL_ACCOUNT_MIN_RISK_PERCENT_PER_TRADE ||
          InpSmallMinimumRiskPercentPerTrade>InpSmallRiskPercentPerTrade ||
@@ -1083,6 +1096,132 @@ int EffectiveMaxOpenTrades()
    return tracked+1;
   }
 
+bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,string &quoteSymbol,string &reasonOut)
+  {
+   rate=0.0;
+   quoteSymbol="";
+   reasonOut="";
+   if(accountCurrency=="KES")
+     {
+      rate=1.0;
+      quoteSymbol="account currency KES";
+      return true;
+     }
+
+   // Strategy Tester agents do not reliably expose synchronized cross-symbol
+   // ticks. Require an explicit, operator-supplied conversion factor there.
+   if((bool)MQLInfoInteger(MQL_TESTER))
+     {
+      if(!MathIsValidNumber(InpAccountCurrencyPerKES) || InpAccountCurrencyPerKES<=0.0)
+        {
+         reasonOut="Strategy Tester Gold risk cap requires InpAccountCurrencyPerKES > 0 (account-currency units per KES); no rate is guessed";
+         return false;
+        }
+      rate=InpAccountCurrencyPerKES;
+      quoteSymbol="Strategy Tester configured conversion";
+      return true;
+     }
+
+   int maxAge=MathMax(1,InpKESConversionMaxQuoteAgeSeconds);
+   datetime now=TimeTradeServer();
+   if(now<=0) now=TimeCurrent();
+
+   // Prefer KES/account-currency direct quotes, then invert account/KES.
+   // Scan all known terminal symbols so broker suffixes/prefixes are supported.
+   for(int direction=0;direction<2;direction++)
+     {
+      int total=SymbolsTotal(false);
+      for(int i=0;i<total;i++)
+        {
+         string candidate=SymbolName(i,false);
+         if(StringLen(candidate)<6) continue;
+         string normalized=candidate;
+         StringToUpper(normalized);
+         int nameLength=StringLen(normalized);
+         for(int offset=0;offset<=nameLength-6;offset++)
+           {
+            string baseCurrency=StringSubstr(normalized,offset,3);
+            string quoteCurrency=StringSubstr(normalized,offset+3,3);
+            bool direct=(baseCurrency=="KES" && quoteCurrency==accountCurrency);
+            bool inverse=(baseCurrency==accountCurrency && quoteCurrency=="KES");
+            if((direction==0 && !direct) || (direction==1 && !inverse)) continue;
+            if(!SymbolSelect(candidate,true)) continue;
+
+            MqlTick tick;
+            if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
+            long age=(long)now-(long)tick.time;
+            if(age<0 || age>maxAge) continue;
+
+            double candidateRate=0.0;
+            if(direct && tick.bid>0.0) candidateRate=tick.bid;
+            else if(inverse && tick.ask>0.0) candidateRate=1.0/tick.ask;
+            if(!MathIsValidNumber(candidateRate) || candidateRate<=0.0) continue;
+
+            rate=candidateRate;
+            quoteSymbol=candidate;
+            return true;
+           }
+        }
+     }
+
+   reasonOut=StringFormat("no fresh broker KES/%s conversion quote found (maximum age %d seconds); Gold entries are blocked",
+                          accountCurrency,maxAge);
+   return false;
+  }
+
+bool ResolveGoldCashCapInAccountCurrency(double &capMoney,string &reasonOut)
+  {
+   capMoney=0.0;
+   reasonOut="";
+   if(!MathIsValidNumber(InpSmallGoldMaxStopRiskKES) || InpSmallGoldMaxStopRiskKES<=0.0)
+     {
+      reasonOut="InpSmallGoldMaxStopRiskKES must be finite and positive";
+      return false;
+     }
+
+   string accountCurrency=AccountInfoString(ACCOUNT_CURRENCY);
+   StringToUpper(accountCurrency);
+   double accountCurrencyPerKES=0.0;
+   string quoteSymbol="";
+   if(!ResolveLiveKESPerAccountCurrency(accountCurrency,accountCurrencyPerKES,quoteSymbol,reasonOut))
+      return false;
+
+   capMoney=InpSmallGoldMaxStopRiskKES*accountCurrencyPerKES;
+   if(!MathIsValidNumber(capMoney) || capMoney<=0.0)
+     {
+      capMoney=0.0;
+      reasonOut="KES Gold stop-risk cap conversion returned an invalid account-currency amount";
+      return false;
+     }
+   PrintFormat("Midas small-account Gold risk cap: KES %.2f = %.8f %s via %s",
+               InpSmallGoldMaxStopRiskKES,capMoney,accountCurrency,quoteSymbol);
+   return true;
+  }
+
+bool ResolveSmallAccountOrderRisk(double &effectiveRiskPercent,double &goldCashCapMoney,string &reasonOut)
+  {
+   effectiveRiskPercent=g_activeRiskLimits.riskPercentPerTrade;
+   goldCashCapMoney=0.0;
+   reasonOut="";
+   if(g_activeRiskLimits.profile!=ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT ||
+      !IsGoldRiskLimitedSymbol(_Symbol))
+      return true;
+
+   double equity=AccountInfoDouble(ACCOUNT_EQUITY);
+   if(!MathIsValidNumber(equity) || equity<=0.0)
+     {
+      reasonOut="small-account Gold risk blocked: account equity is invalid";
+      return false;
+     }
+   if(!ResolveGoldCashCapInAccountCurrency(goldCashCapMoney,reasonOut))
+      return false;
+
+   if(!ResolveRiskPercentWithCashCap(equity,g_activeRiskLimits.riskPercentPerTrade,
+                                     goldCashCapMoney,true,effectiveRiskPercent,reasonOut))
+      return false;
+   return true;
+  }
+
 bool SmallAccountRiskAdmission(bool reduceRisk,string &reasonOut)
   {
    reasonOut="";
@@ -1093,13 +1232,22 @@ bool SmallAccountRiskAdmission(bool reduceRisk,string &reasonOut)
    if(!MathIsValidNumber(equity) || equity<=0.0)
      { reasonOut="small-account risk admission blocked: account equity is invalid"; return false; }
 
-   double requestedRisk=g_activeRiskLimits.riskPercentPerTrade;
+   double baseRiskPercent=0.0;
+   double goldCashCapMoney=0.0;
+   if(!ResolveSmallAccountOrderRisk(baseRiskPercent,goldCashCapMoney,reasonOut))
+     {
+      reasonOut="small-account risk admission blocked: "+reasonOut;
+      return false;
+     }
+
+   double requestedRisk=baseRiskPercent;
    if(reduceRisk) requestedRisk*=0.5;
    requestedRisk*=g_riskGuard.SizeMultiplier();
-   if(!MathIsValidNumber(requestedRisk) ||
-      requestedRisk+0.000001<InpSmallMinimumRiskPercentPerTrade)
+   bool goldCashCapApplies=(goldCashCapMoney>0.0);
+   if(!SmallAccountRiskFloorSatisfied(requestedRisk,InpSmallMinimumRiskPercentPerTrade,
+                                      goldCashCapApplies))
      {
-      reasonOut=StringFormat("risk reduction would take planned risk %.2f%% below the configured %.2f%% minimum; trade skipped rather than silently violating the minimum",
+      reasonOut=StringFormat("risk reduction would take planned risk %.4f%% below the configured %.2f%% minimum; trade skipped rather than silently violating the minimum",
                              requestedRisk,InpSmallMinimumRiskPercentPerTrade);
       return false;
      }
