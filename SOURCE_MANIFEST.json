@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "build/single-file-staging",
-    "commit": "142bf7d477b527c01b4a717af7f33f85f5e284ce",
-    "git_tree_sha": "ac3f2e3028956eaee38b64082c7ce0250376d097",
+    "commit": "6260e495ae6f3e03ae302173e8ae36e337b29e3a",
+    "git_tree_sha": "22a7cd0234235ea229f5c6ad23a1f78be7723afa",
     "root": "development/EA",
     "file_count": 95,
     "files": [
@@ -612,8 +612,8 @@
       },
       {
         "path": "development/EA/includes/Execution/ExecutionLedgerClient.mqh",
-        "git_blob_sha": "2486c641c738b5da61e14ee69c753f41c18127ea",
-        "size_bytes": 16979
+        "git_blob_sha": "288497e66dc929b4365b860e9bf50e6230c9a81b",
+        "size_bytes": 17581
       },
       {
         "path": "development/EA/includes/Execution/OrderManager.mqh",
