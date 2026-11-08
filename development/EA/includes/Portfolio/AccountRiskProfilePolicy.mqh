@@ -70,6 +70,78 @@ bool ValidateAccountRiskLimits(const AccountRiskLimits &limits,string &reason)
    return true;
   }
 
+// Gold in the small-account profile has an absolute cash-risk exception.
+// The KES budget is converted to account currency by the EA before these pure
+// policy helpers are called. This keeps the 20% profile intact for other assets
+// while preventing Gold from exceeding the operator's separate KES stop-risk cap.
+bool IsGoldRiskLimitedSymbol(const string symbol)
+  {
+   string normalized=symbol;
+   StringToUpper(normalized);
+   return (StringFind(normalized,"XAU")>=0 || StringFind(normalized,"GOLD")>=0);
+  }
+
+bool ResolveRiskPercentWithCashCap(const double equity,
+                                   const double requestedRiskPercent,
+                                   const double goldCapMoney,
+                                   const bool isGold,
+                                   double &effectiveRiskPercent,
+                                   string &reason)
+  {
+   effectiveRiskPercent=0.0;
+   reason="";
+   if(!MathIsValidNumber(equity) || equity<=0.0 ||
+      !MathIsValidNumber(requestedRiskPercent) || requestedRiskPercent<=0.0)
+     {
+      reason="equity and requested risk percent must be finite and positive";
+      return false;
+     }
+
+   effectiveRiskPercent=requestedRiskPercent;
+   if(!isGold) return true;
+
+   if(!MathIsValidNumber(goldCapMoney) || goldCapMoney<=0.0)
+     {
+      effectiveRiskPercent=0.0;
+      reason="Gold KES cash-risk cap is unavailable or invalid";
+      return false;
+     }
+
+   double cashCapPercent=goldCapMoney/equity*100.0;
+   if(!MathIsValidNumber(cashCapPercent) || cashCapPercent<=0.0)
+     {
+      effectiveRiskPercent=0.0;
+      reason="Gold cash-risk cap could not be converted to an equity percentage";
+      return false;
+     }
+
+   effectiveRiskPercent=MathMin(requestedRiskPercent,cashCapPercent);
+   if(effectiveRiskPercent<=0.0)
+     {
+      reason="effective Gold risk budget is zero";
+      return false;
+     }
+   return true;
+  }
+
+bool SmallAccountRiskFloorSatisfied(const double plannedRiskPercent,
+                                    const double configuredMinimumPercent,
+                                    const bool goldCashCapApplies)
+  {
+   if(!MathIsValidNumber(plannedRiskPercent) || plannedRiskPercent<=0.0)
+      return false;
+   if(goldCashCapApplies) return true;
+   return (MathIsValidNumber(configuredMinimumPercent) &&
+           plannedRiskPercent+0.000001>=configuredMinimumPercent);
+  }
+
+bool GoldStopRiskWithinCashCap(const double proposedRiskMoney,const double goldCapMoney)
+  {
+   return (MathIsValidNumber(proposedRiskMoney) && proposedRiskMoney>0.0 &&
+           MathIsValidNumber(goldCapMoney) && goldCapMoney>0.0 &&
+           proposedRiskMoney<=goldCapMoney+0.000001);
+  }
+
 // Select exactly one complete profile. The caller constructs all three from
 // the EA inputs and validates the selected profile before any order routing.
 // Global account-wide RiskGuard persistence remains account-scoped across restarts.
