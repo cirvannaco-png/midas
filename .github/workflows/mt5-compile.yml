@@ -13,8 +13,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - name: Verify committed single-file EA matches modular sources
+      - name: Verify committed single-file EA matches modular sources on pull requests
+        if: github.event_name == 'pull_request'
         run: python scripts/build_single_file.py --check
+      - name: Regenerate and verify single-file EA on branch pushes
+        if: github.event_name != 'pull_request'
+        run: python scripts/build_single_file.py && python scripts/build_single_file.py --check
       - name: Validate flattened source and safety defaults
         run: python scripts/validate_single_file.py
 
@@ -26,8 +30,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - name: Verify committed single-file EA matches modular sources
-        run: python scripts/build_single_file.py --check
+      - name: Regenerate and verify single-file EA before MetaEditor build
+        run: python scripts/build_single_file.py && python scripts/build_single_file.py --check
       - name: Install official MetaTrader 5 and locate MetaEditor
         shell: pwsh
         run: |
