@@ -27,5 +27,7 @@ jobs:
           fetch-depth: 0
 
       - name: Sync complete backend source snapshot
+        env:
+          BACKEND_SOURCE_REF: main
         run: bash scripts/sync_backend_source.sh
 
