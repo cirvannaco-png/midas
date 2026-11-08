@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "build/single-file-staging",
-    "commit": "6260e495ae6f3e03ae302173e8ae36e337b29e3a",
-    "git_tree_sha": "22a7cd0234235ea229f5c6ad23a1f78be7723afa",
+    "commit": "519df19d7199537bd7e2cc63d2020c4357e31fd1",
+    "git_tree_sha": "68f0dadd31f5b74df012cc30c90e31633d099e0b",
     "root": "development/EA",
     "file_count": 95,
     "files": [
@@ -927,8 +927,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.mq5",
-        "git_blob_sha": "08349ab97f15f7868f377b2fe3463dbe44ba8c9d",
-        "size_bytes": 100698
+        "git_blob_sha": "d8b59fa643b06308e71b8dbd9290a37e0572f6e5",
+        "size_bytes": 100660
       },
       {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
