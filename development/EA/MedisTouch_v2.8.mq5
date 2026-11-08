@@ -914,9 +914,12 @@ void OnTimer()
         }
      }
    if(InpEnableExecution && InpRequireExecutionLedger && (!g_executionLedgerHealthy || !g_executionLedger.AdmissionReady()) &&
-      now-g_lastLedgerReconcileAttempt>=MathMax(10,InpExecutionLedgerRetrySeconds))
+      localNow-g_lastLedgerReconcileAttempt>=MathMax(10,InpExecutionLedgerRetrySeconds))
      {
-      g_executionLedgerHealthy=ReconcileBrokerStateSnapshot();
+      // Retry cadence uses local terminal time so recovery continues while the market is closed.
+      g_lastLedgerReconcileAttempt=localNow;
+      // Reopen admission only after fresh authenticated DB health and complete broker/history reconciliation.
+      g_executionLedgerHealthy=g_executionLedger.CheckHealth() && ReconcileBrokerStateSnapshot();
       if(g_executionLedgerHealthy) g_executionLedger.MarkReconciled();
       if(g_executionLedgerHealthy)
          g_execAudit.Log("EXECUTION_LEDGER_RECOVERED","broker snapshot and restart history reconciliation succeeded; new entries re-enabled");
