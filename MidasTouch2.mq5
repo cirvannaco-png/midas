@@ -11604,7 +11604,8 @@ public:
          return false;
         }
       string body=CharArrayToString(result,0,-1,CP_UTF8);
-      if(StringFind(body,"\\"execution_ledger\\":\\"ready\\"")<0)
+      string readinessToken=CharToString(34)+"execution_ledger"+CharToString(34)+":"+CharToString(34)+"ready"+CharToString(34);
+      if(StringFind(body,readinessToken)<0)
         {
          m_admissionHealthy=false;
          PrintFormat("Midas execution ledger: health response did not confirm execution_ledger=ready; body=%s",body);
@@ -14754,9 +14755,12 @@ void OnTimer()
         }
      }
    if(InpEnableExecution && InpRequireExecutionLedger && (!g_executionLedgerHealthy || !g_executionLedger.AdmissionReady()) &&
-      now-g_lastLedgerReconcileAttempt>=MathMax(10,InpExecutionLedgerRetrySeconds))
+      localNow-g_lastLedgerReconcileAttempt>=MathMax(10,InpExecutionLedgerRetrySeconds))
      {
-      g_executionLedgerHealthy=ReconcileBrokerStateSnapshot();
+      // Retry cadence uses local terminal time so recovery continues while the market is closed.
+      g_lastLedgerReconcileAttempt=localNow;
+      // Reopen admission only after fresh authenticated DB health and complete broker/history reconciliation.
+      g_executionLedgerHealthy=g_executionLedger.CheckHealth() && ReconcileBrokerStateSnapshot();
       if(g_executionLedgerHealthy) g_executionLedger.MarkReconciled();
       if(g_executionLedgerHealthy)
          g_execAudit.Log("EXECUTION_LEDGER_RECOVERED","broker snapshot and restart history reconciliation succeeded; new entries re-enabled");
