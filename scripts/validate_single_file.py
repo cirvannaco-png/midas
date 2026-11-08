@@ -84,6 +84,7 @@ def main():
         "Gold policy tests cover KES cap overflow":r'GoldStopRiskWithinCashCap\(7\.51,7\.50\)',
         "Gold policy tests retain non-Gold risk":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,false',
         "Gold policy tests cover cash-cap conversion":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,true',
+        "Gold policy tests cap higher legacy/prop risk targets":r'ResolveRiskPercentWithCashCap\(1500\.0,1\.0,7\.50,true',
         "KES tests cover direct conversion":r'ResolveKESConversionFactorFromQuote\(0\.0065,0\.0066,true',
         "KES tests cover inverse conversion":r'ResolveKESConversionFactorFromQuote\(150\.0,151\.0,false',
         "KES tests reject stale quotes":r'"stale KES conversion ticks are rejected"'
