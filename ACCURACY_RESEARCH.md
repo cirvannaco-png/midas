@@ -31,6 +31,38 @@ A previous LONA dry-run smoke test is not a performance backtest and does not va
 5. The live outcome tracker groups broker deal history under a decision ID and excludes ambiguous/incomplete cashflow outcomes from calibration. This is a better basis for decision-level accuracy than counting partial exit records, but it still needs real MT5 Strategy Tester evidence and sufficient samples.
 6. Calibration is stored in fixed five-point buckets, requires 30 samples by default, and is symbol-specific. The source warns that a scoring-formula change invalidates old calibration data. Any future calibration gate must be version-aware, sample-gated and tested out of sample; do not use sparse buckets to block or size live trades.
 
+
+## Fresh matched Gold M15 diagnostic — 2026-11-08
+
+A new StrategyTune research batch used **Gold / IC Markets / M15**, USD 1,500 starting balance, requested window **2026-07-01 00:00 UTC through 2026-11-01 00:00 UTC**. These are saved StrategyTune research validators, not runs of the compiled MT5 EA. The feed is quote-driven; the optional RVOL check measures quote-update activity, not exchange-traded volume. Historical bid/ask is used, but the platform has no commission or slippage model.
+
+### Results
+
+| Causal v2.1 test | Closed trade records | Record win rate | Closed position groups | Position win rate | Net P&L | Net R | Max DD | Entries/day |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| No optional filter | 500* | 85.4%* | Not returned* | Not returned* | -$72.00* | Not returned* | $80.25* | Not reliable* |
+| Quote-activity confirmation only (RVOL 1.5) | 25 | 84.0% | 14 | 71.4% | -$5.26 | -4.17R | $9.58 | 0.159 |
+| Fibonacci zone only (50–61.8%) | 40 | 80.0% | 24 | 66.7% | -$13.78 | -4.25R | $15.37 | 0.273 |
+| Both filters enabled | 0 | N/A | 0 | N/A | $0.00 | 0R | $0.00 | 0.000 |
+
+`*` The no-filter run stopped at 1,000 order operations on **2026-10-29 19:05 UTC**, before the requested end date. It is an incomplete partial result: 500 closed trade records, 427 winners / 73 losers, -$72 P&L, $80.25 maximum drawdown, and one remaining open position. Its 85.4% is a close-record win rate, not a completed-position win rate.
+
+The Strict Tier D v9 research script was also run on the same requested instrument, dates, timeframe and balance. It stopped at the same 1,000-operation cap on **2026-10-29 20:16 UTC** with 500 closed records, 447 wins / 53 losses (89.4% by close records), +$9.55 P&L and $10.46 maximum drawdown. Do not rank it against Causal v2.1 as a controlled one-variable ablation: the saved source implementations differ in more than the `minQuality` default (62 vs 101), and the cut-off timestamps are not identical.
+
+The three filtered Causal v2.1 runs processed the complete available market-update stream to **2026-10-30 20:57 UTC** without the 1,000-operation stop warning. Their custom position counters provide a better unit than partial-close records:
+
+- RVOL only: 14 completed position groups, 10 winners / 4 losers, 71.4% position win rate, -4.165 position R. It observed 88 days, met the configured 3-entry daily diagnostic on 0 days, and its busiest day had 2 entries.
+- Fibonacci only: 24 completed position groups, 16 winners / 8 losers, 66.7% position win rate, -4.255 position R. It also met the 3-entry diagnostic on 0 of 88 days; busiest day had 2 entries.
+- Both filters: no entries on any of the 88 observed days. The combination over-filters the strategy rather than improving its economics.
+
+### Interpretation
+
+1. The headline close-record win rate overstates trade-level quality when partial exits produce multiple records. Judge the full position group and R-multiple as well.
+2. Neither one-filter variant has positive expectancy in this sample: both have negative total P&L and negative aggregate position R despite majority winning positions. This points to an adverse win/loss payoff distribution, not simply a lack of winning records.
+3. Quote-activity confirmation sharply reduces frequency and drawdown, but did not make expectancy positive or meet the three-entry/day diagnostic. Fibonacci filtering was worse on P&L and position win rate. The combined filter blocks all participation.
+4. Do not enable either filter as a live default, and do not lower thresholds to force the daily target. The next analysis should attribute average winning R, average losing R, tail losses, partial-exit contribution, and costs per complete position group; then test one exit change at a time on a matched training range and untouched OOS range.
+5. These runs are strategy-validator diagnostics only. No profitability claim, broker execution claim, or live approval follows from them.
+
 ## Next research steps
 
 - Re-run the StrategyTune variants after the daily compute allowance resets, reducing trade-operation consumption (lower daily entry cap and/or less aggressive multi-tranche exits) so each run reaches the same end date. Keep the same instrument, provider, interval, balance, costs assumptions and dates across variants.
