@@ -1,0 +1,36 @@
+name: MidasTouch2 source consistency
+on:
+  # Branch pushes regenerate and commit the distributable artifact; pull requests
+  # only verify that the committed artifact already matches the modular source.
+  push:
+    branches: ["build/**", "release/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Verify committed single-file EA on pull requests
+        if: github.event_name == 'pull_request'
+        run: python scripts/build_single_file.py --check
+      - name: Regenerate single-file EA on branch pushes
+        if: github.event_name != 'pull_request'
+        run: python scripts/build_single_file.py
+      - name: Run structural and safety checks
+        run: python scripts/validate_single_file.py
+      - name: Commit deterministic generated EA when source changed
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          if ! git diff --quiet -- MidasTouch2.mq5; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add MidasTouch2.mq5
+            git commit -m "build: regenerate consolidated MidasTouch2 EA"
+            git push
+          fi

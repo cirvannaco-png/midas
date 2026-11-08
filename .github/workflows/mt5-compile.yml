@@ -1,0 +1,146 @@
+name: MidasTouch2 validation and MetaEditor compile
+on:
+  push:
+    branches: ["build/**", "release/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Verify committed single-file EA matches modular sources on pull requests
+        if: github.event_name == 'pull_request'
+        run: python scripts/build_single_file.py --check
+      - name: Regenerate and verify single-file EA on branch pushes
+        if: github.event_name != 'pull_request'
+        run: python scripts/build_single_file.py && python scripts/build_single_file.py --check
+      - name: Validate flattened source and safety defaults
+        run: python scripts/validate_single_file.py
+
+  metaeditor-compile:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Regenerate and verify single-file EA before MetaEditor build
+        run: python scripts/build_single_file.py && python scripts/build_single_file.py --check
+      - name: Install official MetaTrader 5 and locate MetaEditor
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Join-Path $env:RUNNER_TEMP "mt5setup.exe"
+          Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" -OutFile $installer
+          $installPath = "C:\MT5"
+          $proc = Start-Process -FilePath $installer -ArgumentList '/auto /path:"C:\MT5"' -Wait -PassThru
+          $editor = Join-Path $installPath "metaeditor64.exe"
+          $terminalExe = Join-Path $installPath "terminal64.exe"
+          if (-not (Test-Path $editor) -or -not (Test-Path $terminalExe)) {
+            throw "MetaTrader 5 did not install at the requested path. Installer exit: $($proc.ExitCode)"
+          }
+          # First launch initializes the portable MQL5 data tree and standard library; no account login is supplied.
+          $terminalProcess = Start-Process -FilePath $terminalExe -ArgumentList "/portable" -PassThru
+          Start-Sleep -Seconds 8
+          Stop-Process -Id $terminalProcess.Id -Force -ErrorAction SilentlyContinue
+          $mql5 = Join-Path $installPath "MQL5"
+          if (-not (Test-Path (Join-Path $mql5 "Include\Trade\Trade.mqh"))) {
+            throw "MT5 first-run initialization did not create MQL5\Include\Trade\Trade.mqh."
+          }
+          "METAEDITOR=$editor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MQL5ROOT=$mql5" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "MetaEditor: $editor"
+          Write-Host "MQL5 root: $mql5"
+      - name: Compile with MetaEditor64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not (Test-Path $env:METAEDITOR)) { throw "MetaEditor path missing." }
+          if (-not (Test-Path (Join-Path $env:MQL5ROOT "Include\Trade\Trade.mqh"))) { throw "MT5 standard library missing." }
+          $target = Join-Path $env:RUNNER_TEMP "MidasTouch2"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $source = Join-Path $target "MidasTouch2.mq5"
+          Copy-Item "MidasTouch2.mq5" $source -Force
+          $log = Join-Path $target "MidasTouch2.log"
+          $compileArg = '/compile:"' + $source + '"'
+          $includeArg = '/include:"' + $env:MQL5ROOT + '"'
+          $proc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($compileArg, $includeArg, "/log") -Wait -PassThru
+          if (-not (Test-Path $log)) { throw "MetaEditor log missing; process exit $($proc.ExitCode)" }
+          $content = Get-Content $log -Raw -Encoding Unicode
+          $match = [regex]::Match($content, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
+          if (-not $match.Success) { throw "Cannot parse MetaEditor result: $content" }
+          $errors = [int]$match.Groups[1].Value
+          $warnings = [int]$match.Groups[2].Value
+          Write-Host "MetaEditor: $errors errors, $warnings warnings"
+          if ($errors -ne 0 -or $warnings -ne 0) { throw "Release compile gate requires zero errors and zero warnings; found $errors errors and $warnings warnings." }
+
+          # Install the pure policy test and its relative include tree as a terminal Script.
+          # It performs no trading and uses no account credentials.
+          $policyScriptRoot = Join-Path $env:MQL5ROOT "Scripts\development\EA"
+          $policyTestDir = Join-Path $policyScriptRoot "tests"
+          $policyIncludeDir = Join-Path $policyScriptRoot "includes\Portfolio"
+          New-Item -ItemType Directory -Force -Path $policyTestDir, $policyIncludeDir | Out-Null
+          Copy-Item "development/EA/tests/AccountRiskProfilePolicy.mq5" (Join-Path $policyTestDir "AccountRiskProfilePolicy.mq5") -Force
+          Copy-Item "development/EA/includes/Portfolio/AccountRiskProfilePolicy.mqh" (Join-Path $policyIncludeDir "AccountRiskProfilePolicy.mqh") -Force
+          $policyTestSource = Join-Path $policyTestDir "AccountRiskProfilePolicy.mq5"
+          $policyTestLog = Join-Path $policyTestDir "AccountRiskProfilePolicy.log"
+          $policyCompileArg = '/compile:"' + $policyTestSource + '"'
+          $policyProc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($policyCompileArg, $includeArg, "/log") -Wait -PassThru
+          if (-not (Test-Path $policyTestLog)) { throw "Risk-policy test compile log missing; process exit $($policyProc.ExitCode)" }
+          $policyContent = Get-Content $policyTestLog -Raw -Encoding Unicode
+          $policyMatch = [regex]::Match($policyContent, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
+          if (-not $policyMatch.Success) { throw "Cannot parse risk-policy test compile result: $policyContent" }
+          $policyErrors = [int]$policyMatch.Groups[1].Value
+          $policyWarnings = [int]$policyMatch.Groups[2].Value
+          Write-Host "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings"
+          if ($policyErrors -ne 0 -or $policyWarnings -ne 0) { throw "Risk-policy test source must compile with zero errors and warnings." }
+
+          # Execute the test Script from a one-shot terminal startup config.
+          $policyResultFile = Join-Path $env:MQL5ROOT "Files\AccountRiskProfilePolicy-tests.txt"
+          if (Test-Path $policyResultFile) { Remove-Item $policyResultFile -Force }
+          New-Item -ItemType Directory -Force -Path (Split-Path $policyResultFile) | Out-Null
+          $policyConfig = Join-Path $target "AccountRiskPolicyTest.ini"
+          $policyIniContent = @"
+          [StartUp]
+          Script=development\EA\tests\AccountRiskProfilePolicy
+          Symbol=EURUSD
+          Period=M1
+          ShutdownTerminal=Yes
+          "@
+          Set-Content -LiteralPath $policyConfig -Value $policyIniContent -Encoding Unicode
+          $terminal = Join-Path (Split-Path $env:METAEDITOR) "terminal64.exe"
+          $policyTerminal = Start-Process -FilePath $terminal -ArgumentList @("/portable", "/config:$policyConfig") -PassThru
+          try {
+            Wait-Process -Id $policyTerminal.Id -Timeout 180
+          } catch {
+            Stop-Process -Id $policyTerminal.Id -Force -ErrorAction SilentlyContinue
+            throw "Policy-test MT5 terminal did not close after the script timeout."
+          }
+          if (-not (Test-Path $policyResultFile)) { throw "Policy test did not write its result file; startup script may not have executed." }
+          $policyResult = Get-Content $policyResultFile -Raw
+          if ($policyResult -notmatch "failures=0") { throw "AccountRiskProfilePolicy assertions failed: $policyResult" }
+          Write-Host "AccountRiskProfilePolicy runtime assertions: PASS ($policyResult)"
+          
+          $ex5 = Join-Path $target "MidasTouch2.ex5"
+          if (-not (Test-Path $ex5)) { throw "Compiled EX5 not produced" }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item $ex5 artifacts/MidasTouch2.ex5 -Force
+          Copy-Item $log artifacts/MidasTouch2.MetaEditor.log -Force
+          Copy-Item $policyTestLog artifacts/AccountRiskProfilePolicy.MetaEditor.log -Force
+          Copy-Item $policyTestSource.Replace(".mq5",".ex5") artifacts/AccountRiskProfilePolicy.ex5 -Force
+          Copy-Item $policyResultFile artifacts/AccountRiskProfilePolicy-tests.txt -Force
+          "MetaEditor result: $errors errors, $warnings warnings" | Out-File artifacts/compile-summary.txt -Encoding utf8
+          "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings; runtime assertions: PASS" | Out-File artifacts/policy-test-compile-summary.txt -Encoding utf8
+      - name: Upload MetaEditor artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MidasTouch2-MetaEditor-build
+          path: artifacts/
+          if-no-files-found: warn
