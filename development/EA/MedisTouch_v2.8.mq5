@@ -1153,9 +1153,9 @@ bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,
             if(age<0 || age>maxAge) continue;
 
             double candidateRate=0.0;
-            if(direct && tick.bid>0.0) candidateRate=tick.bid;
-            else if(inverse && tick.ask>0.0) candidateRate=1.0/tick.ask;
-            if(!MathIsValidNumber(candidateRate) || candidateRate<=0.0) continue;
+            if(!ResolveKESConversionFactorFromQuote(tick.bid,tick.ask,direct,
+                                                    tick.time,now,maxAge,candidateRate))
+               continue;
 
             rate=candidateRate;
             quoteSymbol=candidate;
