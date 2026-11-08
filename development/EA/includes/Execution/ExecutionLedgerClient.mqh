@@ -87,7 +87,42 @@ public:
          return;
         }
       m_ready=true;
+      // Configuration is not proof of bridge/database readiness. Admission
+      // remains closed until the authenticated health probe succeeds.
+      m_admissionHealthy=false;
+     }
+
+   bool CheckHealth()
+     {
+      if(!m_ready)
+        {
+         m_admissionHealthy=false;
+         return false;
+        }
+      char data[];
+      ArrayResize(data,0);
+      char result[];
+      string resultHeaders;
+      string headers="X-API-Key: "+m_apiKey+"\r\n";
+      ResetLastError();
+      int status=WebRequest("GET",m_baseUrl+"/execution-ledger/health",headers,
+                            m_timeoutMs,data,result,resultHeaders);
+      if(status!=200)
+        {
+         m_admissionHealthy=false;
+         PrintFormat("Midas execution ledger: authenticated health probe failed (HTTP=%d, error=%d); new entries remain blocked.",
+                     status,GetLastError());
+         return false;
+        }
+      string body=CharArrayToString(result,0,-1,CP_UTF8);
+      if(StringFind(body,"\\"execution_ledger\\":\\"ready\\"")<0)
+        {
+         m_admissionHealthy=false;
+         PrintFormat("Midas execution ledger: health response did not confirm execution_ledger=ready; body=%s",body);
+         return false;
+        }
       m_admissionHealthy=true;
+      return true;
      }
 
    bool Ready() const { return m_ready; }
