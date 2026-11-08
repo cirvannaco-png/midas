@@ -913,7 +913,9 @@ void OnTimer()
          Print("CRITICAL: MidasTouch stop remains active in memory, but persistent restart latch refresh failed.");
         }
      }
-   if(InpEnableExecution && InpRequireExecutionLedger && (!g_executionLedgerHealthy || !g_executionLedger.AdmissionReady()) &&
+   if(!(bool)MQLInfoInteger(MQL_TESTER) &&
+      InpEnableExecution && InpRequireExecutionLedger &&
+      (!g_executionLedgerHealthy || !g_executionLedger.AdmissionReady()) &&
       localNow-g_lastLedgerReconcileAttempt>=MathMax(10,InpExecutionLedgerRetrySeconds))
      {
       // Retry cadence uses local terminal time so recovery continues while the market is closed.
