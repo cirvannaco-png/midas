@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "build/single-file-staging",
-    "commit": "ab11e4cc9d7e70d95a01303cbccd71d9bad5d5a6",
-    "git_tree_sha": "e57eb14542bd6d9e647644f70dbafd74fb538da1",
+    "commit": "258133ce7ca1bdb612d99310aa7e5c662fa9bf10",
+    "git_tree_sha": "c78a2925ce14a477a96ce8cd0f9b5451fd22e1cc",
     "root": "development/EA",
     "file_count": 95,
     "files": [
@@ -932,8 +932,8 @@
       },
       {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
-        "git_blob_sha": "6c5e83d3116b831b73efbca4920fc17f8922d7f5",
-        "size_bytes": 9784
+        "git_blob_sha": "45472e81131290cebd98e6fa2d8c5fbc1b81740f",
+        "size_bytes": 10398
       },
       {
         "path": "development/EA/tests/ConfigSyncContract.mq5",
