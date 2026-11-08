@@ -18,6 +18,10 @@ The EA requires an authenticated `GET /execution-ledger/health` probe returning 
 
 The bridge API uses `X-API-Key`. Configure the HTTPS base URL and key through EA inputs locally; do not commit credentials. Add the bridge origin to MT5's **Tools → Options → Expert Advisors → Allow WebRequest for listed URL** setting.
 
+## Source provenance
+
+`SOURCE_MANIFEST.json` keeps two records separate: the immutable upstream baseline and the exact staged EA source snapshot. The staged snapshot pins the Git tree commit and Git blob SHA-1 plus byte size for every source file under `development/EA/`. `scripts/validate_single_file.py` rejects missing, extra, modified, or size-mismatched staged source files. The generated EA banner records both the upstream baseline and the staged-source snapshot used by the generator.
+
 ## Source and generated file
 
 Edit modular sources in `development/EA/`, not the generated root EA. The generator expands the active local include closure and rejects include cycles, missing dependencies, conditional local includes, and duplicate include guards.
