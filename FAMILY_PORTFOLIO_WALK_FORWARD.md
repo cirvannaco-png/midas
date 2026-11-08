@@ -204,6 +204,21 @@ A valid next sequence is:
 
 The last completed StrategyTune run reported 586 of 600 daily compute seconds used. No further backtests were launched after that reading. Version 3 of the research harness compiled successfully, but the weekend guard, regime gates and family-specific stop/exit controls have no measured performance result yet.
 
+## Production EA portfolio audit — allocator is not yet a multi-symbol opportunity engine
+
+I inspected the consolidated `MidasTouch2.mq5` on this branch after the StrategyTune portfolio proxy. The distinction is important:
+
+- `CPortfolioManager` does aggregate stop-based risk from open positions and pending orders across symbols that share the configured Midas magic number. It also enforces per-symbol and coarse group count limits. Unknown protection geometry fails closed for positions/orders included in that calculation.
+- That risk sum filters by `POSITION_MAGIC` and `ORDER_MAGIC` equal to the configured magic. It therefore does **not** currently account for manual or other-EA exposure under different magic numbers.
+- The group classifier is a static symbol-name bucket (crypto, metals, indices, default FX). It does not calculate signed currency-factor exposure or rolling empirical correlation.
+- The manager does not calculate projected portfolio margin or margin utilization as part of its `AllowNewTradeBatch` admission check.
+- `CTFContextPool` is configured with `_Symbol`; it creates multiple timeframe contexts for that one symbol. The normal `OnTick` entry path generates buy/sell setups from the chart-symbol decision engine. `InpEnableMultiTrade` creates two- or three-leg batches on the current `_Symbol`; it is not multi-symbol scanning.
+- Multiple chart instances can each run on their own chart symbol and the same magic-number risk gate can observe already-open/pending exposure from those instances. But there is no single candidate queue, cross-symbol ranking step or atomic reserve-before-submit mechanism visible in this manager. A concurrent multi-chart admission race must be tested and addressed before calling the risk budget authoritative.
+
+**Conclusion:** the EA has a useful same-magic cross-symbol stop-risk gate, but it does not yet implement the requested account-wide multi-symbol opportunity allocator. The next production-engineering step is not to weaken the existing risk limits. It is to add symbol contexts, a shared opportunity queue, account-wide external exposure policy, margin and factor-risk checks, and atomic reservations while retaining the current gates as defence in depth.
+
+The implementation specification is recorded here: [PORTFOLIO_OPPORTUNITY_MODEL_SPEC.md](PORTFOLIO_OPPORTUNITY_MODEL_SPEC.md). It defines the candidate contract, regime routing, expected-net-R ranking, account-wide budget, margin/factor exposure, atomic reservations, position ledger and synchronized MT5 validation protocol. It is an architecture specification only; no production MQL5 code was changed in this step.
+
 ## Promotion gates
 
 No research candidate is eligible for production until all of the following are true:
