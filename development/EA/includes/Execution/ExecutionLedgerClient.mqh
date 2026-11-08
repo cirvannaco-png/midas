@@ -124,11 +124,13 @@ public:
          return false;
         }
       string body=CharArrayToString(result,0,-1,CP_UTF8);
-      string readinessToken=CharToString(34)+"execution_ledger"+CharToString(34)+":"+CharToString(34)+"ready"+CharToString(34);
-      if(StringFind(body,readinessToken)<0)
+      string quote=CharToString(34);
+      string readinessToken=quote+"execution_ledger"+quote+":"+quote+"ready"+quote;
+      string schemaToken=quote+"ledger_schema"+quote+":"+quote+"ready"+quote;
+      if(StringFind(body,readinessToken)<0 || StringFind(body,schemaToken)<0)
         {
          m_admissionHealthy=false;
-         PrintFormat("Midas execution ledger: health response did not confirm execution_ledger=ready; body=%s",body);
+         PrintFormat("Midas execution ledger: health response did not confirm execution_ledger=ready and ledger_schema=ready; body=%s",body);
          return false;
         }
       m_admissionHealthy=true;
