@@ -68,11 +68,19 @@ def main():
         "manual sizing uses capped risk percent":r'CalculateLotSize\(_Symbol,effectiveRiskPercent,entry,setup\.stop_loss',
         "manual Gold cash risk is capped":r'GoldStopRiskWithinCashCap\(proposedRisk,goldCashCapMoney\)',
         "Gold cap exception does not bypass zero-risk rejection":r'bool\s+SmallAccountRiskFloorSatisfied[\s\S]{0,280}plannedRiskPercent\s*<=\s*0\.0[\s\S]{0,100}if\s*\(goldCashCapApplies\)',
-        "Gold policy tests cover KES 7.50":r'GoldStopRiskWithinCashCap\(7\.51,7\.50\)',
-        "Gold policy tests retain non-Gold risk":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,false'
+    }
+    policy_test_path=ROOT/"development"/"EA"/"tests"/"AccountRiskProfilePolicy.mq5"
+    policy_test=policy_test_path.read_text(encoding="utf-8-sig") if policy_test_path.is_file() else ""
+    policy_test_checks={
+        "Gold policy tests cover KES cap overflow":r'GoldStopRiskWithinCashCap\(7\.51,7\.50\)',
+        "Gold policy tests retain non-Gold risk":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,false',
+        "Gold policy tests cover cash-cap conversion":r'ResolveRiskPercentWithCashCap\(1500\.0,20\.0,7\.50,true'
     }
     for name,pattern in bridge_checks.items():
         if not re.search(pattern,raw): fail.append("bridge/control regression: "+name)
+    for name,pattern in policy_test_checks.items():
+        if not re.search(pattern,policy_test):
+            fail.append("Gold risk policy test missing: "+name)
     if re.search(r'^\s*#include\s*"',code,re.MULTILINE): fail.append("custom quoted include remains")
     system=re.findall(r'^\s*#include\s*<([^>]+)>',code,re.MULTILINE)
     if not system: fail.append("standard MQL5 library include missing")
