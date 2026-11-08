@@ -8,7 +8,7 @@ MANIFEST=ROOT/"SOURCE_MANIFEST.json"
 OUTPUT=ROOT/"MidasTouch2.mq5"
 INCLUDE=re.compile(r'^(?P<indent>\s*)#include\s*(?P<quote>[<"])(?P<path>[^">]+)[">](?P<tail>.*)$')
 GUARD=re.compile(r'^\s*#ifndef\s+([A-Za-z_]\w*)\s*[\r\n]+\s*#define\s+\1\b',re.MULTILINE)
-def build(entry,commit):
+def build(entry,commit,staged_commit):
     expanded=set(); guards={}; stack=[]; conditional=[]
     def expand(path):
         path=path.resolve()
@@ -41,7 +41,8 @@ def build(entry,commit):
         stack.pop(); return "\n".join(out)
     prefix=("// MidasTouch2 single-file production build\n"
             "// Package version: 1.0.0-rc.1\n"
-            f"// Generated from cirvannaco-png/Midas-touch2-@{commit}\n"
+            f"// Upstream baseline: cirvannaco-png/Midas-touch2-@{commit}\n"
+            f"// Staged EA source snapshot: cirvannaco-png/midas@{staged_commit}\n"
             "// Modular source is preserved under development/EA/.\n"
             "// Regenerate with: python scripts/build_single_file.py\n"
             "// Do not hand-edit this generated file.\n\n")
@@ -53,7 +54,9 @@ def main():
     parser=argparse.ArgumentParser(); parser.add_argument("--check",action="store_true"); parser.add_argument("--output",type=Path,default=OUTPUT); args=parser.parse_args()
     data=json.loads(MANIFEST.read_text(encoding="utf-8"))
     entry=SOURCE_ROOT/Path(data["entrypoint"]).relative_to("EA")
-    generated=build(entry,data["source_commit"])
+    staged_commit=data.get("current_source_snapshot",{}).get("commit","UNPINNED")
+    if not staged_commit: raise SystemExit("FAIL: current_source_snapshot.commit missing from SOURCE_MANIFEST.json")
+    generated=build(entry,data["source_commit"],staged_commit)
     if args.check:
         actual=args.output.read_text(encoding="utf-8-sig") if args.output.exists() else None
         if actual!=generated: raise SystemExit("FAIL: generated EA differs from modular sources; regenerate it")
