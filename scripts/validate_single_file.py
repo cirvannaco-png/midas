@@ -89,6 +89,15 @@ def main():
         "KES tests cover inverse conversion":r'ResolveKESConversionFactorFromQuote\(150\.0,151\.0,false',
         "KES tests reject stale quotes":r'"stale KES conversion ticks are rejected"'
     }
+    tester_export_checks = {
+        "tester export requires an explicit server UTC offset": r'input int InpTesterServerUtcOffsetMinutes=99999',
+        "tester export rejects unknown timezone offsets": r'm_enabled=\(enabled && \(bool\)MQLInfoInteger\(MQL_TESTER\) && validOffset\)',
+        "tester export emits an explicit ISO offset": r'return stamp\+zone;',
+        "tester export records timestamp provenance": r'timestamp_basis.*broker_wall_clock_with_explicit_offset',
+        "tester export does not falsely label tester time as UTC": r'TimeIsoWithOffset\(row\.deal_time\)'
+    }
+    for name,pattern in tester_export_checks.items():
+        if not re.search(pattern,raw): fail.append("tester export regression: "+name)
     for name,pattern in bridge_checks.items():
         if not re.search(pattern,raw): fail.append("bridge/control regression: "+name)
     for name,pattern in policy_test_checks.items():
