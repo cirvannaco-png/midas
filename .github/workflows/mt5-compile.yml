@@ -80,11 +80,11 @@ jobs:
           Write-Host "MetaEditor: $errors errors, $warnings warnings"
           if ($errors -ne 0 -or $warnings -ne 0) { throw "Release compile gate requires zero errors and zero warnings; found $errors errors and $warnings warnings." }
 
-          # Compile the pure account-risk policy test as a second MQL5 source.
-          # Its relative include tree is preserved so MetaEditor checks the exact policy header.
-          $policyTestRoot = Join-Path $target "policy-tests"
-          $policyTestDir = Join-Path $policyTestRoot "tests"
-          $policyIncludeDir = Join-Path $policyTestRoot "includes\Portfolio"
+          # Install the pure policy test and its relative include tree as a terminal Script.
+          # It performs no trading and uses no account credentials.
+          $policyScriptRoot = Join-Path $env:MQL5ROOT "Scripts\development\EA"
+          $policyTestDir = Join-Path $policyScriptRoot "tests"
+          $policyIncludeDir = Join-Path $policyScriptRoot "includes\Portfolio"
           New-Item -ItemType Directory -Force -Path $policyTestDir, $policyIncludeDir | Out-Null
           Copy-Item "development/EA/tests/AccountRiskProfilePolicy.mq5" (Join-Path $policyTestDir "AccountRiskProfilePolicy.mq5") -Force
           Copy-Item "development/EA/includes/Portfolio/AccountRiskProfilePolicy.mqh" (Join-Path $policyIncludeDir "AccountRiskProfilePolicy.mqh") -Force
@@ -101,14 +101,42 @@ jobs:
           Write-Host "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings"
           if ($policyErrors -ne 0 -or $policyWarnings -ne 0) { throw "Risk-policy test source must compile with zero errors and warnings." }
 
+          # Execute the test Script from a one-shot terminal startup config.
+          $policyResultFile = Join-Path $env:MQL5ROOT "Files\AccountRiskProfilePolicy-tests.txt"
+          if (Test-Path $policyResultFile) { Remove-Item $policyResultFile -Force }
+          New-Item -ItemType Directory -Force -Path (Split-Path $policyResultFile) | Out-Null
+          $policyConfig = Join-Path $target "AccountRiskPolicyTest.ini"
+          $policyIniContent = @"
+          [StartUp]
+          Script=development\EA\tests\AccountRiskProfilePolicy
+          Symbol=EURUSD
+          Period=M1
+          ShutdownTerminal=Yes
+          "@
+          Set-Content -LiteralPath $policyConfig -Value $policyIniContent -Encoding Unicode
+          $terminal = Join-Path (Split-Path $env:METAEDITOR) "terminal64.exe"
+          $policyTerminal = Start-Process -FilePath $terminal -ArgumentList @("/portable", "/config:$policyConfig") -PassThru
+          try {
+            Wait-Process -Id $policyTerminal.Id -Timeout 180
+          } catch {
+            Stop-Process -Id $policyTerminal.Id -Force -ErrorAction SilentlyContinue
+            throw "Policy-test MT5 terminal did not close after the script timeout."
+          }
+          if (-not (Test-Path $policyResultFile)) { throw "Policy test did not write its result file; startup script may not have executed." }
+          $policyResult = Get-Content $policyResultFile -Raw
+          if ($policyResult -notmatch "failures=0") { throw "AccountRiskProfilePolicy assertions failed: $policyResult" }
+          Write-Host "AccountRiskProfilePolicy runtime assertions: PASS ($policyResult)"
+          
           $ex5 = Join-Path $target "MidasTouch2.ex5"
           if (-not (Test-Path $ex5)) { throw "Compiled EX5 not produced" }
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Copy-Item $ex5 artifacts/MidasTouch2.ex5 -Force
           Copy-Item $log artifacts/MidasTouch2.MetaEditor.log -Force
           Copy-Item $policyTestLog artifacts/AccountRiskProfilePolicy.MetaEditor.log -Force
+          Copy-Item $policyTestSource.Replace(".mq5",".ex5") artifacts/AccountRiskProfilePolicy.ex5 -Force
+          Copy-Item $policyResultFile artifacts/AccountRiskProfilePolicy-tests.txt -Force
           "MetaEditor result: $errors errors, $warnings warnings" | Out-File artifacts/compile-summary.txt -Encoding utf8
-          "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings" | Out-File artifacts/policy-test-compile-summary.txt -Encoding utf8
+          "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings; runtime assertions: PASS" | Out-File artifacts/policy-test-compile-summary.txt -Encoding utf8
       - name: Upload MetaEditor artifacts
         if: always()
         uses: actions/upload-artifact@v4
