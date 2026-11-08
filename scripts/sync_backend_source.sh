@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SOURCE_REPO="https://github.com/cirvannaco-png/Midas-touch2-.git"
-SOURCE_REF="main"
+SOURCE_REF="${BACKEND_SOURCE_REF:-main}"
 SOURCE_DIR="${RUNNER_TEMP:-/tmp}/midas-touch2-source"
 DEST_DIR="backend/source"
 
@@ -19,11 +19,11 @@ cat > backend/SOURCE_REVISION.md <<EOF
 - Upstream: $SOURCE_REPO
 - Branch: $SOURCE_REF
 - Commit: $SOURCE_SHA
-- Snapshot path: `backend/source/`
+- Snapshot path: backend/source/
 
 This is a byte-for-byte source snapshot of the upstream repository, excluding its
 Git object database. It preserves source, tests, migrations, docs, deployment
-manifests and research tooling. Files nested under `backend/source/.github/`
+manifests and research tooling. Files nested under backend/source/.github/
 are provenance only; GitHub Actions does not execute workflows from nested
 directories.
 

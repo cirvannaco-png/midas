@@ -61,3 +61,25 @@ A release requires all of the following evidence:
 5. Risk limits, broker contract constraints, and independent forward results are reviewed before any live approval.
 
 No backtest or win-rate target is a profitability guarantee. Keep live trading disabled until these gates have been evidenced and reviewed.
+
+## Monorepo source layout
+
+The repository now carries a complete, pinned source snapshot of the companion
+Midas-touch2 backend under backend/source/. The snapshot includes the backend
+FastAPI bridge, PostgreSQL models and migrations, research and walk-forward
+tooling, deployment manifests, tests, documentation, and upstream EA source.
+Its exact upstream commit is recorded in backend/SOURCE_REVISION.md.
+
+The root MidasTouch2.mq5 and development/EA/ tree remain the canonical
+distributable EA and its build sources. backend/source/EA/ is retained as the
+upstream repository snapshot for provenance and reconciliation; it is not a
+second live EA build target. Workflows nested under backend/source/.github/
+are archival source only. Active GitHub Actions workflows remain under the
+root .github/workflows/.
+
+Use the Sync Midas-touch2 source snapshot workflow to refresh backend/source/
+from the upstream main branch. A complete source snapshot does not imply that
+every backend research component is wired into live EA admission. Regime
+eligibility, portfolio-wide risk and margin admission, position-level
+strategy/regime attribution, and chronological multi-instrument walk-forward
+promotion remain separately validated integration gates.
