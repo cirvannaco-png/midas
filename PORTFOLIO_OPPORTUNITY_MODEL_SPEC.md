@@ -206,7 +206,7 @@ For each fold:
 4. Roll forward and repeat.
 5. Reject configurations that only work in one instrument, one regime or one window.
 
-The already inspected April and May 2026 periods are not clean future holdouts for the next candidate. Start the next unexposed selection/validation sequence on a period not used in this research.
+The already inspected April through July 2026 periods are not clean future holdouts for the next candidate. Keep August 2026 untouched until the candidate, parameters and hypotheses are frozen; then use it as the next chronological holdout.
 
 ## 11. Delivery order
 
