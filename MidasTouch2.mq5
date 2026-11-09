@@ -12583,6 +12583,21 @@ struct TesterDealExportRow
    double commission;
    double swap;
    double fee;
+   long decision_id;
+   string strategy;
+   string regime;
+   double requested_price;
+   double slippage_points;
+   double slippage_cost_cash;
+   bool slippage_known;
+  };
+
+struct TesterPositionAttribution
+  {
+   ulong position_id;
+   long decision_id;
+   string strategy;
+   string regime;
   };
 
 class CTesterDealExport
