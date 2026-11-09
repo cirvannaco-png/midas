@@ -1,7 +1,7 @@
 // MidasTouch2 single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@f27167a302a8159ce1d09060c422a448c16c7a5f
+// Staged EA source snapshot: cirvannaco-png/midas@b206992308bb512f83a51265d080397550e37854
 // Modular source is preserved under development/EA/.
 // Regenerate with: python scripts/build_single_file.py
 // Do not hand-edit this generated file.
@@ -12861,6 +12861,19 @@ public:
       int attribution=AttributionIndex(positionId);
       if(entry==DEAL_ENTRY_IN)
          RememberAttribution(positionId,decisionId,strategy,regime);
+      else if(entry==DEAL_ENTRY_INOUT)
+        {
+         // A netting reversal preserves DEAL_POSITION_ID while changing exposure.
+         // One stable position ID can therefore span multiple decision lineages.
+         if(attribution<0)
+            RememberAttribution(positionId,0,"CONFLICT","CONFLICT");
+         else
+           {
+            m_attributions[attribution].decision_id=0;
+            m_attributions[attribution].strategy="CONFLICT";
+            m_attributions[attribution].regime="CONFLICT";
+           }
+        }
       else if(attribution<0 && decisionId>0)
          RememberAttribution(positionId,decisionId,strategy,regime);
       attribution=AttributionIndex(positionId);
@@ -12869,11 +12882,23 @@ public:
       string resolvedRegime=regime;
       if(attribution>=0)
         {
-         if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
-         if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
-            resolvedStrategy=m_attributions[attribution].strategy;
-         if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
-            resolvedRegime=m_attributions[attribution].regime;
+         // Once a netting reversal has made this identifier ambiguous, do not
+         // allow a later IN fill to overwrite the conflict with a new label.
+         if(m_attributions[attribution].strategy=="CONFLICT" ||
+            m_attributions[attribution].regime=="CONFLICT")
+           {
+            resolvedDecisionId=0;
+            resolvedStrategy="CONFLICT";
+            resolvedRegime="CONFLICT";
+           }
+         else
+           {
+            if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
+            if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
+               resolvedStrategy=m_attributions[attribution].strategy;
+            if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
+               resolvedRegime=m_attributions[attribution].regime;
+           }
         }
       if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
       if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
@@ -15891,8 +15916,11 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
          double point=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
          bool buyMatch=(historicalOrderType==ORDER_TYPE_BUY && dealType==DEAL_TYPE_BUY);
          bool sellMatch=(historicalOrderType==ORDER_TYPE_SELL && dealType==DEAL_TYPE_SELL);
-         if((buyMatch || sellMatch) && requestedPrice>0.0 && point>0.0 &&
-            dealVolume>0.0 && dealPrice>0.0)
+         // DEAL_ENTRY_INOUT combines a close and a new-side open in one deal.
+         // Without splitting that volume by the pre-reversal exposure, its cash
+         // slippage cannot be assigned to one direction; leave it explicitly unknown.
+         if(entry!=DEAL_ENTRY_INOUT && (buyMatch || sellMatch) &&
+            requestedPrice>0.0 && point>0.0 && dealVolume>0.0 && dealPrice>0.0)
            {
             slippagePoints=(buyMatch?(dealPrice-requestedPrice):(requestedPrice-dealPrice))/point;
             // For an exit deal, calculate the cost against the position being

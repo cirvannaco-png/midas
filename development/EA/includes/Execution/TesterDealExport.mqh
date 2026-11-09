@@ -298,6 +298,19 @@ public:
       int attribution=AttributionIndex(positionId);
       if(entry==DEAL_ENTRY_IN)
          RememberAttribution(positionId,decisionId,strategy,regime);
+      else if(entry==DEAL_ENTRY_INOUT)
+        {
+         // A netting reversal preserves DEAL_POSITION_ID while changing exposure.
+         // One stable position ID can therefore span multiple decision lineages.
+         if(attribution<0)
+            RememberAttribution(positionId,0,"CONFLICT","CONFLICT");
+         else
+           {
+            m_attributions[attribution].decision_id=0;
+            m_attributions[attribution].strategy="CONFLICT";
+            m_attributions[attribution].regime="CONFLICT";
+           }
+        }
       else if(attribution<0 && decisionId>0)
          RememberAttribution(positionId,decisionId,strategy,regime);
       attribution=AttributionIndex(positionId);
@@ -306,11 +319,23 @@ public:
       string resolvedRegime=regime;
       if(attribution>=0)
         {
-         if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
-         if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
-            resolvedStrategy=m_attributions[attribution].strategy;
-         if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
-            resolvedRegime=m_attributions[attribution].regime;
+         // Once a netting reversal has made this identifier ambiguous, do not
+         // allow a later IN fill to overwrite the conflict with a new label.
+         if(m_attributions[attribution].strategy=="CONFLICT" ||
+            m_attributions[attribution].regime=="CONFLICT")
+           {
+            resolvedDecisionId=0;
+            resolvedStrategy="CONFLICT";
+            resolvedRegime="CONFLICT";
+           }
+         else
+           {
+            if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
+            if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
+               resolvedStrategy=m_attributions[attribution].strategy;
+            if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
+               resolvedRegime=m_attributions[attribution].regime;
+           }
         }
       if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
       if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";

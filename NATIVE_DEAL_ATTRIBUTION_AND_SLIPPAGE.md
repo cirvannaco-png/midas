@@ -10,6 +10,7 @@ The Strategy Tester deal export supports position-level strategy/regime analysis
 - The active outcome tracker supplies the selected strategy and market regime for that decision.
 - The exporter stores that identity against the stable MT5 DEAL_POSITION_ID.
 - Partial exits and later deal rows inherit the original position attribution from that stable identifier.
+- Netting reversals are different: MT5 reports DEAL_ENTRY_INOUT, and POSITION_IDENTIFIER is preserved while the exposure direction changes. One identifier can then span multiple decision lineages. The exporter marks that position's attribution CONFLICT, and the position ledger excludes any position history containing INOUT rather than blending the old and reversed exposure.
 - Conflicting labels for one position are marked CONFLICT; missing lineage is UNTAGGED. Neither is silently guessed.
 - The native CSV carries decision_id, strategy, and regime on every deal row. The Python ledger verifies that a completed position has consistent labels before grouping it.
 
@@ -19,6 +20,7 @@ The Strategy Tester deal export supports position-level strategy/regime analysis
 - Slippage is calculated only when the historical order is a market ORDER_TYPE_BUY or ORDER_TYPE_SELL, the deal direction matches, and the reference price and point size are valid.
 - Signed points are adverse-positive and favorable-negative: BUY uses (fill - requested) / point; SELL uses (requested - fill) / point.
 - Adverse cash cost is calculated with OrderCalcProfit from requested price to actual fill and floored at zero. For closing deals, the calculation uses the opposite hypothetical position direction so an adverse close fill has the correct cost sign. Favorable execution is retained as negative points and zero adverse cash cost.
+- DEAL_ENTRY_INOUT reversal deals remain unknown for slippage: one deal contains both the close of the old exposure and the opening of residual opposite exposure, so one directional cash-cost calculation would be misleading.
 - Pending stop/limit orders are not scored by this field. Their trigger gaps and limit-price improvement are different execution phenomena; this export leaves them unknown rather than mislabelling them as market slippage.
 - If requested price, direction, or cash conversion is unavailable, the CSV writes blank numeric slippage fields and slippage_known=false. The ledger never converts missing evidence into zero.
 

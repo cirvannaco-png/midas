@@ -1786,8 +1786,11 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
          double point=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
          bool buyMatch=(historicalOrderType==ORDER_TYPE_BUY && dealType==DEAL_TYPE_BUY);
          bool sellMatch=(historicalOrderType==ORDER_TYPE_SELL && dealType==DEAL_TYPE_SELL);
-         if((buyMatch || sellMatch) && requestedPrice>0.0 && point>0.0 &&
-            dealVolume>0.0 && dealPrice>0.0)
+         // DEAL_ENTRY_INOUT combines a close and a new-side open in one deal.
+         // Without splitting that volume by the pre-reversal exposure, its cash
+         // slippage cannot be assigned to one direction; leave it explicitly unknown.
+         if(entry!=DEAL_ENTRY_INOUT && (buyMatch || sellMatch) &&
+            requestedPrice>0.0 && point>0.0 && dealVolume>0.0 && dealPrice>0.0)
            {
             slippagePoints=(buyMatch?(dealPrice-requestedPrice):(requestedPrice-dealPrice))/point;
             // For an exit deal, calculate the cost against the position being

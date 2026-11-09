@@ -265,3 +265,18 @@ def test_decision_id_must_be_consistent_across_position_deals():
     rows[1]["decision_id"] = "124"
     with pytest.raises(LedgerError, match="conflicting decision IDs"):
         reconstruct_positions(rows)
+
+
+
+def test_inout_reversal_excludes_entire_stable_position_identifier():
+    rows = [
+        deal(730, "2026-04-05T09:00:00", "in", 1.0, risk_cash=100.0,
+             strategy="MOMENTUM_BREAKOUT", regime="TRENDING", row=2),
+        deal(730, "2026-04-05T10:00:00", "inout", 2.0, risk_cash=100.0,
+             strategy="CONFLICT", regime="CONFLICT", row=3),
+        deal(730, "2026-04-05T11:00:00", "out", 1.0, profit=15.0,
+             strategy="CONFLICT", regime="CONFLICT", row=4),
+    ]
+    positions, ignored = reconstruct_positions(rows)
+    assert positions == []
+    assert ignored["inout_ambiguous"] == 1
