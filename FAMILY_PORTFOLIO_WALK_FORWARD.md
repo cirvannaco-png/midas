@@ -202,7 +202,7 @@ A valid next sequence is:
 4. Repeat sequentially. Never tune on a month after inspecting its validation result and still call that month an out-of-sample holdout.
 5. Run a shared-allocator portfolio simulation in MT5 Strategy Tester, including cross-symbol risk, correlation, weekend rules, gaps and broker execution. StrategyTune's independent symbol runs cannot prove this.
 
-The last completed StrategyTune run reported 586 of 600 daily compute seconds used. No further backtests were launched after that reading. Version 3 of the research harness compiled successfully, but the weekend guard, regime gates and family-specific stop/exit controls have no measured performance result yet.
+At the time of the first report, the daily compute counter was nearly exhausted, so no additional runs were launched then. After the UTC reset, the v4 harness was tested on June and July 2026 Gold M15 folds with the weekend guard and family gates enabled. Those results and limitations are documented in the addendum below.
 
 ## Production EA portfolio audit — allocator is not yet a multi-symbol opportunity engine
 
@@ -230,3 +230,47 @@ No research candidate is eligible for production until all of the following are 
 - The consolidated MQL5 EA passes Strategy Tester and broker-demo verification, including stop modification, weekend exposure and execution ledger checks.
 
 **Decision:** reject both current family baskets as production candidates. Keep trend continuation as the more promising entry-family research baseline, not as a validated strategy. Keep the mean-reversion lane isolated until it has a distinct improvement in full-position expectancy. Prioritize the weekend gap guard and reliable entry/outcome attribution before another round of parameter optimization.
+
+
+## Fold 2 — June baseline / July frozen-configuration holdout (Gold M15)
+
+**Research dates:** June 1–30, 2026 (baseline/selection window) and July 1–31, 2026 (untouched holdout).  
+**Instrument:** Gold, IC Markets, M15.  
+**Harness:** StrategyTune script `y8hhgudv0ojp8mf4dcmlrqdh`, compiled version 4.  
+**Shared settings:** strict chain disabled by setting its quality threshold above the valid range; micro-momentum disabled; only one specialist family enabled per run; 0.10% simulated risk per entry; six-entry daily ceiling; 2.25% run-level open-risk cap; Friday 17:00 UTC cutoff and weekend flatten enabled. The three-entry minimum remained diagnostic only.
+
+Important qualification: June and July used the same fixed family settings. June was not used for an extensive parameter optimization, and July was not used to retune the configurations. July is therefore a frozen-configuration temporal holdout, not proof of a fully trained/calibrated model. Results remain single-instrument simulations, not a synchronized portfolio test.
+
+### Position-level results (grouped by original opening fill)
+
+| Fold | Family | Closed rows | Original positions | Wins / losses | Full-position WR | Net P&L | PF | Close-row WR | Partial-exit positions |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| June | Sweep/reclaim, range-only | 66 | 33 | 27 / 6 | 81.82% | +$4.71 | 1.085 | 90.91% | 27 / 33 |
+| June | Continuation, trend-only | 81 | 43 | 30 / 13 | 69.77% | -$41.19 | 0.634 | 83.95% | 30 / 43 |
+| July | Sweep/reclaim, range-only | 46 | 25 | 15 / 10 | 60.00% | -$31.18 | 0.629 | 78.26% | 15 / 25 |
+| July | Continuation, trend-only | 62 | 32 | 25 / 7 | 78.13% | -$5.39 | 0.912 | 88.71% | 25 / 32 |
+
+All monetary values are simulated USD. Position P&L and PF were independently recomputed from the saved session trade rows grouped by `openingFillId`, summing every partial close belonging to the original opening fill. This is the authoritative calculation for this fold.
+
+### Interpretation
+
+- The range-only sweep/reclaim family moved from a small positive June result to a materially negative July holdout: full-position WR fell from 81.82% to 60.00%, PF from 1.085 to 0.629, and P&L from +$4.71 to -$31.18. Reject it as a production candidate.
+- Trend continuation improved its position win rate from 69.77% to 78.13%, but remained negative in both folds: -$41.19 in June and -$5.39 in July; July PF was still below 1.0. Do not promote it.
+- The attractive close-row rates (up to 90.91%) are again materially higher than full-position rates because partial exits generate multiple rows per opening fill. They are not strategy win rates.
+- Neither family reliably met the three-entry daily objective. The research counter records days with at least three entries, not three winning full positions: sweep/reclaim met the entry count on 4/22 June eligible days and 4/23 July eligible days; continuation met it on 6/22 June days and 4/23 July days. No entries were forced.
+- Weekend protection executed in July: one account-wide flatten call per family run, one lot targeted, zero flatten errors and zero residual lots at the end. No weekend flatten was needed in the June runs. This verifies that the research guard path was exercised in this sample, not that a broker will guarantee a stop/market exit across all real market closures.
+
+### Attribution and telemetry caveats
+
+- June sweep/reclaim position attribution was internally valid and matched saved-row P&L.
+- June continuation attribution was invalid: one missed close event and a $4.32 difference versus saved-row P&L. Use saved-row grouping only.
+- July sweep/reclaim attribution was invalid: two missed close events and a $7.84 P&L difference. Use saved-row grouping only.
+- July continuation attribution was valid and matched saved-row P&L.
+- Every run returned an explicit warning that the script emitted 111 custom-stat keys while the result limit retained only 100. The backtests themselves completed and aggregate trade statistics were valid, but 11 telemetry fields were dropped. Missing telemetry must not be interpreted as zero. Before the next research batch, reduce the script's emitted custom-stat set to a deliberate, prioritized subset so the key diagnostics fit within the result limit.
+- StrategyTune's engine-level win/loss counts are close-record statistics. The independent position-level figures above are grouped from the saved session table and must be preferred for strategy evaluation.
+
+### Decision after June/July
+
+Both isolated families remain rejected as production candidates. The continuation family is less weak than sweep/reclaim on July, but its PF remains below 1 and its June loss was substantial. The June-to-July variation also shows why a single attractive training window is insufficient.
+
+Do not broaden into a larger cross-asset sweep yet. First harden research telemetry and stop/exit attribution, then test a small number of predeclared hypotheses on later untouched folds. The next unexposed chronological period after the inspected April–July windows is August 2026; it must remain untouched until any candidate and its parameters are frozen.
