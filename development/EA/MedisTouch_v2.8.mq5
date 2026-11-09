@@ -1757,24 +1757,66 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
      {
       ulong exportOrder=(ulong)HistoryDealGetInteger(trans.deal,DEAL_ORDER);
       double entryRiskCash=0.0;
-      if(entry==DEAL_ENTRY_IN && exportOrder>0 && HistoryOrderSelect(exportOrder))
+      long exportDecisionId=0;
+      int exportLegIndex=0;
+      string exportStrategy="UNTAGGED";
+      string exportRegime="UNTAGGED";
+      double requestedPrice=0.0;
+      double slippagePoints=0.0;
+      double slippageCostCash=0.0;
+      bool slippageKnown=false;
+      double dealVolume=HistoryDealGetDouble(trans.deal,DEAL_VOLUME);
+      double dealPrice=HistoryDealGetDouble(trans.deal,DEAL_PRICE);
+      if(exportOrder>0 && HistoryOrderSelect(exportOrder))
         {
+         string orderComment=HistoryOrderGetString(exportOrder,ORDER_COMMENT);
+         if(entry==DEAL_ENTRY_IN &&
+            ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex))
+            g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime);
          double entryStop=HistoryOrderGetDouble(exportOrder,ORDER_SL);
-         double entryVolume=HistoryDealGetDouble(trans.deal,DEAL_VOLUME);
-         double entryPrice=HistoryDealGetDouble(trans.deal,DEAL_PRICE);
-         if(entryStop>0.0 && entryVolume>0.0 && entryPrice>0.0)
-            entryRiskCash=g_risk.RiskAmountForLots(_Symbol,entryVolume,entryPrice,entryStop);
+         if(entry==DEAL_ENTRY_IN && entryStop>0.0 && dealVolume>0.0 && dealPrice>0.0)
+            entryRiskCash=g_risk.RiskAmountForLots(_Symbol,dealVolume,dealPrice,entryStop);
+
+         // Only market BUY/SELL orders are scored as execution slippage.
+         // Pending stop/limit triggers are deliberately left unknown rather than
+         // conflating trigger gaps or limit price improvement with market slippage.
+         ENUM_ORDER_TYPE historicalOrderType=(ENUM_ORDER_TYPE)HistoryOrderGetInteger(exportOrder,ORDER_TYPE);
+         ENUM_DEAL_TYPE dealType=(ENUM_DEAL_TYPE)HistoryDealGetInteger(trans.deal,DEAL_TYPE);
+         requestedPrice=HistoryOrderGetDouble(exportOrder,ORDER_PRICE_OPEN);
+         double point=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+         bool buyMatch=(historicalOrderType==ORDER_TYPE_BUY && dealType==DEAL_TYPE_BUY);
+         bool sellMatch=(historicalOrderType==ORDER_TYPE_SELL && dealType==DEAL_TYPE_SELL);
+         if((buyMatch || sellMatch) && requestedPrice>0.0 && point>0.0 &&
+            dealVolume>0.0 && dealPrice>0.0)
+           {
+            slippagePoints=(buyMatch?(dealPrice-requestedPrice):(requestedPrice-dealPrice))/point;
+            // For an exit deal, calculate the cost against the position being
+            // closed, not as though the deal opened a new position in its own direction.
+            ENUM_ORDER_TYPE slippageCalcType=historicalOrderType;
+            if(entry==DEAL_ENTRY_OUT || entry==DEAL_ENTRY_OUT_BY)
+               slippageCalcType=(historicalOrderType==ORDER_TYPE_BUY?ORDER_TYPE_SELL:ORDER_TYPE_BUY);
+            double hypotheticalPnl=0.0;
+            if(MathIsValidNumber(slippagePoints) &&
+               OrderCalcProfit(slippageCalcType,_Symbol,dealVolume,
+                               requestedPrice,dealPrice,hypotheticalPnl) &&
+               MathIsValidNumber(hypotheticalPnl))
+              {
+               slippageCostCash=MathMax(0.0,-hypotheticalPnl);
+               slippageKnown=MathIsValidNumber(slippageCostCash);
+              }
+           }
         }
       if(!g_testerDealExport.Record(
             trans.deal,exportOrder,positionIdentifier,
             (datetime)HistoryDealGetInteger(trans.deal,DEAL_TIME),
             HistoryDealGetString(trans.deal,DEAL_SYMBOL),entry,
-            HistoryDealGetDouble(trans.deal,DEAL_VOLUME),
-            HistoryDealGetDouble(trans.deal,DEAL_PRICE),
+            dealVolume,dealPrice,
             HistoryDealGetDouble(trans.deal,DEAL_PROFIT),
             HistoryDealGetDouble(trans.deal,DEAL_COMMISSION),
             HistoryDealGetDouble(trans.deal,DEAL_SWAP),
-            HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash))
+            HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash,
+            exportDecisionId,exportStrategy,exportRegime,
+            requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
          PrintFormat("MIDAS_TEST_EXPORT_ERROR deal=%I64u position=%I64u; artifact will be incomplete",
                      trans.deal,positionIdentifier);
      }

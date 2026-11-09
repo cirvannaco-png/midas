@@ -20,6 +20,21 @@ struct TesterDealExportRow
    double commission;
    double swap;
    double fee;
+   long decision_id;
+   string strategy;
+   string regime;
+   double requested_price;
+   double slippage_points;
+   double slippage_cost_cash;
+   bool slippage_known;
+  };
+
+struct TesterPositionAttribution
+  {
+   ulong position_id;
+   long decision_id;
+   string strategy;
+   string regime;
   };
 
 class CTesterDealExport
@@ -48,6 +63,54 @@ private:
    ulong  m_seenDeals[];
    ulong  m_riskPositions[];
    double m_positionRiskCash[];
+   TesterPositionAttribution m_attributions[];
+
+   int AttributionIndex(const ulong positionId) const
+     {
+      for(int i=0;i<ArraySize(m_attributions);i++)
+         if(m_attributions[i].position_id==positionId) return i;
+      return -1;
+     }
+
+   void RememberAttribution(const ulong positionId,const long decisionId,
+                            const string strategy,const string regime)
+     {
+      if(positionId==0) return;
+      int index=AttributionIndex(positionId);
+      if(index<0)
+        {
+         index=ArraySize(m_attributions);
+         if(ArrayResize(m_attributions,index+1)!=index+1) return;
+         m_attributions[index].position_id=positionId;
+         m_attributions[index].decision_id=decisionId;
+         m_attributions[index].strategy=(StringLen(strategy)>0?strategy:"UNTAGGED");
+         m_attributions[index].regime=(StringLen(regime)>0?regime:"UNTAGGED");
+         return;
+        }
+      if(m_attributions[index].strategy=="CONFLICT" ||
+         m_attributions[index].regime=="CONFLICT") return;
+      bool conflict=(decisionId>0 && m_attributions[index].decision_id>0 &&
+                     decisionId!=m_attributions[index].decision_id) ||
+                    (StringLen(strategy)>0 && strategy!="UNTAGGED" &&
+                     m_attributions[index].strategy!="UNTAGGED" &&
+                     strategy!=m_attributions[index].strategy) ||
+                    (StringLen(regime)>0 && regime!="UNTAGGED" &&
+                     m_attributions[index].regime!="UNTAGGED" &&
+                     regime!=m_attributions[index].regime);
+      if(conflict)
+        {
+         m_attributions[index].decision_id=0;
+         m_attributions[index].strategy="CONFLICT";
+         m_attributions[index].regime="CONFLICT";
+         return;
+        }
+      if(m_attributions[index].decision_id<=0 && decisionId>0)
+         m_attributions[index].decision_id=decisionId;
+      if(m_attributions[index].strategy=="UNTAGGED" && StringLen(strategy)>0 && strategy!="UNTAGGED")
+         m_attributions[index].strategy=strategy;
+      if(m_attributions[index].regime=="UNTAGGED" && StringLen(regime)>0 && regime!="UNTAGGED")
+         m_attributions[index].regime=regime;
+     }
 
    string SafeName(string value)
      {
@@ -189,6 +252,7 @@ public:
       ArrayResize(m_seenDeals,0);
       ArrayResize(m_riskPositions,0);
       ArrayResize(m_positionRiskCash,0);
+      ArrayResize(m_attributions,0);
       if(m_enabled)
          PrintFormat("MIDAS_TEST_EXPORT_READY run=%s symbol=%s magic=%I64u",
                      m_runId,m_symbol,m_magic);
@@ -214,7 +278,10 @@ public:
                const datetime dealTime,const string symbol,
                const ENUM_DEAL_ENTRY entry,const double volume,const double price,
                const double profit,const double commission,const double swap,
-               const double fee,const double entryRiskCash)
+               const double fee,const double entryRiskCash,
+               const long decisionId,const string strategy,const string regime,
+               const double requestedPrice,const double slippagePoints,
+               const double slippageCostCash,const bool slippageKnown)
      {
       if(!m_enabled) return true;
       if(dealId==0 || orderId==0 || positionId==0 || symbol=="") return false;
@@ -223,6 +290,30 @@ public:
       for(int i=0;i<ArraySize(values);i++)
          if(!MathIsValidNumber(values[i])) return false;
       if(volume<=0.0 || price<=0.0) return false;
+      if(slippageKnown &&
+         (!MathIsValidNumber(requestedPrice) || requestedPrice<=0.0 ||
+          !MathIsValidNumber(slippagePoints) || !MathIsValidNumber(slippageCostCash) ||
+          slippageCostCash<0.0)) return false;
+
+      int attribution=AttributionIndex(positionId);
+      if(entry==DEAL_ENTRY_IN)
+         RememberAttribution(positionId,decisionId,strategy,regime);
+      else if(attribution<0 && decisionId>0)
+         RememberAttribution(positionId,decisionId,strategy,regime);
+      attribution=AttributionIndex(positionId);
+      long resolvedDecisionId=decisionId;
+      string resolvedStrategy=strategy;
+      string resolvedRegime=regime;
+      if(attribution>=0)
+        {
+         if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
+         if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
+            resolvedStrategy=m_attributions[attribution].strategy;
+         if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
+            resolvedRegime=m_attributions[attribution].regime;
+        }
+      if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
+      if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
 
       int seen=ArraySize(m_seenDeals);
       ArrayResize(m_seenDeals,seen+1);
@@ -243,6 +334,13 @@ public:
       m_rows[count].commission=commission;
       m_rows[count].swap=swap;
       m_rows[count].fee=fee;
+      m_rows[count].decision_id=resolvedDecisionId;
+      m_rows[count].strategy=resolvedStrategy;
+      m_rows[count].regime=resolvedRegime;
+      m_rows[count].requested_price=(slippageKnown?requestedPrice:0.0);
+      m_rows[count].slippage_points=(slippageKnown?slippagePoints:0.0);
+      m_rows[count].slippage_cost_cash=(slippageKnown?slippageCostCash:0.0);
+      m_rows[count].slippage_known=slippageKnown;
       return true;
      }
 
@@ -257,7 +355,9 @@ public:
          return;
         }
       FileWrite(handle,"position_id","time","entry","volume","profit","commission",
-                "swap","fee","risk_cash","lane","deal_id","order_id","symbol");
+                "swap","fee","risk_cash","lane","deal_id","order_id","symbol",
+                "decision_id","strategy","regime","requested_price","slippage_points",
+                "slippage_cost_cash","slippage_known");
       for(int i=0;i<ArraySize(m_rows);i++)
         {
          TesterDealExportRow row=m_rows[i];
@@ -274,7 +374,14 @@ public:
                     "EA",
                    IntegerToString((long)row.deal_id),
                    IntegerToString((long)row.order_id),
-                   row.symbol);
+                   row.symbol,
+                   IntegerToString(row.decision_id),
+                   row.strategy,
+                   row.regime,
+                   (row.slippage_known?DoubleToString(row.requested_price,10):""),
+                   (row.slippage_known?DoubleToString(row.slippage_points,8):""),
+                   (row.slippage_known?DoubleToString(row.slippage_cost_cash,8):""),
+                   (row.slippage_known?"true":"false"));
         }
       FileFlush(handle);
       FileClose(handle);

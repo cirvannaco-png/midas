@@ -23,6 +23,12 @@ jobs:
         run: python scripts/build_single_file.py
       - name: Run structural and safety checks
         run: python scripts/validate_single_file.py
+      - name: Run native deal attribution and position-ledger tests
+        env:
+          PYTHONPATH: backend/source
+        run: |
+          python -m pip install pytest
+          python -m pytest backend/source/tools/tests/test_position_ledger_metrics.py backend/source/tools/tests/test_tester_deal_export_contract.py backend/source/tools/tests/test_ea_deal_accounting_contract.py -q
       - name: Commit deterministic generated EA when source changed
         if: github.event_name != 'pull_request'
         shell: bash

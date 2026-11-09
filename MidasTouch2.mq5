@@ -1,7 +1,7 @@
 // MidasTouch2 single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@31cede417931ceb7d92cc31cdcac7dc3c32e1c81
+// Staged EA source snapshot: cirvannaco-png/midas@f27167a302a8159ce1d09060c422a448c16c7a5f
 // Modular source is preserved under development/EA/.
 // Regenerate with: python scripts/build_single_file.py
 // Do not hand-edit this generated file.
@@ -8719,6 +8719,18 @@ public:
    void Init(CSignalLogger* logger,string symbol,ENUM_TIMEFRAMES tf,int maxBars,ENUM_FILL_POLICY fp=FILL_CONSERVATIVE,ENUM_TIMEFRAMES replayTF=PERIOD_M1){m_logger=logger;m_symbol=symbol;m_entryTF=tf;m_maxBars=MathMax(5,maxBars);m_fillPolicy=fp;m_replayTF=replayTF;m_count=0;m_lastFinalizedR=0.0;m_lastFinalizedQualified=false;ArrayResize(m_pending,0);ArrayResize(m_seenDealTickets,0);ArrayResize(m_rebuiltDecisionIds,0);ZeroMemory(m_stats);}
    void ConfigureExecutionMode(bool live){m_liveExecution=live;}void ConfigureSimulation(double risk,bool allow,double be,double partial,double frac,double trail,double comm,double spread,double slip){m_riskPercent=risk;m_allowMinLotOverride=allow;m_breakEvenAtR=be;m_partialAtR=partial;m_partialFraction=MathMax(0.0,MathMin(1.0,frac));m_trailATRMult=trail;m_commissionPerLot=MathMax(0.0,comm);m_spreadPoints=MathMax(0.0,spread);m_slippagePoints=MathMax(0.0,slip);}void ConfigureCalibration(bool enabled,int minSample=30){m_calibrationEnabled=enabled;m_calibration.Init(m_symbol,minSample);}void ConfigureConfidenceDecay(double halfLife=12.0){m_decayHalfLifeBars=halfLife;}void ConfigurePublishing(CSignalPublisher* p,string version){m_publisher=p;m_weightVersion=version;}void ConfigureEnvironmentMemory(CEnvironmentStrategyMemory* memory){m_environmentMemory=memory;}
    int ActiveCount()const{return m_count;}double LastFinalizedR()const{return m_lastFinalizedR;}bool LastFinalizedQualified()const{return m_lastFinalizedQualified;}OutcomeStats GetStats()const{return m_stats;}double GetCalibratedProbability(double confidence,int &sample,bool &enough)const{return m_calibration.GetCalibratedProbability(confidence,sample,enough);}
+   bool GetAttribution(long decisionId,string &strategy,string &regime)
+     {
+      strategy="UNTAGGED";
+      regime="UNTAGGED";
+      int index=Find(decisionId);
+      if(index<0) return false;
+      strategy=EnumToString(m_pending[index].setup.reasons.selected_strategy);
+      regime=EnumToString(m_pending[index].setup.reasons.regime);
+      if(StringLen(strategy)==0) strategy="UNTAGGED";
+      if(StringLen(regime)==0) regime="UNTAGGED";
+      return true;
+     }
    void AddSetup(TradeSetup &setup,long decisionId=-1,string decisionFingerprint=""){if(!setup.active||decisionId<=0||Find(decisionId)>=0)return;PendingSetup p;ZeroMemory(p);p.setup=setup;p.decisionId=decisionId;p.decision_fingerprint=decisionFingerprint;p.entryRef=ResolveExecutionEntry(setup);p.riskDist=MathAbs(p.entryRef-setup.stop_loss);p.sizingEntryPrice=p.entryRef;p.mgmtRiskDist=p.riskDist;p.weightedRiskDistLots=0.0;p.mfePrice=p.entryRef;p.maePrice=p.entryRef;p.currentSL=setup.stop_loss;p.confidenceAtSignal=setup.confidence;p.confidenceDecayed=setup.confidence;p.cashflowsKnown=true;p.outcomeHistoryComplete=true;p.excursionHistoryComplete=true;int n=m_count++;ArrayResize(m_pending,m_count);m_pending[n]=p;}
    // Rebuild only a currently-live decision from broker deal history. Completed
    // decisions are intentionally not replayed here: replaying them on every restart
@@ -12571,6 +12583,21 @@ struct TesterDealExportRow
    double commission;
    double swap;
    double fee;
+   long decision_id;
+   string strategy;
+   string regime;
+   double requested_price;
+   double slippage_points;
+   double slippage_cost_cash;
+   bool slippage_known;
+  };
+
+struct TesterPositionAttribution
+  {
+   ulong position_id;
+   long decision_id;
+   string strategy;
+   string regime;
   };
 
 class CTesterDealExport
@@ -12599,6 +12626,54 @@ private:
    ulong  m_seenDeals[];
    ulong  m_riskPositions[];
    double m_positionRiskCash[];
+   TesterPositionAttribution m_attributions[];
+
+   int AttributionIndex(const ulong positionId) const
+     {
+      for(int i=0;i<ArraySize(m_attributions);i++)
+         if(m_attributions[i].position_id==positionId) return i;
+      return -1;
+     }
+
+   void RememberAttribution(const ulong positionId,const long decisionId,
+                            const string strategy,const string regime)
+     {
+      if(positionId==0) return;
+      int index=AttributionIndex(positionId);
+      if(index<0)
+        {
+         index=ArraySize(m_attributions);
+         if(ArrayResize(m_attributions,index+1)!=index+1) return;
+         m_attributions[index].position_id=positionId;
+         m_attributions[index].decision_id=decisionId;
+         m_attributions[index].strategy=(StringLen(strategy)>0?strategy:"UNTAGGED");
+         m_attributions[index].regime=(StringLen(regime)>0?regime:"UNTAGGED");
+         return;
+        }
+      if(m_attributions[index].strategy=="CONFLICT" ||
+         m_attributions[index].regime=="CONFLICT") return;
+      bool conflict=(decisionId>0 && m_attributions[index].decision_id>0 &&
+                     decisionId!=m_attributions[index].decision_id) ||
+                    (StringLen(strategy)>0 && strategy!="UNTAGGED" &&
+                     m_attributions[index].strategy!="UNTAGGED" &&
+                     strategy!=m_attributions[index].strategy) ||
+                    (StringLen(regime)>0 && regime!="UNTAGGED" &&
+                     m_attributions[index].regime!="UNTAGGED" &&
+                     regime!=m_attributions[index].regime);
+      if(conflict)
+        {
+         m_attributions[index].decision_id=0;
+         m_attributions[index].strategy="CONFLICT";
+         m_attributions[index].regime="CONFLICT";
+         return;
+        }
+      if(m_attributions[index].decision_id<=0 && decisionId>0)
+         m_attributions[index].decision_id=decisionId;
+      if(m_attributions[index].strategy=="UNTAGGED" && StringLen(strategy)>0 && strategy!="UNTAGGED")
+         m_attributions[index].strategy=strategy;
+      if(m_attributions[index].regime=="UNTAGGED" && StringLen(regime)>0 && regime!="UNTAGGED")
+         m_attributions[index].regime=regime;
+     }
 
    string SafeName(string value)
      {
@@ -12740,6 +12815,7 @@ public:
       ArrayResize(m_seenDeals,0);
       ArrayResize(m_riskPositions,0);
       ArrayResize(m_positionRiskCash,0);
+      ArrayResize(m_attributions,0);
       if(m_enabled)
          PrintFormat("MIDAS_TEST_EXPORT_READY run=%s symbol=%s magic=%I64u",
                      m_runId,m_symbol,m_magic);
@@ -12765,7 +12841,10 @@ public:
                const datetime dealTime,const string symbol,
                const ENUM_DEAL_ENTRY entry,const double volume,const double price,
                const double profit,const double commission,const double swap,
-               const double fee,const double entryRiskCash)
+               const double fee,const double entryRiskCash,
+               const long decisionId,const string strategy,const string regime,
+               const double requestedPrice,const double slippagePoints,
+               const double slippageCostCash,const bool slippageKnown)
      {
       if(!m_enabled) return true;
       if(dealId==0 || orderId==0 || positionId==0 || symbol=="") return false;
@@ -12774,6 +12853,30 @@ public:
       for(int i=0;i<ArraySize(values);i++)
          if(!MathIsValidNumber(values[i])) return false;
       if(volume<=0.0 || price<=0.0) return false;
+      if(slippageKnown &&
+         (!MathIsValidNumber(requestedPrice) || requestedPrice<=0.0 ||
+          !MathIsValidNumber(slippagePoints) || !MathIsValidNumber(slippageCostCash) ||
+          slippageCostCash<0.0)) return false;
+
+      int attribution=AttributionIndex(positionId);
+      if(entry==DEAL_ENTRY_IN)
+         RememberAttribution(positionId,decisionId,strategy,regime);
+      else if(attribution<0 && decisionId>0)
+         RememberAttribution(positionId,decisionId,strategy,regime);
+      attribution=AttributionIndex(positionId);
+      long resolvedDecisionId=decisionId;
+      string resolvedStrategy=strategy;
+      string resolvedRegime=regime;
+      if(attribution>=0)
+        {
+         if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
+         if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
+            resolvedStrategy=m_attributions[attribution].strategy;
+         if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
+            resolvedRegime=m_attributions[attribution].regime;
+        }
+      if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
+      if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
 
       int seen=ArraySize(m_seenDeals);
       ArrayResize(m_seenDeals,seen+1);
@@ -12794,6 +12897,13 @@ public:
       m_rows[count].commission=commission;
       m_rows[count].swap=swap;
       m_rows[count].fee=fee;
+      m_rows[count].decision_id=resolvedDecisionId;
+      m_rows[count].strategy=resolvedStrategy;
+      m_rows[count].regime=resolvedRegime;
+      m_rows[count].requested_price=(slippageKnown?requestedPrice:0.0);
+      m_rows[count].slippage_points=(slippageKnown?slippagePoints:0.0);
+      m_rows[count].slippage_cost_cash=(slippageKnown?slippageCostCash:0.0);
+      m_rows[count].slippage_known=slippageKnown;
       return true;
      }
 
@@ -12808,7 +12918,9 @@ public:
          return;
         }
       FileWrite(handle,"position_id","time","entry","volume","profit","commission",
-                "swap","fee","risk_cash","lane","deal_id","order_id","symbol");
+                "swap","fee","risk_cash","lane","deal_id","order_id","symbol",
+                "decision_id","strategy","regime","requested_price","slippage_points",
+                "slippage_cost_cash","slippage_known");
       for(int i=0;i<ArraySize(m_rows);i++)
         {
          TesterDealExportRow row=m_rows[i];
@@ -12825,7 +12937,14 @@ public:
                     "EA",
                    IntegerToString((long)row.deal_id),
                    IntegerToString((long)row.order_id),
-                   row.symbol);
+                   row.symbol,
+                   IntegerToString(row.decision_id),
+                   row.strategy,
+                   row.regime,
+                   (row.slippage_known?DoubleToString(row.requested_price,10):""),
+                   (row.slippage_known?DoubleToString(row.slippage_points,8):""),
+                   (row.slippage_known?DoubleToString(row.slippage_cost_cash,8):""),
+                   (row.slippage_known?"true":"false"));
         }
       FileFlush(handle);
       FileClose(handle);
@@ -15743,24 +15862,66 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
      {
       ulong exportOrder=(ulong)HistoryDealGetInteger(trans.deal,DEAL_ORDER);
       double entryRiskCash=0.0;
-      if(entry==DEAL_ENTRY_IN && exportOrder>0 && HistoryOrderSelect(exportOrder))
+      long exportDecisionId=0;
+      int exportLegIndex=0;
+      string exportStrategy="UNTAGGED";
+      string exportRegime="UNTAGGED";
+      double requestedPrice=0.0;
+      double slippagePoints=0.0;
+      double slippageCostCash=0.0;
+      bool slippageKnown=false;
+      double dealVolume=HistoryDealGetDouble(trans.deal,DEAL_VOLUME);
+      double dealPrice=HistoryDealGetDouble(trans.deal,DEAL_PRICE);
+      if(exportOrder>0 && HistoryOrderSelect(exportOrder))
         {
+         string orderComment=HistoryOrderGetString(exportOrder,ORDER_COMMENT);
+         if(entry==DEAL_ENTRY_IN &&
+            ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex))
+            g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime);
          double entryStop=HistoryOrderGetDouble(exportOrder,ORDER_SL);
-         double entryVolume=HistoryDealGetDouble(trans.deal,DEAL_VOLUME);
-         double entryPrice=HistoryDealGetDouble(trans.deal,DEAL_PRICE);
-         if(entryStop>0.0 && entryVolume>0.0 && entryPrice>0.0)
-            entryRiskCash=g_risk.RiskAmountForLots(_Symbol,entryVolume,entryPrice,entryStop);
+         if(entry==DEAL_ENTRY_IN && entryStop>0.0 && dealVolume>0.0 && dealPrice>0.0)
+            entryRiskCash=g_risk.RiskAmountForLots(_Symbol,dealVolume,dealPrice,entryStop);
+
+         // Only market BUY/SELL orders are scored as execution slippage.
+         // Pending stop/limit triggers are deliberately left unknown rather than
+         // conflating trigger gaps or limit price improvement with market slippage.
+         ENUM_ORDER_TYPE historicalOrderType=(ENUM_ORDER_TYPE)HistoryOrderGetInteger(exportOrder,ORDER_TYPE);
+         ENUM_DEAL_TYPE dealType=(ENUM_DEAL_TYPE)HistoryDealGetInteger(trans.deal,DEAL_TYPE);
+         requestedPrice=HistoryOrderGetDouble(exportOrder,ORDER_PRICE_OPEN);
+         double point=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+         bool buyMatch=(historicalOrderType==ORDER_TYPE_BUY && dealType==DEAL_TYPE_BUY);
+         bool sellMatch=(historicalOrderType==ORDER_TYPE_SELL && dealType==DEAL_TYPE_SELL);
+         if((buyMatch || sellMatch) && requestedPrice>0.0 && point>0.0 &&
+            dealVolume>0.0 && dealPrice>0.0)
+           {
+            slippagePoints=(buyMatch?(dealPrice-requestedPrice):(requestedPrice-dealPrice))/point;
+            // For an exit deal, calculate the cost against the position being
+            // closed, not as though the deal opened a new position in its own direction.
+            ENUM_ORDER_TYPE slippageCalcType=historicalOrderType;
+            if(entry==DEAL_ENTRY_OUT || entry==DEAL_ENTRY_OUT_BY)
+               slippageCalcType=(historicalOrderType==ORDER_TYPE_BUY?ORDER_TYPE_SELL:ORDER_TYPE_BUY);
+            double hypotheticalPnl=0.0;
+            if(MathIsValidNumber(slippagePoints) &&
+               OrderCalcProfit(slippageCalcType,_Symbol,dealVolume,
+                               requestedPrice,dealPrice,hypotheticalPnl) &&
+               MathIsValidNumber(hypotheticalPnl))
+              {
+               slippageCostCash=MathMax(0.0,-hypotheticalPnl);
+               slippageKnown=MathIsValidNumber(slippageCostCash);
+              }
+           }
         }
       if(!g_testerDealExport.Record(
             trans.deal,exportOrder,positionIdentifier,
             (datetime)HistoryDealGetInteger(trans.deal,DEAL_TIME),
             HistoryDealGetString(trans.deal,DEAL_SYMBOL),entry,
-            HistoryDealGetDouble(trans.deal,DEAL_VOLUME),
-            HistoryDealGetDouble(trans.deal,DEAL_PRICE),
+            dealVolume,dealPrice,
             HistoryDealGetDouble(trans.deal,DEAL_PROFIT),
             HistoryDealGetDouble(trans.deal,DEAL_COMMISSION),
             HistoryDealGetDouble(trans.deal,DEAL_SWAP),
-            HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash))
+            HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash,
+            exportDecisionId,exportStrategy,exportRegime,
+            requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
          PrintFormat("MIDAS_TEST_EXPORT_ERROR deal=%I64u position=%I64u; artifact will be incomplete",
                      trans.deal,positionIdentifier);
      }

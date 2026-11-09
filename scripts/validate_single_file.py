@@ -98,6 +98,17 @@ def main():
     }
     for name,pattern in tester_export_checks.items():
         if not re.search(pattern,raw): fail.append("tester export regression: "+name)
+    native_deal_attribution_checks = {
+        "tester export records decision and strategy lineage": r'"decision_id","strategy","regime","requested_price","slippage_points"',
+        "deal rows preserve strategy and regime": r'm_rows\[count\]\.strategy\s*=\s*resolvedStrategy;[\s\S]{0,100}m_rows\[count\]\.regime\s*=\s*resolvedRegime;',
+        "position attribution is keyed by stable position identifier": r'AttributionIndex\(const ulong positionId\)',
+        "exit slippage cash reverses to the exposure direction": r'if\s*\(entry\s*==\s*DEAL_ENTRY_OUT\s*\|\|\s*entry\s*==\s*DEAL_ENTRY_OUT_BY\)[\s\S]{0,180}slippageCalcType\s*=\s*\(historicalOrderType\s*==\s*ORDER_TYPE_BUY\s*\?\s*ORDER_TYPE_SELL\s*:\s*ORDER_TYPE_BUY\)',
+        "slippage uses historical market-order requested price": r'HistoryOrderGetDouble\(exportOrder,ORDER_PRICE_OPEN\)[\s\S]{0,1400}OrderCalcProfit\(slippageCalcType,_Symbol,dealVolume',
+        "pending order triggers are not mislabeled as market slippage": r'Pending stop/limit triggers are deliberately left unknown',
+        "unknown slippage is exported as blank numeric fields": r'row\.slippage_known\?DoubleToString\(row\.slippage_cost_cash,8\):""'
+    }
+    for name,pattern in native_deal_attribution_checks.items():
+        if not re.search(pattern,raw): fail.append("native deal attribution regression: "+name)
     position_manager_checks = {
         "live PositionManager initializer has no obsolete stop arguments": r'void\s+CPositionManager::Init\(COrderManager\*\s*orders\s*,\s*CBrokerAdapter\*\s*broker\s*,\s*double\s+partialAtR\s*,\s*double\s+partialFraction\s*,\s*CSwingDetector\*\s*structureSwings',
         "manager declaration removes obsolete break-even and trail args": r'void\s+Init\(COrderManager\*\s*orders\s*,\s*CBrokerAdapter\*\s*broker\s*,\s*double\s+partialAtR\s*,\s*double\s+partialFraction\s*,\s*CSwingDetector\*\s*structureSwings',

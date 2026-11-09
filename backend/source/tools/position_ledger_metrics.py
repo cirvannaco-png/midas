@@ -31,6 +31,11 @@ ALIASES = {
     "symbol": ("symbol", "instrument", "pair"),
     "strategy": ("strategy", "selected_strategy", "strategy_name"),
     "regime": ("regime", "market_regime"),
+    "decision_id": ("decision_id", "decision", "trade_decision_id"),
+    "requested_price": ("requested_price", "order_requested_price"),
+    "slippage_points": ("slippage_points", "execution_slippage_points"),
+    "slippage_cost_cash": ("slippage_cost_cash", "slippage_cash", "execution_slippage_cost"),
+    "slippage_known": ("slippage_known", "execution_slippage_known"),
 }
 IN = {"in", "deal_entry_in", "entry_in", "0"}
 OUT = {"out", "deal_entry_out", "entry_out", "1"}
@@ -62,6 +67,12 @@ def number(value, field, row_num, default=None):
     if not math.isfinite(result):
         raise LedgerError(f"row {row_num}: non-finite {field}")
     return result
+
+
+def optional_number(value, field, row_num):
+    if value is None or str(value).strip() == "":
+        return None
+    return number(value, field, row_num)
 
 
 def parse_time(value, row_num):
@@ -120,8 +131,24 @@ def read_deals(path):
                 "symbol": str(row.get(cols["symbol"], "")).strip().upper() if "symbol" in cols else "",
                 "strategy": str(row.get(cols["strategy"], "")).strip().upper() if "strategy" in cols else "",
                 "regime": str(row.get(cols["regime"], "")).strip().upper() if "regime" in cols else "",
+                "decision_id": (str(row.get(cols["decision_id"], "")).strip() if "decision_id" in cols and str(row.get(cols["decision_id"], "")).strip() not in {"", "0"} else ""),
+                "requested_price": optional_number(row.get(cols["requested_price"]) if "requested_price" in cols else None, "requested_price", row_num),
+                "slippage_points": optional_number(row.get(cols["slippage_points"]) if "slippage_points" in cols else None, "slippage_points", row_num),
+                "slippage_cost_cash": optional_number(row.get(cols["slippage_cost_cash"]) if "slippage_cost_cash" in cols else None, "slippage_cost_cash", row_num),
+                "slippage_known": (str(row.get(cols["slippage_known"], "")).strip().lower() in {"1", "true", "yes"} if "slippage_known" in cols else False),
                 "source_row": row_num,
             }
+            if item["slippage_known"]:
+                if item["requested_price"] is None or item["requested_price"] <= 0:
+                    raise LedgerError(f"row {row_num}: known slippage requires a positive requested_price")
+                if item["slippage_points"] is None or item["slippage_cost_cash"] is None:
+                    raise LedgerError(f"row {row_num}: known slippage requires points and cash cost")
+                if item["slippage_cost_cash"] < 0:
+                    raise LedgerError(f"row {row_num}: slippage_cost_cash cannot be negative")
+            else:
+                item["requested_price"] = None
+                item["slippage_points"] = None
+                item["slippage_cost_cash"] = None
             deals.append(item)
     if not deals:
         raise LedgerError("CSV contains no deal rows")
@@ -171,12 +198,15 @@ def reconstruct_positions(deals, open_ids=None):
         symbols = {r["symbol"] for r in rows if r.get("symbol")}
         strategies = {r["strategy"] for r in rows if r.get("strategy")}
         regimes = {r["regime"] for r in rows if r.get("regime")}
+        decisions = {r["decision_id"] for r in rows if r.get("decision_id")}
         if len(symbols) > 1:
             raise LedgerError(f"position {pid}: conflicting symbol labels {sorted(symbols)}")
         if len(strategies) > 1:
             raise LedgerError(f"position {pid}: conflicting strategy labels {sorted(strategies)}")
         if len(regimes) > 1:
             raise LedgerError(f"position {pid}: conflicting regime labels {sorted(regimes)}")
+        if len(decisions) > 1:
+            raise LedgerError(f"position {pid}: conflicting decision IDs {sorted(decisions)}")
         net = sum(r["profit"] + r["commission"] + r["swap"] + r["fee"] for r in rows)
         positions.append({
             "position_id": pid, "opened_at": min(r["time"] for r in entries),
@@ -190,6 +220,10 @@ def reconstruct_positions(deals, open_ids=None):
             "symbol": next(iter(symbols), "UNKNOWN"),
             "strategy": next(iter(strategies), "UNTAGGED"),
             "regime": next(iter(regimes), "UNTAGGED"),
+            "decision_id": next(iter(decisions), ""),
+            "slippage_complete": all(r.get("slippage_known", False) for r in rows),
+            "slippage_cost_cash": (sum(r["slippage_cost_cash"] for r in rows) if all(r.get("slippage_known", False) for r in rows) else None),
+            "volume_weighted_slippage_points": (sum(r["slippage_points"] * r["volume"] for r in rows) / sum(r["volume"] for r in rows) if rows and all(r.get("slippage_known", False) for r in rows) and sum(r["volume"] for r in rows) > 0 else None),
         })
     positions.sort(key=lambda p: (p["closed_at"], p["position_id"]))
     return positions, ignored
@@ -267,6 +301,10 @@ def calculate_metrics(positions, initial_balance=10000.0, ignored=None):
         if avg_win_r is not None and avg_loss_r_abs is not None and avg_win_r + avg_loss_r_abs > 0
         else None
     )
+    slippage_complete_positions = [p for p in positions if p.get("slippage_complete")]
+    attributed_strategy = [p for p in positions if p.get("strategy") not in {"", "UNTAGGED", "UNKNOWN", "CONFLICT"}]
+    attributed_regime = [p for p in positions if p.get("regime") not in {"", "UNTAGGED", "UNKNOWN", "CONFLICT"}]
+    attributed_decision = [p for p in positions if p.get("decision_id")]
     by_symbol_strategy_regime = {}
     group_keys = sorted({
         (position.get("symbol", "UNKNOWN"), position.get("strategy", "UNTAGGED"),
@@ -301,6 +339,9 @@ def calculate_metrics(positions, initial_balance=10000.0, ignored=None):
                 if group_gross_loss else (None if not group_gross_win else "no_losses"),
             "average_realized_R": round(sum(group_r) / len(group_r), 4) if group_r else None,
             "positions_with_risk_cash": len(group_r),
+            "slippage_complete_positions": sum(1 for position in group if position.get("slippage_complete")),
+            "slippage_unknown_positions": sum(1 for position in group if not position.get("slippage_complete")),
+            "slippage_cost_cash_known_positions": (round(sum(position["slippage_cost_cash"] for position in group if position.get("slippage_complete")), 8) if any(position.get("slippage_complete") for position in group) else None),
         }
 
     return {
@@ -326,7 +367,18 @@ def calculate_metrics(positions, initial_balance=10000.0, ignored=None):
         "max_consecutive_losses": max_consecutive_losses,
         "max_closed_position_drawdown_cash": round(max_dd, 2), "max_closed_position_drawdown_pct": round(max_dd_pct, 4),
         "average_realized_R": round(sum(r_values) / len(r_values), 4) if r_values else None,
-        "positions_with_risk_cash": len(r_values), "by_lane": lanes,
+        "positions_with_risk_cash": len(r_values),
+        "positions_with_strategy_attribution": len(attributed_strategy),
+        "strategy_attribution_coverage_pct": round(100.0 * len(attributed_strategy) / len(positions), 2) if positions else None,
+        "positions_with_regime_attribution": len(attributed_regime),
+        "regime_attribution_coverage_pct": round(100.0 * len(attributed_regime) / len(positions), 2) if positions else None,
+        "positions_with_decision_attribution": len(attributed_decision),
+        "decision_attribution_coverage_pct": round(100.0 * len(attributed_decision) / len(positions), 2) if positions else None,
+        "slippage_complete_positions": len(slippage_complete_positions),
+        "slippage_unknown_positions": len(positions) - len(slippage_complete_positions),
+        "slippage_coverage_pct": round(100.0 * len(slippage_complete_positions) / len(positions), 2) if positions else None,
+        "slippage_cost_cash_known_positions": (round(sum(p["slippage_cost_cash"] for p in slippage_complete_positions), 8) if slippage_complete_positions else None),
+        "by_lane": lanes,
         "by_symbol_strategy_regime": by_symbol_strategy_regime, "ignored_groups": ignored or {},
         "drawdown_basis": "closed-position settlement sequence, not tick-level equity",
         "equity_curve": equity,

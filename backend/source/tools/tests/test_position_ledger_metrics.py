@@ -5,12 +5,17 @@ from datetime import datetime, timezone
 from tools.position_ledger_metrics import LedgerError, calculate_metrics, reconstruct_positions, reject_reserved_oos_entries
 
 
-def deal(pid, stamp, entry, volume, profit=0.0, commission=0.0, risk_cash=0.0, lane="A", row=2, symbol="EURUSD", strategy="", regime=""):
+def deal(pid, stamp, entry, volume, profit=0.0, commission=0.0, risk_cash=0.0, lane="A", row=2, symbol="EURUSD", strategy="", regime="", slippage_cost_cash=None, slippage_points=None, slippage_known=False):
     return {
         "position_id": str(pid), "time": datetime.fromisoformat(stamp).replace(tzinfo=timezone.utc),
         "entry": entry, "volume": volume, "profit": profit, "commission": commission,
         "swap": 0.0, "fee": 0.0, "risk_cash": risk_cash, "lane": lane,
         "symbol": symbol, "strategy": strategy, "regime": regime, "source_row": row,
+        "decision_id": "",
+        "requested_price": 1.1 if slippage_known else None,
+        "slippage_points": slippage_points if slippage_known else None,
+        "slippage_cost_cash": slippage_cost_cash if slippage_known else None,
+        "slippage_known": slippage_known,
     }
 
 
@@ -192,4 +197,71 @@ def test_position_rejects_conflicting_strategy_or_regime_lineage():
              strategy="MEAN_REVERSION", regime="RANGING", row=3),
     ]
     with pytest.raises(LedgerError, match="conflicting strategy labels"):
+        reconstruct_positions(rows)
+
+
+def test_position_slippage_requires_complete_known_costs_for_every_deal():
+    rows = [
+        deal(700, "2026-04-01T09:00:00", "in", 1.0, risk_cash=100.0,
+             strategy="MOMENTUM_BREAKOUT", regime="TRENDING",
+             slippage_cost_cash=0.40, slippage_points=1.0, slippage_known=True, row=2),
+        deal(700, "2026-04-01T10:00:00", "out", 0.4, profit=10.0,
+             strategy="MOMENTUM_BREAKOUT", regime="TRENDING",
+             slippage_cost_cash=0.10, slippage_points=0.5, slippage_known=True, row=3),
+        deal(700, "2026-04-01T11:00:00", "out", 0.6, profit=10.0,
+             strategy="MOMENTUM_BREAKOUT", regime="TRENDING",
+             slippage_cost_cash=0.20, slippage_points=-0.25, slippage_known=True, row=4),
+        deal(701, "2026-04-02T09:00:00", "in", 1.0, risk_cash=100.0,
+             strategy="MEAN_REVERSION", regime="RANGING",
+             slippage_known=False, row=5),
+        deal(701, "2026-04-02T10:00:00", "out", 1.0, profit=-5.0,
+             strategy="MEAN_REVERSION", regime="RANGING",
+             slippage_known=True, slippage_cost_cash=0.2, slippage_points=0.5, row=6),
+    ]
+    positions, ignored = reconstruct_positions(rows)
+    report = calculate_metrics(positions, 10000.0, ignored)
+
+    first = next(position for position in positions if position["position_id"] == "700")
+    second = next(position for position in positions if position["position_id"] == "701")
+    assert first["slippage_complete"] is True
+    assert first["slippage_cost_cash"] == pytest.approx(0.70)
+    assert first["volume_weighted_slippage_points"] == pytest.approx(0.525)
+    assert second["slippage_complete"] is False
+    assert second["slippage_cost_cash"] is None
+    assert report["slippage_complete_positions"] == 1
+    assert report["slippage_unknown_positions"] == 1
+    assert report["slippage_coverage_pct"] == 50.0
+    assert report["slippage_cost_cash_known_positions"] == pytest.approx(0.70)
+
+
+def test_strategy_regime_and_decision_attribution_coverage_is_explicit():
+    rows = [
+        deal(710, "2026-04-03T09:00:00", "in", 1.0, risk_cash=100.0,
+             strategy="MOMENTUM_BREAKOUT", regime="TRENDING", row=2),
+        deal(710, "2026-04-03T10:00:00", "out", 1.0, profit=2.0,
+             strategy="MOMENTUM_BREAKOUT", regime="TRENDING", row=3),
+        deal(711, "2026-04-04T09:00:00", "in", 1.0, risk_cash=100.0,
+             strategy="UNTAGGED", regime="CONFLICT", row=4),
+        deal(711, "2026-04-04T10:00:00", "out", 1.0, profit=1.0,
+             strategy="UNTAGGED", regime="CONFLICT", row=5),
+    ]
+    rows[0]["decision_id"] = rows[1]["decision_id"] = "123"
+    positions, ignored = reconstruct_positions(rows)
+    report = calculate_metrics(positions, 10000.0, ignored)
+    assert report["positions_with_strategy_attribution"] == 1
+    assert report["strategy_attribution_coverage_pct"] == 50.0
+    assert report["positions_with_regime_attribution"] == 1
+    assert report["regime_attribution_coverage_pct"] == 50.0
+    assert report["positions_with_decision_attribution"] == 1
+    assert report["decision_attribution_coverage_pct"] == 50.0
+
+
+def test_decision_id_must_be_consistent_across_position_deals():
+    rows = [
+        deal(720, "2026-04-05T09:00:00", "in", 1.0, row=2),
+        deal(720, "2026-04-05T10:00:00", "out", 1.0, profit=3.0, row=3),
+    ]
+    rows[0]["decision_id"] = "123"
+    rows[1]["decision_id"] = "124"
+    with pytest.raises(LedgerError, match="conflicting decision IDs"):
         reconstruct_positions(rows)
