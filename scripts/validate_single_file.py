@@ -103,7 +103,7 @@ def main():
         "deal rows preserve strategy and regime": r'm_rows\[count\]\.strategy\s*=\s*resolvedStrategy;[\s\S]{0,100}m_rows\[count\]\.regime\s*=\s*resolvedRegime;',
         "position attribution is keyed by stable position identifier": r'AttributionIndex\(const ulong positionId\)',
         "exit slippage cash reverses to the exposure direction": r'if\s*\(entry\s*==\s*DEAL_ENTRY_OUT\s*\|\|\s*entry\s*==\s*DEAL_ENTRY_OUT_BY\)[\s\S]{0,180}slippageCalcType\s*=\s*\(historicalOrderType\s*==\s*ORDER_TYPE_BUY\s*\?\s*ORDER_TYPE_SELL\s*:\s*ORDER_TYPE_BUY\)',
-        "slippage uses historical market-order requested price": r'HistoryOrderGetDouble\(exportOrder,ORDER_PRICE_OPEN\)[\s\S]{0,900}OrderCalcProfit\(historicalOrderType,_Symbol,dealVolume',
+        "slippage uses historical market-order requested price": r'HistoryOrderGetDouble\(exportOrder,ORDER_PRICE_OPEN\)[\s\S]{0,1400}OrderCalcProfit\(slippageCalcType,_Symbol,dealVolume',
         "pending order triggers are not mislabeled as market slippage": r'Pending stop/limit triggers are deliberately left unknown',
         "unknown slippage is exported as blank numeric fields": r'row\.slippage_known\?DoubleToString\(row\.slippage_cost_cash,8\):""'
     }

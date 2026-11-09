@@ -68,7 +68,7 @@ def test_native_export_carries_decision_strategy_regime_and_slippage_provenance(
     assert "ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex)" in ea
     assert "g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime)" in ea
     assert "HistoryOrderGetDouble(exportOrder,ORDER_PRICE_OPEN)" in ea
-    assert "OrderCalcProfit(historicalOrderType,_Symbol,dealVolume" in ea
+    assert "OrderCalcProfit(slippageCalcType,_Symbol,dealVolume" in ea
     assert "historicalOrderType==ORDER_TYPE_BUY" in ea
     assert "historicalOrderType==ORDER_TYPE_SELL" in ea
     assert "Pending stop/limit triggers are deliberately left unknown" in ea
