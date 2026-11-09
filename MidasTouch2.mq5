@@ -1,7 +1,7 @@
 // MidasTouch2 single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@e10f47c075c0dabfe903ac7e6408b062191d26a7
+// Staged EA source snapshot: cirvannaco-png/midas@b206992308bb512f83a51265d080397550e37854
 // Modular source is preserved under development/EA/.
 // Regenerate with: python scripts/build_single_file.py
 // Do not hand-edit this generated file.
@@ -12882,11 +12882,23 @@ public:
       string resolvedRegime=regime;
       if(attribution>=0)
         {
-         if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
-         if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
-            resolvedStrategy=m_attributions[attribution].strategy;
-         if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
-            resolvedRegime=m_attributions[attribution].regime;
+         // Once a netting reversal has made this identifier ambiguous, do not
+         // allow a later IN fill to overwrite the conflict with a new label.
+         if(m_attributions[attribution].strategy=="CONFLICT" ||
+            m_attributions[attribution].regime=="CONFLICT")
+           {
+            resolvedDecisionId=0;
+            resolvedStrategy="CONFLICT";
+            resolvedRegime="CONFLICT";
+           }
+         else
+           {
+            if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
+            if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
+               resolvedStrategy=m_attributions[attribution].strategy;
+            if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
+               resolvedRegime=m_attributions[attribution].regime;
+           }
         }
       if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
       if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
