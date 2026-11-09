@@ -18,7 +18,7 @@ The Strategy Tester deal export supports position-level strategy/regime analysis
 - The reference is the historical order's ORDER_PRICE_OPEN, not a bar close or a later quote.
 - Slippage is calculated only when the historical order is a market ORDER_TYPE_BUY or ORDER_TYPE_SELL, the deal direction matches, and the reference price and point size are valid.
 - Signed points are adverse-positive and favorable-negative: BUY uses (fill - requested) / point; SELL uses (requested - fill) / point.
-- Adverse cash cost is calculated with OrderCalcProfit from requested price to actual fill and floored at zero. Favorable execution is retained as negative points and zero adverse cash cost.
+- Adverse cash cost is calculated with OrderCalcProfit from requested price to actual fill and floored at zero. For closing deals, the calculation uses the opposite hypothetical position direction so an adverse close fill has the correct cost sign. Favorable execution is retained as negative points and zero adverse cash cost.
 - Pending stop/limit orders are not scored by this field. Their trigger gaps and limit-price improvement are different execution phenomena; this export leaves them unknown rather than mislabelling them as market slippage.
 - If requested price, direction, or cash conversion is unavailable, the CSV writes blank numeric slippage fields and slippage_known=false. The ledger never converts missing evidence into zero.
 

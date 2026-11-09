@@ -1790,9 +1790,14 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
             dealVolume>0.0 && dealPrice>0.0)
            {
             slippagePoints=(buyMatch?(dealPrice-requestedPrice):(requestedPrice-dealPrice))/point;
+            // For an exit deal, calculate the cost against the position being
+            // closed, not as though the deal opened a new position in its own direction.
+            ENUM_ORDER_TYPE slippageCalcType=historicalOrderType;
+            if(entry==DEAL_ENTRY_OUT || entry==DEAL_ENTRY_OUT_BY)
+               slippageCalcType=(historicalOrderType==ORDER_TYPE_BUY?ORDER_TYPE_SELL:ORDER_TYPE_BUY);
             double hypotheticalPnl=0.0;
             if(MathIsValidNumber(slippagePoints) &&
-               OrderCalcProfit(historicalOrderType,_Symbol,dealVolume,
+               OrderCalcProfit(slippageCalcType,_Symbol,dealVolume,
                                requestedPrice,dealPrice,hypotheticalPnl) &&
                MathIsValidNumber(hypotheticalPnl))
               {

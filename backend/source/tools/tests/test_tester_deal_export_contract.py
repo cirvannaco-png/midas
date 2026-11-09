@@ -88,3 +88,12 @@ def test_unknown_slippage_is_blank_not_zero_and_labels_follow_position_id():
 def test_only_opening_orders_resolve_strategy_decision_identity():
     ea = read_modular("MedisTouch_v2.8.mq5")
     assert "if(entry==DEAL_ENTRY_IN &&" in ea
+
+
+
+def test_exit_slippage_cash_uses_position_direction_not_deal_direction():
+    ea = read_modular("MedisTouch_v2.8.mq5")
+    assert "ENUM_ORDER_TYPE slippageCalcType=historicalOrderType;" in ea
+    assert "if(entry==DEAL_ENTRY_OUT || entry==DEAL_ENTRY_OUT_BY)" in ea
+    assert "slippageCalcType=(historicalOrderType==ORDER_TYPE_BUY?ORDER_TYPE_SELL:ORDER_TYPE_BUY);" in ea
+    assert "OrderCalcProfit(slippageCalcType,_Symbol,dealVolume" in ea
