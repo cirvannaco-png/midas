@@ -2,7 +2,7 @@
 
 **Status:** Research only. No production EA code or live risk settings changed.  
 **Research script v1.1:** `a15gl2vswagiiobrul4z58uc` (compiled version 9)  
-**Current research candidate:** `y8hhgudv0ojp8mf4dcmlrqdh` (version 5; compiled successfully)  
+**Current research candidate:** `y8hhgudv0ojp8mf4dcmlrqdh` (version 6; compiled successfully)  
 **Instrument / timeframe:** IC Markets, M15  
 **Report date:** 2026-11-09
 
@@ -14,7 +14,7 @@ The liquidity-sweep/reclaim (mean-reversion) and trend-continuation families can
 
 This is a clear rejection of optimizing for daily winner count or close-record win rate at the expense of payoff asymmetry.
 
-A material risk defect also emerged: multiple Friday positions were held through the weekend and closed at the Sunday reopening price, materially beyond their recorded stops. This was responsible for most of the two baskets' negative result in the May window. A research-only weekend guard has now been added as a separate compiled StrategyTune script, but it has not yet been backtested.
+A material risk defect also emerged: multiple Friday positions were held through the weekend and closed at the Sunday reopening price, materially beyond their recorded stops. This was responsible for most of the two baskets' negative result in the May window. A research-only weekend guard has been exercised in July, August and October StrategyTune simulations without reported flatten errors or residual lots. This is not broker-demo evidence.
 
 ## Scope and interpretation
 
@@ -280,7 +280,7 @@ Do not broaden into a larger cross-asset sweep yet. First harden research teleme
 
 **Period:** 2026-08-01 through 2026-08-31.  
 **Instrument:** Gold, IC Markets, M15.  
-**Harness:** StrategyTune script `y8hhgudv0ojp8mf4dcmlrqdh`, version 5 (compiled successfully).  
+**Harness:** StrategyTune script `y8hhgudv0ojp8mf4dcmlrqdh`, version 6 (compiled successfully).  
 **Inputs:** same frozen family/regime/stop/exit settings as June and July; no August parameter tuning.
 
 | Family | Closed rows | Original positions | Wins / losses | Full-position WR | Net P&L | PF | Close-row WR | Partial-exit positions |
@@ -354,3 +354,18 @@ September 2026 is excluded because it was touched by an earlier research route. 
 Neither family has demonstrated stable positive expectancy across the observed periods. The continuation family is less poor than sweep/reclaim overall, but three of four observed months were negative and the one positive month was modest. Sweep/reclaim has larger losses in July and October that overwhelm its positive June/August results.
 
 **Decision:** both family configurations remain rejected for production. Do not broaden their use across symbols or increase risk. The next clean temporal validation period is November 2026 once the instrument's complete data window is available; preserve it untouched until a specific hypothesis and configuration are frozen.
+
+
+## Exit architecture follow-up — 2026-11-09
+
+The dedicated [Exit Architecture Audit](EXIT_ARCHITECTURE_AUDIT.md) records a four-fold continuation exit comparison and a separate inspection of the actual MQL5 position manager.
+
+The key research finding is that the baseline continuation payoff is asymmetric: 152 full positions across June, July, August and October produced 116 wins and 36 losses (76.32% full-position WR), +$267.19 gross wins against -$307.01 gross losses, net -$39.82 and PF 0.870. The average win was about $2.30 while the average loss was about $8.53; the break-even win rate for that payoff ratio is about 78.74%.
+
+A delayed TP1 at 0.50R lifted the four-fold aggregate to +$13.34 and PF 1.033, but three of four folds remained negative and the positive August result was highly concentrated in its largest winners. It is not a production candidate. Widening the runner trail to 1.8 ATR did not improve aggregate expectancy. October tests also showed that removing the +0.10R stop offset or reducing the TP1 partial fraction worsened results.
+
+Important distinction: the StrategyTune surrogate uses 0.25R/40% TP1, 1R/20% TP2 and a 1.2 ATR runner trail. The actual MQL5 EA uses a dynamic stop that activates at +0.75R, a +1R breakeven floor, and a 50% partial close at +2R. Do not transfer surrogate exit settings into the production EA.
+
+The actual MQL5 audit also found that the legacy `InpBreakEvenAtR` and `InpTrailATRMult` values are passed into `CPositionManager::Init` but do not control its live dynamic-stop engine; live stop behavior is driven by `InpDynamicStopBreakevenAtR` and `InpDynamicStopATRMult`. Resolve this configuration clarity issue in a separate regression-tested patch, not by silently changing live behavior.
+
+Finally, a v5 telemetry-indexing defect was found after the August/October runs: six emitted feature labels were reading the wrong source slots in the 12-value feature vector. Version 6 now maps quality, RVOL, spread/ATR, trend slope/ATR, MFE and MAE to their correct indices, and calculates the runner-P&L approximation with family-specific exit parameters. Historical v5 feature means and runner approximation under family-specific overrides must not be relied on. The saved-row full-position P&L analysis in this report is unaffected.
