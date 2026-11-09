@@ -274,3 +274,43 @@ All monetary values are simulated USD. Position P&L and PF were independently re
 Both isolated families remain rejected as production candidates. The continuation family is less weak than sweep/reclaim on July, but its PF remains below 1 and its June loss was substantial. The June-to-July variation also shows why a single attractive training window is insufficient.
 
 Do not broaden into a larger cross-asset sweep yet. First harden research telemetry and stop/exit attribution, then test a small number of predeclared hypotheses on later untouched folds. The next unexposed chronological period after the inspected April–July windows is August 2026; it must remain untouched until any candidate and its parameters are frozen.
+
+
+## Fold 3 — August 2026 temporal holdout (Gold M15)
+
+**Period:** 2026-08-01 through 2026-08-31.  
+**Instrument:** Gold, IC Markets, M15.  
+**Harness:** StrategyTune script `y8hhgudv0ojp8mf4dcmlrqdh`, version 5 (compiled successfully).  
+**Inputs:** same frozen family/regime/stop/exit settings as June and July; no August parameter tuning.
+
+| Family | Closed rows | Original positions | Wins / losses | Full-position WR | Net P&L | PF | Close-row WR | Partial-exit positions |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Sweep/reclaim, range-only | 54 | 27 | 22 / 5 | 81.48% | +$10.74 | 1.231 | 90.74% | 22 / 27 |
+| Continuation, trend-only | 82 | 42 | 34 / 8 | 80.95% | +$8.66 | 1.124 | 89.02% | 34 / 42 |
+
+These figures were independently recomputed from saved session rows grouped by original `openingFillId`. All values are simulated USD. No position remained open at the fold boundary.
+
+### Interpretation
+
+August is positive for both isolated families, but it does not erase the June/July failures. The three-month sequence is inconsistent:
+
+| Family | June P&L / PF | July P&L / PF | August P&L / PF |
+|---|---:|---:|---:|
+| Sweep/reclaim | +$4.71 / 1.085 | -$31.18 / 0.629 | +$10.74 / 1.231 |
+| Trend continuation | -$41.19 / 0.634 | -$5.39 / 0.912 | +$8.66 / 1.124 |
+
+The August PF values are modest and the sample is small (27 and 42 positions). They are not sufficient evidence of a durable edge or a 90% full-position win rate. Do not promote either family.
+
+The close-row win rates again overstate the full-position results by about 9.3 percentage points for sweep/reclaim and 8.1 points for continuation. Partial-close accounting remains material.
+
+### Attribution and weekend guard
+
+- Sweep/reclaim internal attribution was valid and reconciled with the saved rows.
+- Continuation internal attribution was invalid: two close events were missed and its internal position-P&L tally differed from the saved-row total by $4.64. The saved-row grouping is the authoritative outcome.
+- The v5 telemetry reduction removed 12 low-priority feature-mean keys. The August runs completed without the earlier 111-key / 100-key truncation warning. The retained telemetry includes the key position-attribution validity flag, regime/family counters, risk blocks, daily entry diagnostics, weekend-guard outcomes and selected feature means.
+- Weekend protection was exercised in the continuation run: three account-wide flatten calls targeted four lots, with zero errors and zero residual lots. The sweep/reclaim run did not require a weekend flatten. This is research-harness evidence only, not broker-demo evidence.
+- The daily three-entry counter is an entry-count diagnostic, not a winning-position guarantee. The runs recorded 4/21 and 5/21 eligible days reaching at least three entries, respectively. No trades were forced.
+
+### Updated decision
+
+August shows that both families can have a profitable month under the frozen settings, but June and July show they can also lose materially. Three monthly observations with only one positive month per family are not enough for promotion. Keep both in research; prioritize stable full-position expectancy, tail-loss containment and a synchronized multi-symbol account-level test over win-rate optimization.
