@@ -98,6 +98,18 @@ def main():
     }
     for name,pattern in tester_export_checks.items():
         if not re.search(pattern,raw): fail.append("tester export regression: "+name)
+    position_manager_checks = {
+        "live PositionManager initializer has no obsolete stop arguments": r'void\s+CPositionManager::Init\(COrderManager\*\s*orders\s*,\s*CBrokerAdapter\*\s*broker\s*,\s*double\s+partialAtR\s*,\s*double\s+partialFraction\s*,\s*CSwingDetector\*\s*structureSwings',
+        "manager declaration removes obsolete break-even and trail args": r'void\s+Init\(COrderManager\*\s*orders\s*,\s*CBrokerAdapter\*\s*broker\s*,\s*double\s+partialAtR\s*,\s*double\s+partialFraction\s*,\s*CSwingDetector\*\s*structureSwings',
+        "live dynamic-stop activation, break-even and ATR remain canonical": r'cfg\.activateAtR\s*=\s*InpDynamicStopActivateAtR\s*;[\s\S]{0,100}cfg\.breakevenAtR\s*=\s*InpDynamicStopBreakevenAtR\s*;[\s\S]{0,100}cfg\.atrMultiplier\s*=\s*InpDynamicStopATRMult\s*;',
+        "manager interval uses canonical dynamic-stop input": r'm_minModifyIntervalSec\s*=\s*MathMax\(0\s*,\s*InpDynamicStopModifyIntervalSec\s*\)',
+        "position manager receives only live partial-exit controls": r'g_positions\.Init\(\s*&g_orders\s*,\s*&g_broker\s*,\s*InpPartialAtR\s*,\s*InpPartialFraction\s*,\s*&g_chartCtx\.swings',
+        "legacy break-even and trail inputs remain simulator-only": r'g_tracker\.ConfigureSimulation\([^;]*InpBreakEvenAtR\s*,\s*InpPartialAtR\s*,\s*InpPartialFraction\s*,\s*InpTrailATRMult\s*,',
+        "live partial-close threshold remains 2R": r'input\s+double\s+InpPartialAtR\s*=\s*2\.0\s*;',
+        "live partial-close fraction remains 50 percent": r'input\s+double\s+InpPartialFraction\s*=\s*0\.5\s*;'
+    }
+    for name,pattern in position_manager_checks.items():
+        if not re.search(pattern,raw): fail.append("position-manager configuration regression: "+name)
     for name,pattern in bridge_checks.items():
         if not re.search(pattern,raw): fail.append("bridge/control regression: "+name)
     for name,pattern in policy_test_checks.items():
