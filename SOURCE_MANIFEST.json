@@ -484,9 +484,9 @@
   "note": "files[] is the immutable upstream baseline snapshot. current_source_snapshot pins the complete staged EA development tree used to generate the distributable root EA. The validator checks every staged file's exact Git blob SHA and ensures no unmanifested source file is present.",
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
-    "branch": "fix/position-manager-config-contract",
-    "commit": "31cede417931ceb7d92cc31cdcac7dc3c32e1c81",
-    "git_tree_sha": "2e9ffcd6bae6ea51166cf852dc22e8155fe9fef4",
+    "branch": "research/native-deal-attribution-slippage",
+    "commit": "c83b3d75931998f94ed5bb706e99fd6dc4a8cb41",
+    "git_tree_sha": "60c6b5d405a558b27e28bdb0c98ca05413e91bed",
     "root": "development/EA",
     "file_count": 95,
     "files": [
@@ -637,8 +637,8 @@
       },
       {
         "path": "development/EA/includes/Execution/TesterDealExport.mqh",
-        "git_blob_sha": "66334a01b9e7b4b654c99c295d82c5400fcdc04d",
-        "size_bytes": 11538
+        "git_blob_sha": "06f2082677db0f23dd78fd6a84487eb7a7674b03",
+        "size_bytes": 16481
       },
       {
         "path": "development/EA/includes/Execution/TradeStateMachine.mqh",
@@ -872,8 +872,8 @@
       },
       {
         "path": "development/EA/includes/Trading/OutcomeTrackerLive.mqh",
-        "git_blob_sha": "52cfde06c000049aab28184e1495eb1622a590bd",
-        "size_bytes": 32790
+        "git_blob_sha": "52d3c158ed10c9b2bf99592e8e68e72420e3de52",
+        "size_bytes": 33262
       },
       {
         "path": "development/EA/includes/Trading/RiskEngine.mqh",
@@ -927,8 +927,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.mq5",
-        "git_blob_sha": "c86fa5037fcd6691cba8903d2310122a82496f98",
-        "size_bytes": 110197
+        "git_blob_sha": "926ece1ae45020f1d19e0492382d743387a4ea2b",
+        "size_bytes": 112250
       },
       {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
