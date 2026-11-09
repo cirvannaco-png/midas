@@ -484,9 +484,9 @@
   "note": "files[] is the immutable upstream baseline snapshot. current_source_snapshot pins the complete staged EA development tree used to generate the distributable root EA. The validator checks every staged file's exact Git blob SHA and ensures no unmanifested source file is present.",
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
-    "branch": "build/single-file-staging",
-    "commit": "401b1353ca3d6e9cb2c2c3a76050abfba00b3f40",
-    "git_tree_sha": "09c78ae02108c248cdd33e05a349eda86d239656",
+    "branch": "fix/position-manager-config-contract",
+    "commit": "31cede417931ceb7d92cc31cdcac7dc3c32e1c81",
+    "git_tree_sha": "2e9ffcd6bae6ea51166cf852dc22e8155fe9fef4",
     "root": "development/EA",
     "file_count": 95,
     "files": [
@@ -627,8 +627,8 @@
       },
       {
         "path": "development/EA/includes/Execution/PositionManager.mqh",
-        "git_blob_sha": "9f28ef528524f534755921919809e793c6fbd763",
-        "size_bytes": 13636
+        "git_blob_sha": "236d21ab9205fd9a64f8e270e998399ec1b382d3",
+        "size_bytes": 13296
       },
       {
         "path": "development/EA/includes/Execution/PriceGridNormalizer.mqh",
@@ -927,8 +927,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.mq5",
-        "git_blob_sha": "24cf20be87e5bae645dc47181536e002a2beb522",
-        "size_bytes": 109894
+        "git_blob_sha": "c86fa5037fcd6691cba8903d2310122a82496f98",
+        "size_bytes": 110197
       },
       {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
