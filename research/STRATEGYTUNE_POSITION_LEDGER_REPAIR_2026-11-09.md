@@ -53,3 +53,39 @@ In the 0.10% strict-risk variant, the four strict-family positions netted +9.40,
 - The strategy is not approved. High record win rates do not establish positive whole-position expectancy or profit factor.
 - No live EA entry, exit, order admission, stop or risk setting was changed by this work.
 - StrategyTune does not model commission or slippage and runs one instrument per backtest. Native MT5 Strategy Tester exports and broker-demo comparison remain separate release gates.
+
+
+## Single-swing regime and exit experiments
+
+The v2.5 regime-gate runs isolated single-swing/continuation behavior by disabling the strict family, keeping the original 0.25R single-swing TP1, enabling adaptive fallback price-delivery filtering, and setting the weak transition-band ceiling to 0.45 ATR slope. The regime gate blocks the transition band, applies the trend impulse-range cap, and retains price-delivery validation in range-like conditions.
+
+| Period | Strict-off baseline P&L / max DD | Regime-gate P&L / max DD | Entries (baseline → gate) |
+|---|---:|---:|---:|
+| September 2026 | +132.36 / 42.80 | +140.65 / 31.05 | 110 → 110 |
+| October 2026 | -71.11 / 119.64 | -47.90 / 78.26 | 115 → 102 |
+| Combined closed P&L | +61.25 | +92.75 | 225 → 212 |
+
+The filter routed many otherwise-eligible single-swing signals into the independent continuation family. That routing is included in the results; these are not pure single-swing-only comparisons. All entry-map records matched the saved-session rows, with no overflow, unmatched or ambiguous mappings. Session closed-row P&L reconciled to StrategyTune engine P&L in both periods.
+
+### Single-swing TP1 threshold ablation
+
+With the regime gate and strict-off research conditions held constant, only the single-swing first scale-out threshold was changed from 0.25R to 0.50R.
+
+| Period / exit | Completed positions | Position win rate | Position PF | Closed P&L | Engine max DD |
+|---|---:|---:|---:|---:|---:|
+| September, TP1 0.25R | 109 | 89.91% | 2.369 | +140.65 | 31.05 |
+| September, TP1 0.50R | 106 | 80.19% | 1.660 | +124.68 | 53.93 |
+| October, TP1 0.25R | 101 | 73.27% | 0.794 | -47.90 | 78.26 |
+| October, TP1 0.50R | 98 | 69.39% | 0.980 | -5.04 | 101.10 |
+| Combined, TP1 0.25R | 210 | 81.90% | 1.277 | +92.75 | — |
+| Combined, TP1 0.50R | 204 | 75.00% | 1.269 | +119.64 | — |
+
+The 0.50R threshold increased average winning-position P&L from $2.49 to $3.69 and left average losing-position P&L broadly similar ($-8.82 versus $-8.72). However, position win rate fell by 6.9 percentage points, combined profit factor was slightly lower, and engine max drawdown worsened in both months. This is a trade-off, not a clean improvement. Keep 0.25R as the current research control; retain 0.50R as a separate exit experiment.
+
+### Research decision
+
+- The adaptive regime gate is the strongest candidate from these examined windows because it improved both monthly net P&L and monthly engine maximum drawdown relative to strict-off baseline.
+- It remains **development-window evidence**, not untouched out-of-sample proof. The months were already used to diagnose and choose the filter. Do not enable it in the live EA or describe it as validated profitability.
+- The 0.50R TP1 experiment is not selected because its drawdown and combined profit-factor trade-offs are unfavorable despite higher combined net P&L.
+- StrategyTune data currently ends on **2026-11-06**. A future unseen data window and multiple instruments are required before any promotion decision.
+- The standalone scripts `MT2 v2.6 Regime Gate Strict-Off` and `MT2 v2.7 TP1 0.50R Exit Test` preserve the two tested parameter sets. They do not alter the MT5 EA or the v2.2/v2.3 baseline scripts.
