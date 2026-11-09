@@ -2,9 +2,9 @@
 
 **Status:** Research only. No production EA code or live risk settings changed.  
 **Research script v1.1:** `a15gl2vswagiiobrul4z58uc` (compiled version 9)  
-**Current research candidate:** `y8hhgudv0ojp8mf4dcmlrqdh` (version 4; compiled successfully)  
+**Current research candidate:** `y8hhgudv0ojp8mf4dcmlrqdh` (version 5; compiled successfully)  
 **Instrument / timeframe:** IC Markets, M15  
-**Report date:** 2026-11-08
+**Report date:** 2026-11-09
 
 ## Executive conclusion
 
@@ -273,7 +273,7 @@ All monetary values are simulated USD. Position P&L and PF were independently re
 
 Both isolated families remain rejected as production candidates. The continuation family is less weak than sweep/reclaim on July, but its PF remains below 1 and its June loss was substantial. The June-to-July variation also shows why a single attractive training window is insufficient.
 
-Do not broaden into a larger cross-asset sweep yet. First harden research telemetry and stop/exit attribution, then test a small number of predeclared hypotheses on later untouched folds. The next unexposed chronological period after the inspected April–July windows is August 2026; it must remain untouched until any candidate and its parameters are frozen.
+Do not broaden into a larger cross-asset sweep yet. First harden research telemetry and stop/exit attribution, then test a small number of predeclared hypotheses on later untouched folds. August 2026 has now been tested as the next temporal holdout. September 2026 was previously touched by an earlier research route and is not clean. Keep October 2026 untouched until a candidate and its parameters are frozen.
 
 
 ## Fold 3 — August 2026 temporal holdout (Gold M15)
