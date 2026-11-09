@@ -54,10 +54,15 @@ def test_export_observes_spread_and_preserves_unique_run_identity():
     assert 'return stamp+"Z";' not in exporter
 
 
+def read_modular(path: str) -> str:
+    repo_root = ROOT.parents[1]
+    return (repo_root / "development" / "EA" / path).read_text(encoding="utf-8")
+
+
 def test_native_export_carries_decision_strategy_regime_and_slippage_provenance():
-    ea = read("EA/MedisTouch_v2.8.mq5")
-    exporter = read("EA/includes/Execution/TesterDealExport.mqh")
-    tracker = read("EA/includes/Trading/OutcomeTrackerLive.mqh")
+    ea = read_modular("MedisTouch_v2.8.mq5")
+    exporter = read_modular("includes/Execution/TesterDealExport.mqh")
+    tracker = read_modular("includes/Trading/OutcomeTrackerLive.mqh")
 
     assert "bool GetAttribution(long decisionId,string &strategy,string &regime)" in tracker
     assert "ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex)" in ea
@@ -73,7 +78,7 @@ def test_native_export_carries_decision_strategy_regime_and_slippage_provenance(
 
 
 def test_unknown_slippage_is_blank_not_zero_and_labels_follow_position_id():
-    exporter = read("EA/includes/Execution/TesterDealExport.mqh")
+    exporter = read_modular("includes/Execution/TesterDealExport.mqh")
     assert '(row.slippage_known?DoubleToString(row.slippage_cost_cash,8):"")' in exporter
     assert 'm_attributions[attribution].strategy' in exporter
     assert 'm_attributions[attribution].regime' in exporter
@@ -81,5 +86,5 @@ def test_unknown_slippage_is_blank_not_zero_and_labels_follow_position_id():
 
 
 def test_only_opening_orders_resolve_strategy_decision_identity():
-    ea = read("EA/MedisTouch_v2.8.mq5")
+    ea = read_modular("MedisTouch_v2.8.mq5")
     assert "if(entry==DEAL_ENTRY_IN &&" in ea
