@@ -193,7 +193,7 @@ The previous v2.0 guard closed only one lot per update and blocked only Friday-a
 
 **Completed:** one initial training window (April Gold) plus one cross-asset time holdout (May 1–14). The May holdout rejects the current baseline family configurations on profitability.
 
-**Not completed:** a proper series of rolling monthly folds. The family settings were not broadly optimized in April, the May period has now been examined, and no June/July/August tests have been run in this pass.
+**Not completed:** a proper series of rolling monthly folds. The family settings were not broadly optimized in April. Subsequent June, July, August and October Gold folds have now been tested with frozen family configurations; September is excluded because it was touched by an earlier research route. These results are documented in the fold addenda below.
 
 A valid next sequence is:
 1. Use a previously unexposed training window to select each family's entry quality, regime gate and exit design independently.
@@ -273,7 +273,7 @@ All monetary values are simulated USD. Position P&L and PF were independently re
 
 Both isolated families remain rejected as production candidates. The continuation family is less weak than sweep/reclaim on July, but its PF remains below 1 and its June loss was substantial. The June-to-July variation also shows why a single attractive training window is insufficient.
 
-Do not broaden into a larger cross-asset sweep yet. First harden research telemetry and stop/exit attribution, then test a small number of predeclared hypotheses on later untouched folds. August 2026 has now been tested as the next temporal holdout. September 2026 was previously touched by an earlier research route and is not clean. Keep October 2026 untouched until a candidate and its parameters are frozen.
+Do not broaden into a larger cross-asset sweep yet. First harden research telemetry and stop/exit attribution, then test a small number of predeclared hypotheses on later untouched folds. August 2026 has now been tested as the next temporal holdout. September 2026 was previously touched by an earlier research route and is not clean. October 2026 has now been tested. Keep November 2026 untouched until a candidate and its parameters are frozen and a sufficiently complete data window is available.
 
 
 ## Fold 3 — August 2026 temporal holdout (Gold M15)
