@@ -52,3 +52,34 @@ def test_export_observes_spread_and_preserves_unique_run_identity():
     assert "broker_wall_clock_with_explicit_offset" in exporter
     assert "return stamp+zone;" in exporter
     assert 'return stamp+"Z";' not in exporter
+
+
+def test_native_export_carries_decision_strategy_regime_and_slippage_provenance():
+    ea = read("EA/MedisTouch_v2.8.mq5")
+    exporter = read("EA/includes/Execution/TesterDealExport.mqh")
+    tracker = read("EA/includes/Trading/OutcomeTrackerLive.mqh")
+
+    assert "bool GetAttribution(long decisionId,string &strategy,string &regime)" in tracker
+    assert "ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex)" in ea
+    assert "g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime)" in ea
+    assert "HistoryOrderGetDouble(exportOrder,ORDER_PRICE_OPEN)" in ea
+    assert "OrderCalcProfit(historicalOrderType,_Symbol,dealVolume" in ea
+    assert "historicalOrderType==ORDER_TYPE_BUY" in ea
+    assert "historicalOrderType==ORDER_TYPE_SELL" in ea
+    assert "Pending stop/limit triggers are deliberately left unknown" in ea
+    assert "slippage_known" in exporter
+    assert '"decision_id","strategy","regime","requested_price","slippage_points"' in exporter
+    assert "RememberAttribution(positionId,decisionId,strategy,regime)" in exporter
+
+
+def test_unknown_slippage_is_blank_not_zero_and_labels_follow_position_id():
+    exporter = read("EA/includes/Execution/TesterDealExport.mqh")
+    assert '(row.slippage_known?DoubleToString(row.slippage_cost_cash,8):"")' in exporter
+    assert 'm_attributions[attribution].strategy' in exporter
+    assert 'm_attributions[attribution].regime' in exporter
+    assert 'm_attributions[index].strategy="CONFLICT"' in exporter
+
+
+def test_only_opening_orders_resolve_strategy_decision_identity():
+    ea = read("EA/MedisTouch_v2.8.mq5")
+    assert "if(entry==DEAL_ENTRY_IN &&" in ea
