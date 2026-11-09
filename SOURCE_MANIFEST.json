@@ -486,7 +486,7 @@
     "repository": "cirvannaco-png/midas",
     "branch": "research/native-deal-attribution-slippage",
     "commit": "f27167a302a8159ce1d09060c422a448c16c7a5f",
-    "git_tree_sha": "c9fc2bbed5cfe08aeec0a2927d0bdbd8b21272a0",
+    "git_tree_sha": "7639f442d6fbb6d5c8a8e5486050c0c91a5859da",
     "root": "development/EA",
     "file_count": 95,
     "files": [
@@ -637,8 +637,8 @@
       },
       {
         "path": "development/EA/includes/Execution/TesterDealExport.mqh",
-        "git_blob_sha": "06f2082677db0f23dd78fd6a84487eb7a7674b03",
-        "size_bytes": 16481
+        "git_blob_sha": "ca9ac50e5c7fe448ad1e22495be3fd74378bbfb1",
+        "size_bytes": 17016
       },
       {
         "path": "development/EA/includes/Execution/TradeStateMachine.mqh",
@@ -927,8 +927,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.mq5",
-        "git_blob_sha": "69cb93d96fca0af48e429b704b95595fef5a985e",
-        "size_bytes": 112650
+        "git_blob_sha": "72c7e5d2931b6223ac61f85514b8b2579f0e8176",
+        "size_bytes": 112924
       },
       {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
