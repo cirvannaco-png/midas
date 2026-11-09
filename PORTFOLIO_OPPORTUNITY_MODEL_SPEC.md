@@ -206,7 +206,7 @@ For each fold:
 4. Roll forward and repeat.
 5. Reject configurations that only work in one instrument, one regime or one window.
 
-April through August 2026 have now been inspected. September 2026 was also touched by an earlier research route and is not a clean holdout. Keep October 2026 untouched until the candidate, parameters and hypotheses are frozen; then use it as the next chronological holdout.
+April through August and October 2026 have now been inspected. September 2026 was also touched by an earlier research route and is not a clean holdout. Keep November 2026 untouched until the candidate, parameters and hypotheses are frozen; use it only after a sufficiently complete data window is available.
 
 ## 11. Delivery order
 
