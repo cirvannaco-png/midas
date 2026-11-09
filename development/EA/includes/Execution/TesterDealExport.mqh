@@ -298,6 +298,19 @@ public:
       int attribution=AttributionIndex(positionId);
       if(entry==DEAL_ENTRY_IN)
          RememberAttribution(positionId,decisionId,strategy,regime);
+      else if(entry==DEAL_ENTRY_INOUT)
+        {
+         // A netting reversal preserves DEAL_POSITION_ID while changing exposure.
+         // One stable position ID can therefore span multiple decision lineages.
+         if(attribution<0)
+            RememberAttribution(positionId,0,"CONFLICT","CONFLICT");
+         else
+           {
+            m_attributions[attribution].decision_id=0;
+            m_attributions[attribution].strategy="CONFLICT";
+            m_attributions[attribution].regime="CONFLICT";
+           }
+        }
       else if(attribution<0 && decisionId>0)
          RememberAttribution(positionId,decisionId,strategy,regime);
       attribution=AttributionIndex(positionId);
