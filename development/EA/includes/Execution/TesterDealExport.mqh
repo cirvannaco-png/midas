@@ -319,11 +319,23 @@ public:
       string resolvedRegime=regime;
       if(attribution>=0)
         {
-         if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
-         if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
-            resolvedStrategy=m_attributions[attribution].strategy;
-         if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
-            resolvedRegime=m_attributions[attribution].regime;
+         // Once a netting reversal has made this identifier ambiguous, do not
+         // allow a later IN fill to overwrite the conflict with a new label.
+         if(m_attributions[attribution].strategy=="CONFLICT" ||
+            m_attributions[attribution].regime=="CONFLICT")
+           {
+            resolvedDecisionId=0;
+            resolvedStrategy="CONFLICT";
+            resolvedRegime="CONFLICT";
+           }
+         else
+           {
+            if(resolvedDecisionId<=0) resolvedDecisionId=m_attributions[attribution].decision_id;
+            if(StringLen(resolvedStrategy)==0 || resolvedStrategy=="UNTAGGED")
+               resolvedStrategy=m_attributions[attribution].strategy;
+            if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
+               resolvedRegime=m_attributions[attribution].regime;
+           }
         }
       if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
       if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
