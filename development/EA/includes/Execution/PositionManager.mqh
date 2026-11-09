@@ -40,16 +40,14 @@ private:
 
 public:
    void Init(COrderManager* orders,CBrokerAdapter* broker,
-             double breakEvenAtR,double partialAtR,double partialFraction,double trailAtrMult,
-             int maxSpreadPoints=0,double minATR=0.0,double maxATR=0.0,
-             int minModifyIntervalSec=5,CSwingDetector* structureSwings=NULL,
+             double partialAtR,double partialFraction,
+             CSwingDetector* structureSwings=NULL,
              CExecutionLedgerClient* ledger=NULL,CRiskEngine* risk=NULL,double riskPercent=0.0);
    void OnTick(double currentAtr);
   };
 
 void CPositionManager::Init(COrderManager* orders,CBrokerAdapter* broker,
-                            double breakEvenAtR,double partialAtR,double partialFraction,double trailAtrMult,
-                            int maxSpreadPoints,double minATR,double maxATR,int minModifyIntervalSec,
+                            double partialAtR,double partialFraction,
                             CSwingDetector* structureSwings,CExecutionLedgerClient* ledger,
                             CRiskEngine* risk,double riskPercent)
   {
@@ -61,7 +59,6 @@ void CPositionManager::Init(COrderManager* orders,CBrokerAdapter* broker,
    m_structureSwings=structureSwings;
    m_partialAtR=partialAtR;
    m_partialFraction=partialFraction;
-   m_minModifyIntervalSec=MathMax(0,minModifyIntervalSec);
    ArrayResize(m_lastModifyTickets,0);
    ArrayResize(m_lastModifyTimes,0);
    m_audit.Init();
