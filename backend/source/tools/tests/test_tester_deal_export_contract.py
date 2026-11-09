@@ -107,3 +107,5 @@ def test_netting_reversal_invalidates_position_lineage():
     assert 'm_attributions[attribution].decision_id=0;' in exporter
     assert 'm_attributions[attribution].strategy="CONFLICT";' in exporter
     assert 'm_attributions[attribution].regime="CONFLICT";' in exporter
+    assert 'resolvedStrategy="CONFLICT";' in exporter
+    assert 'resolvedRegime="CONFLICT";' in exporter
