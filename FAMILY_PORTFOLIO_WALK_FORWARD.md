@@ -314,3 +314,43 @@ The close-row win rates again overstate the full-position results by about 9.3 p
 ### Updated decision
 
 August shows that both families can have a profitable month under the frozen settings, but June and July show they can also lose materially. Three monthly observations with only one positive month per family are not enough for promotion. Keep both in research; prioritize stable full-position expectancy, tail-loss containment and a synchronized multi-symbol account-level test over win-rate optimization.
+
+
+## Fold 4 — October 2026 temporal holdout (Gold M15)
+
+**Period:** 2026-10-01 through 2026-10-31.  
+**Instrument:** Gold, IC Markets, M15.  
+**Harness:** StrategyTune script `y8hhgudv0ojp8mf4dcmlrqdh`, version 5 (compiled successfully).  
+**Inputs:** same frozen family/regime/stop/exit settings as June–August; no October tuning.
+
+| Family | Closed rows | Original positions | Wins / losses | Full-position WR | Net P&L | PF | Close-row WR | Partial-exit positions |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Sweep/reclaim, range-only | 76 | 42 | 29 / 13 | 69.05% | -$55.65 | 0.546 | 82.89% | 29 / 42 |
+| Continuation, trend-only | 67 | 35 | 27 / 8 | 77.14% | -$1.90 | 0.970 | 88.06% | 27 / 35 |
+
+All values are simulated USD. Outcomes were independently recomputed from saved session rows grouped by `openingFillId`. No positions remained open at the fold boundary. Both internal position trackers were valid and reconciled with engine P&L in this fold.
+
+### Interpretation
+
+- Sweep/reclaim had its worst month in this sequence: -$55.65, PF 0.546 and 69.05% full-position WR. Reject.
+- Continuation was close to breakeven but still negative: -$1.90 and PF 0.970. A 77.14% position win rate did not produce positive expectancy. Do not promote.
+- The difference between close-row WR and full-position WR remains large: 13.84 points for sweep/reclaim and 10.92 points for continuation.
+- Weekend protection executed without errors: sweep/reclaim made one account-wide flatten call targeting one lot; continuation made two calls targeting two lots. Both finished flat. This is simulated guard behaviour, not broker-demo proof.
+- The three-entry diagnostic was met on 9/22 eligible days for sweep/reclaim and 5/22 for continuation. It counts entries, not winning positions, and did not force trades.
+
+### Four-fold research summary
+
+September 2026 is excluded because it was touched by an earlier research route. The inspected monthly sequence is therefore June, July, August and October:
+
+| Family | June | July | August | October |
+|---|---:|---:|---:|---:|
+| Sweep/reclaim P&L | +$4.71 | -$31.18 | +$10.74 | -$55.65 |
+| Sweep/reclaim PF | 1.085 | 0.629 | 1.231 | 0.546 |
+| Sweep/reclaim full-position WR | 81.82% | 60.00% | 81.48% | 69.05% |
+| Continuation P&L | -$41.19 | -$5.39 | +$8.66 | -$1.90 |
+| Continuation PF | 0.634 | 0.912 | 1.124 | 0.970 |
+| Continuation full-position WR | 69.77% | 78.13% | 80.95% | 77.14% |
+
+Neither family has demonstrated stable positive expectancy across the observed periods. The continuation family is less poor than sweep/reclaim overall, but three of four observed months were negative and the one positive month was modest. Sweep/reclaim has larger losses in July and October that overwhelm its positive June/August results.
+
+**Decision:** both family configurations remain rejected for production. Do not broaden their use across symbols or increase risk. The next clean temporal validation period is November 2026 once the instrument's complete data window is available; preserve it untouched until a specific hypothesis and configuration are frozen.
