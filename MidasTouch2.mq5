@@ -1,7 +1,7 @@
 // MidasTouch2 single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@f27167a302a8159ce1d09060c422a448c16c7a5f
+// Staged EA source snapshot: cirvannaco-png/midas@e10f47c075c0dabfe903ac7e6408b062191d26a7
 // Modular source is preserved under development/EA/.
 // Regenerate with: python scripts/build_single_file.py
 // Do not hand-edit this generated file.
@@ -12861,6 +12861,19 @@ public:
       int attribution=AttributionIndex(positionId);
       if(entry==DEAL_ENTRY_IN)
          RememberAttribution(positionId,decisionId,strategy,regime);
+      else if(entry==DEAL_ENTRY_INOUT)
+        {
+         // A netting reversal preserves DEAL_POSITION_ID while changing exposure.
+         // One stable position ID can therefore span multiple decision lineages.
+         if(attribution<0)
+            RememberAttribution(positionId,0,"CONFLICT","CONFLICT");
+         else
+           {
+            m_attributions[attribution].decision_id=0;
+            m_attributions[attribution].strategy="CONFLICT";
+            m_attributions[attribution].regime="CONFLICT";
+           }
+        }
       else if(attribution<0 && decisionId>0)
          RememberAttribution(positionId,decisionId,strategy,regime);
       attribution=AttributionIndex(positionId);
