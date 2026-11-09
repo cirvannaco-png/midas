@@ -69,6 +69,7 @@ def test_native_export_carries_decision_strategy_regime_and_slippage_provenance(
     assert "g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime)" in ea
     assert "HistoryOrderGetDouble(exportOrder,ORDER_PRICE_OPEN)" in ea
     assert "OrderCalcProfit(slippageCalcType,_Symbol,dealVolume" in ea
+    assert "entry!=DEAL_ENTRY_INOUT && (buyMatch || sellMatch)" in ea
     assert "historicalOrderType==ORDER_TYPE_BUY" in ea
     assert "historicalOrderType==ORDER_TYPE_SELL" in ea
     assert "Pending stop/limit triggers are deliberately left unknown" in ea
@@ -97,3 +98,12 @@ def test_exit_slippage_cash_uses_position_direction_not_deal_direction():
     assert "if(entry==DEAL_ENTRY_OUT || entry==DEAL_ENTRY_OUT_BY)" in ea
     assert "slippageCalcType=(historicalOrderType==ORDER_TYPE_BUY?ORDER_TYPE_SELL:ORDER_TYPE_BUY);" in ea
     assert "OrderCalcProfit(slippageCalcType,_Symbol,dealVolume" in ea
+
+
+
+def test_netting_reversal_invalidates_position_lineage():
+    exporter = read_modular("includes/Execution/TesterDealExport.mqh")
+    assert "else if(entry==DEAL_ENTRY_INOUT)" in exporter
+    assert 'm_attributions[attribution].decision_id=0;' in exporter
+    assert 'm_attributions[attribution].strategy="CONFLICT";' in exporter
+    assert 'm_attributions[attribution].regime="CONFLICT";' in exporter
