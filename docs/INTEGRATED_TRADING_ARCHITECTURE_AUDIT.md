@@ -5,24 +5,61 @@ at upstream commit 52d737237c08f36d668853312f643cb74d4548da.
 
 This is an implementation audit, not a profitability certification.
 
-## 0. Source reconciliation
+## 0. Source reconciliation and repository authority
 
-The imported backend snapshot was compared path-for-path and blob-for-blob
-against upstream main at the recorded commit: 495 upstream files, 495 snapshot
-files, zero missing paths, zero content differences, and zero extra paths.
+The former companion repository is `cirvanna-co-png/Midas-touch2-`, branch
+`main`, upstream commit `52d737237c08f36d668853312f643cb74d4548da`.
+Its complete 495-file project tree is present under `backend/source/` in this
+repository. All 495 upstream paths are represented. Three files in the
+imported snapshot have target-specific updates rather than byte-identical
+upstream blobs:
 
-The root EA source was not overwritten. Comparing the two EA source trees
-shows 95 files in each, with 89 identical files. Five files differ:
-MedisTouch_v2.8.mq5, includes/Execution/ExecutionLedgerClient.mqh,
-includes/Portfolio/AccountRiskProfilePolicy.mqh,
-tests/AccountRiskProfilePolicy.mq5, and tests/ProductionRuntimePreflight.mq5.
-The upstream EA README is retained in the snapshot; the root EA also has the
-root-only AccuracyPolicyShadow.mqh module.
+- `tools/position_ledger_metrics.py`
+- `tools/tests/test_position_ledger_metrics.py`
+- `tools/tests/test_tester_deal_export_contract.py`
 
-These differences are preserved intentionally. They must be reviewed as
-targeted source reconciliations; copying the older upstream EA files over the
-root Midas versions would risk discarding newer ledger, risk-profile, and
-runtime-preflight behavior.
+Those changes add and test decision identity, requested-price, slippage-point,
+slippage-cash, and slippage-known provenance, and connect the export contract
+test to the active modular EA. They are intentionally retained; do not
+overwrite them with the older upstream copies.
+
+The canonical distributable MT5 EA is the generated root
+`MidasTouch2.mq5`. Its canonical modular MQL5 source is
+`development/EA/`, built by `scripts/build_single_file.py` and validated by
+`scripts/validate_single_file.py`. The active MT5 compile workflow is
+`.github/workflows/mt5-compile.yml`. The complete imported upstream EA,
+backend, tests, research tooling, migrations, deployment files, and docs remain
+available under `backend/source/` for provenance and supporting services.
+
+The root modular EA tree and upstream `backend/source/EA/` tree each contain
+95 files. They share 94 relative paths: 86 are byte-identical and eight differ:
+
+- `MedisTouch_v2.8.mq5`
+- `includes/Execution/ExecutionLedgerClient.mqh`
+- `includes/Execution/PositionManager.mqh`
+- `includes/Execution/TesterDealExport.mqh`
+- `includes/Portfolio/AccountRiskProfilePolicy.mqh`
+- `includes/Trading/OutcomeTrackerLive.mqh`
+- `tests/AccountRiskProfilePolicy.mq5`
+- `tests/ProductionRuntimePreflight.mq5`
+
+The upstream tree has its own `README.md`; the root modular tree has the
+additional `includes/Trading/AccuracyPolicyShadow.mqh`. These differences
+are preserved deliberately. The root modular tree is the active build source;
+blindly copying upstream files over it could discard newer execution-ledger,
+position-management, slippage-attribution, account-risk-profile, and runtime
+preflight behavior.
+
+The StrategyTune Gold M15 proxy candidates used in the November 2026 research
+sequence are archived under `research/strategytune/gold-m15/`, with paired
+metadata and code exports. They are research-only TypeScript artifacts, not
+MQL5 modules. The report
+`research/STRATEGYTUNE_GOLD_M15_V2_13_2026-11-10.md` records the tested
+periods, position-level reconciliation, rejected variants, and limitations.
+StrategyTune results do not establish native MT5 execution or profitability.
+
+This is an implementation and provenance audit, not a profitability
+certification or live-trading approval.
 
 ## 1. Regime intelligence and strategy eligibility
 
