@@ -62,24 +62,37 @@ A release requires all of the following evidence:
 
 No backtest or win-rate target is a profitability guarantee. Keep live trading disabled until these gates have been evidenced and reviewed.
 
-## Monorepo source layout
+## Single-repository source layout
 
-The repository now carries a complete, pinned source snapshot of the companion
-Midas-touch2 backend under backend/source/. The snapshot includes the backend
-FastAPI bridge, PostgreSQL models and migrations, research and walk-forward
-tooling, deployment manifests, tests, documentation, and upstream EA source.
-Its exact upstream commit is recorded in backend/SOURCE_REVISION.md.
+`cirvannaco-png/midas` is the one authoritative repository for Midas Touch 2. The former companion repository, [`cirvannaco-png/Midas-touch2-`](https://github.com/cirvannaco-png/Midas-touch2-), is retained as source provenance; its complete project tree is included under `backend/source/`. Builds, tests, MT5 packaging, and ongoing development are maintained from this repository.
 
-The root MidasTouch2.mq5 and development/EA/ tree remain the canonical
-distributable EA and its build sources. backend/source/EA/ is retained as the
-upstream repository snapshot for provenance and reconciliation; it is not a
-second live EA build target. Workflows nested under backend/source/.github/
-are archival source only. Active GitHub Actions workflows remain under the
-root .github/workflows/.
+### Canonical MT5 / MQL5 build
 
-Use the Sync Midas-touch2 source snapshot workflow to refresh backend/source/
-from the upstream main branch. A complete source snapshot does not imply that
-every backend research component is wired into live EA admission. Regime
-eligibility, portfolio-wide risk and margin admission, position-level
-strategy/regime attribution, and chronological multi-instrument walk-forward
-promotion remain separately validated integration gates.
+| Path | Authority / purpose |
+|---|---|
+| `MidasTouch2.mq5` | Generated, distributable single-file MT5 Expert Advisor. Install this file in `MQL5/Experts/`. |
+| `development/EA/` | **Canonical modular MQL5 source** used to generate the root EA. Contains the EA, indicator, all local `.mqh` modules, policy engines, risk/trailing-stop logic, broker execution, recovery, monitoring, UI, and native MQL5 tests. |
+| `scripts/build_single_file.py` | Expands the active local include closure into the standalone EA; rejects missing dependencies, include cycles, conditional local includes, and duplicate guards. |
+| `scripts/validate_single_file.py` | Verifies the staged source manifest, generated output, and safety invariants. |
+| `.github/workflows/mt5-compile.yml` | Active MT5 validation workflow, source-consistency checks, official Windows MetaEditor compilation, and supported native policy tests. |
+| `tests/mt5/` and `development/EA/tests/` | MT5 package/demo validation and native MQL5 policy/runtime tests. |
+| `docs/MT5_TESTER_TIMEZONE_PROVENANCE.md` | Rules for timestamp provenance in native Strategy Tester exports. |
+
+The flattened EA is generated from `development/EA/`; do not hand-edit `MidasTouch2.mq5`. The local EA include closure is in this repository. Its only external compile-time include is MetaTrader's standard `Trade/Trade.mqh` library supplied by the installed MT5 terminal. Compiled `.ex5` files are generated locally and are not source-controlled.
+
+### Imported upstream project and supporting services
+
+`backend/source/` contains the full 495-file upstream project snapshot at commit `52d737237c08f36d668853312f643cb74d4548da`: FastAPI services, PostgreSQL migrations, Telegram bridge, deployment manifests, tests, research tooling, documentation, and the original upstream EA. `backend/SOURCE_REVISION.md` records its provenance and the small number of target-specific reconciliations.
+
+The nested `backend/source/EA/` tree is an upstream reference snapshot, **not a second active EA build target**. The active root EA remains `development/EA/` plus the generated `MidasTouch2.mq5`. Workflows under `backend/source/.github/` are imported provenance only; GitHub Actions executes workflows from the root `.github/workflows/` directory.
+
+### Research and external validation tools
+
+- `research/`: StrategyTune research reports and archived candidate artifacts. Gold M15 StrategyTune source/metadata for v2.6, v2.7, v2.12, and v2.13 are preserved under `research/strategytune/gold-m15/`.
+- `backend/source/tools/`: imported upstream validation, MQL5 architecture, MT5 variant-comparison, walk-forward, trailing-stop experiment, and deal-ledger analysis tools.
+- `backend/source/medis_touch/`: research/reference implementation; it is not the live MT5 EA or the production execution bridge.
+- `backend/source/telegram-bridge/`: FastAPI execution-ledger and signal bridge source, migrations, and service tests.
+
+StrategyTune proxy results are not native MT5 Strategy Tester results. They do not prove parity for the EA's broker adapter, trailing-stop amendments, margin checks, commissions, slippage, swaps, or execution-ledger behavior. The Gold v2.13 report records this boundary and its negative 2025 expectancy; it is research evidence, not live-trading approval.
+
+Use the repository's source-consistency and MT5 compile workflows for changes. Do not promote StrategyTune parameters into the live EA without a separate code-level parity review, native MT5 Strategy Tester validation, broker-demo execution evidence, and the release gates above.
