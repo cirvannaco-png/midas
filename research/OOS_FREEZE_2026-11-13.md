@@ -155,7 +155,10 @@ The guarded 80% version completed an April 1–12 training run without the runti
 
 - Frozen MQL5 source identity: recorded.
 - Frozen StrategyTune proxy copy: created and compiled.
-- Native MetaEditor compile for this precise snapshot: not run in this freeze operation.
+- Native MetaEditor compile: PASS, 0 errors / 0 warnings. The frozen root EA blob SHA was identical on the freeze and build-validation branches (`94dff03a624c47724d8dcba338176409084abcd6`).
+- Build workflow: GitHub Actions run `43471826607` ([MidasTouch2 validation and MetaEditor compile](https://github.com/cirvannaco-png/midas/actions/runs/43471826607)); static audit and Windows MetaEditor job passed.
+- Compiled EX5 SHA-256: `bd760f0d7c5ca908fe972ccfbb7ba3c17c9b3cd1fb2cfeabc95de0fc5dc68c0c`.
+- Account-risk policy test script: 0 compile errors / 0 warnings; runtime output `failures=0`; EX5 SHA-256 `43059eb62e81facf762fc1392ccf5ffd6081d42197dc17424edf21f866527421`.
 - Native MT5 Strategy Tester: not run.
 - Broker demo execution and protective-stop tests: not run.
 - Current strategy profitability: not validated.
