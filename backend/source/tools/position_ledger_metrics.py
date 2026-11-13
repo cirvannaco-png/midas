@@ -386,30 +386,89 @@ def calculate_metrics(positions, initial_balance=10000.0, ignored=None):
 
 
 def reject_reserved_oos_entries(deals: list[dict]) -> None:
-    """Prevent the standard ledger CLI from printing outcomes for the locked holdout."""
-    reservation_path = Path(__file__).resolve().parents[1] / "docs" / "LOCKED_OOS_RESERVATION_2026-09-01_TO_2026-10-01.json"
-    try:
-        reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
-        if reservation.get("status") != "reserved_unscored":
-            return
-        start = datetime.fromisoformat(reservation["locked_oos_start"].replace("Z", "+00:00")).astimezone(timezone.utc)
-        end = datetime.fromisoformat(reservation["locked_oos_end"].replace("Z", "+00:00")).astimezone(timezone.utc)
-        if not start < end:
-            raise ValueError("invalid reservation interval")
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-        raise LedgerError(f"cannot validate locked-OOS reservation file: {reservation_path}") from exc
+    """Withhold every registered locked-OOS interval from the standard ledger CLI.
+
+    Reservation files are immutable experiment records. A consumed interval remains
+    withheld from ordinary research/training reports so it cannot be recycled as
+    development data after its one-shot evaluation.
+    """
+    docs_path = Path(__file__).resolve().parents[1] / "docs"
+    reservation_paths = sorted(docs_path.glob("LOCKED_OOS_RESERVATION_*.json"))
+    if not reservation_paths:
+        raise LedgerError(f"no locked-OOS reservation files found in {docs_path}")
+
+    valid_statuses = {
+        "reserved_unscored",
+        "consumed_evaluation_started",
+        "consumed_evaluation_complete",
+    }
+    intervals: list[tuple[datetime, datetime, str]] = []
+    required_fields = {
+        "schema_version",
+        "reservation_id",
+        "status",
+        "locked_oos_start",
+        "locked_oos_end",
+        "maturity_end",
+        "external_freshness_attestation_required",
+    }
+
+    for reservation_path in reservation_paths:
+        try:
+            reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
+            if not isinstance(reservation, dict) or set(reservation) != required_fields:
+                raise ValueError("reservation has missing or unsupported fields")
+            if reservation["schema_version"] != 1:
+                raise ValueError("unsupported reservation schema")
+            if not isinstance(reservation["reservation_id"], str) or not reservation["reservation_id"].strip():
+                raise ValueError("reservation_id must be a non-empty string")
+            if reservation["status"] not in valid_statuses:
+                raise ValueError("reservation status is not an active or consumed lock")
+            if reservation["external_freshness_attestation_required"] is not True:
+                raise ValueError("external freshness attestation must remain required")
+
+            start = datetime.fromisoformat(
+                reservation["locked_oos_start"].replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            end = datetime.fromisoformat(
+                reservation["locked_oos_end"].replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            maturity = datetime.fromisoformat(
+                reservation["maturity_end"].replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            if not start < end <= maturity:
+                raise ValueError("invalid locked-OOS interval or maturity cut")
+        except (
+            OSError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            AttributeError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            raise LedgerError(
+                f"cannot validate locked-OOS reservation file: {reservation_path}"
+            ) from exc
+
+        intervals.append((start, end, reservation["reservation_id"]))
+
     for deal in deals:
         if deal.get("entry") in IN or deal.get("entry") in INOUT:
             trade_time = deal.get("time")
             if isinstance(trade_time, datetime):
                 if trade_time.tzinfo is None or trade_time.utcoffset() is None:
-                    raise LedgerError("deal timestamps must be timezone-aware to enforce locked-OOS protection")
-                trade_time = trade_time.astimezone(timezone.utc)
-                if start <= trade_time < end:
                     raise LedgerError(
-                        "deal CSV includes entries from the registered locked-OOS window; "
-                        "standard ledger CLI withholds these outcomes. Use the one-shot evaluator after freeze."
+                        "deal timestamps must be timezone-aware to enforce locked-OOS protection"
                     )
+                trade_time = trade_time.astimezone(timezone.utc)
+                for start, end, reservation_id in intervals:
+                    if start <= trade_time < end:
+                        raise LedgerError(
+                            "deal CSV includes entries from registered locked-OOS window "
+                            f"{reservation_id} ({start.isoformat()} to {end.isoformat()}); "
+                            "standard ledger CLI withholds these outcomes."
+                        )
 
 
 def main():
