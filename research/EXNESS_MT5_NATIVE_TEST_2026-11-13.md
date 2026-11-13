@@ -36,6 +36,27 @@ Official references (checked 2026-11-13):
 
 If the MT5 account's live Market Watch differs from `XAUUSDm`, do not guess or rename the symbol: record the exact server-provided symbol and verify its contract specification before proceeding. Also record the exact Exness server label and account entity shown by MT5.
 
+## Tick-history preflight — mandatory before the P&L run
+
+The Strategy Tester option "Every tick based on real ticks" does not guarantee that every tested minute uses accepted broker real ticks. MT5 can generate fallback ticks for minutes with no real-tick history, and it can discard real ticks that do not reconcile with minute bars. The HTML report's History Quality alone is not a real-tick coverage percentage.
+
+Run a **no-entry tick-history preflight** first on the exact Exness server and `XAUUSDm` symbol:
+- Use the same requested date range and real-tick mode.
+- Set `InpEnableExecution=false` for this preflight only; do not treat this run as a strategy result.
+- Retain the full Strategy Tester Journal, including lines reporting when real ticks begin, absent-minute counts, discarded-minute counts, and any tick-price/volume mismatches.
+- Do not use a different Exness server or a differently suffixed symbol for the preflight.
+
+Classify the Q2 run as:
+- **accepted-real-tick coverage confirmed** only if the Journal reports no real ticks absent and no real ticks discarded over the full interval;
+- **hybrid real/generated tick test** if any absent or discarded minute uses generated ticks; report the exact minute counts and share of the tested minutes;
+- **not usable for broker-tick replication** if the tester cannot state the source/coverage, the requested data start is after 2026-04-01, or the tick history is otherwise incomplete.
+
+A hybrid run may still be retained as a provisional sensitivity run, but it must never be called a complete real-tick backtest. If Q2 history is incomplete, proceed only with a clearly labelled hybrid test or shorten the historical test to a verified coverage window; do not silently swap the date window.
+
+This gate is based on MetaQuotes' tester documentation and its October 2026 explanation that missing or discarded real ticks cause generated-tick fallback, and that History Quality is not the fraction of accepted real-tick minutes:
+- https://www.mql5.com/en/docs/runtime/testing
+- https://www.mql5.com/en/articles/24562
+
 ## Historical cross-broker replication run
 
 This is a **cross-broker replication on previously researched calendar dates**, not blind out-of-sample evidence. The IC Markets StrategyTune research already used April–June 2026.
