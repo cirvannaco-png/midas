@@ -101,6 +101,56 @@ The StrategyTune proxy's `lastClosedTrade` is only the most recently closed reco
 - Include realistic commission, swap, spread and adverse slippage. StrategyTune's built-in backtester does not model separate commission or slippage and cannot validate the MT5 EA's actual broker fills.
 - No live-trading approval follows from compilation or a proxy result. Require native MT5 Strategy Tester, then broker demo fill/stop-modification/ledger reconciliation.
 
+## Exploratory StrategyTune exit experiments — training data only
+
+These runs use the frozen StrategyTune proxy, not the MQL5 EA. All are historical development/training observations, use the platform's recorded bid/ask spread, and do not include a separate commission or slippage model. They are not independent OOS evidence.
+
+### Full April–June matched exit-fraction comparison
+
+Same frozen script, Gold / IC Markets / M15, 2026-04-01 through 2026-06-30, starting balance USD 10,000. The only changed input was the single-swing TP1 close fraction.
+
+| Variant | Completed unique positions | Win rate | Net P&L | Profit factor | Mean win | Mean loss |
+|---|---:|---:|---:|---:|---:|---:|
+| TP1 0.25R / 40% | 144 | 75.0% | -$86.56 | 0.723 | +$2.09 | -$8.67 |
+| TP1 0.25R / 60% | 144 | 75.0% | -$69.15 | 0.775 | +$2.21 | -$8.54 |
+
+The platform's complete trade table had 269 close rows and 144 opening positions in each run. The exact opening-position set was identical. On paired position outcomes, 94 positions improved, 15 worsened, and 35 were unchanged under the 60% fraction; paired net P&L improved by $17.41.
+
+This is a modest in-sample improvement, not a profitable strategy: both net P&L and profit factor remain negative/sub-1. The 60% run's custom tracker still recorded one missed close event and a $2.66 P&L mismatch; its internal position totals are invalid. The complete session trade table reconciles to engine P&L and is the source used for this comparison.
+
+### TP1 trigger sensitivity and exit/entry interaction
+
+An April-only challenger raised TP1 from 0.25R to 0.50R while leaving other inputs unchanged. It produced 41 completed unique positions and -$81.92 net P&L (PF 0.551), with one open position at the period end excluded from completed-position metrics. Only 41 openings matched between this challenger and the 45-position baseline set; on those 41 common openings the challenger was worse by approximately $43.39. The four baseline openings absent from the challenger show that changing exits can change exposure occupancy and therefore subsequent entry availability. This is not a clean exit-only comparison. Reject the 0.50R change; do not interpret it as a new entry edge.
+
+### Higher TP1 partial fraction and lot-quantity failure
+
+The initial 80% partial-close test using the unguarded research script failed with `Lot 14 not found`: after a small-volume CFD lot was closed, the manager unconditionally attempted to modify stops on a lot that no longer existed.
+
+A separate StrategyTune research copy was created and patched (no change to the frozen script or MQL5 EA):
+
+- Name: `Midas Gold v2.14 Exit Guard Research`
+- Script ID: `uzgla8z1xdjyv3496i28kom3`
+- Promoted copy version: 2
+- Patch: after TP1 and TP2 partial-close calls, re-read `ctx.account.lots`; only modify stops or arm a trail if the lot still exists. If the close consumed the lot, mark that state closed and skip subsequent lot operations.
+
+The guarded 80% version completed an April 1–12 training run without the runtime exception. On 15 unique closed positions, its net P&L was -$6.04, compared with -$6.34 at 40% and -$6.18 at 60% on the same 15 openings. All three variants had 73.3% win rates, and all remained negative. This is only a small runtime-safety and exploratory comparison; it does not justify promoting 80%.
+
+### Exit research decision
+
+- Keep the live MQL5 exit defaults unchanged: dynamic stop activation 0.75R, break-even at 1.00R, ATR trailing 1.50, and 50% partial close at 2.00R.
+- Do not promote StrategyTune TP1/TP2 parameters into the EA; they are not the same exit engine.
+- Retain the 60% proxy variant as an in-sample research challenger only. Its PF < 1 and negative expectancy fail promotion.
+- Keep the guarded 80% research copy for further training-only work; do not use the unguarded 80% script.
+- The next exit comparison must preserve a matched opening-position set or explicitly measure how exit changes suppress later entries. Reject any incomplete run, including the 0.50R test's open-at-end exposure.
+
+## Research-governance pull request
+
+- Draft PR: https://github.com/cirvannaco-png/midas/pull/12
+- Branch: `research/locked-oos-multi-window-2026-11-13`
+- Scope: discover and enforce all registered locked-OOS reservation intervals in the standard position-ledger CLI; add the post-freeze reservation through 2027-02-13 and tests for interval boundaries/coexistence.
+- CI: source consistency, structural/safety validation, native deal-attribution/ledger tests, and static audit all passed. The MetaEditor compile job is skipped on pull requests by workflow design; the separate frozen-source build branch did compile successfully.
+- PR remains draft/open; it has not been merged.
+
 ## Current status at freeze
 
 - Frozen MQL5 source identity: recorded.
