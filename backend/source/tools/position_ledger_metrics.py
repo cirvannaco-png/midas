@@ -413,6 +413,14 @@ def reject_reserved_oos_entries(deals: list[dict]) -> None:
         "external_freshness_attestation_required",
     }
 
+    def parse_reservation_time(value: object) -> datetime:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("reservation timestamps must be ISO-8601 strings")
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("reservation timestamps must include a UTC offset")
+        return parsed.astimezone(timezone.utc)
+
     for reservation_path in reservation_paths:
         try:
             reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
@@ -427,15 +435,9 @@ def reject_reserved_oos_entries(deals: list[dict]) -> None:
             if reservation["external_freshness_attestation_required"] is not True:
                 raise ValueError("external freshness attestation must remain required")
 
-            start = datetime.fromisoformat(
-                reservation["locked_oos_start"].replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
-            end = datetime.fromisoformat(
-                reservation["locked_oos_end"].replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
-            maturity = datetime.fromisoformat(
-                reservation["maturity_end"].replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
+            start = parse_reservation_time(reservation["locked_oos_start"])
+            end = parse_reservation_time(reservation["locked_oos_end"])
+            maturity = parse_reservation_time(reservation["maturity_end"])
             if not start < end <= maturity:
                 raise ValueError("invalid locked-OOS interval or maturity cut")
         except (
