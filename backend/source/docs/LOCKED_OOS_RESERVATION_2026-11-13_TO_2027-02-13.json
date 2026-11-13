@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "reservation_id": "midas-gold-m15-frozen-main-488ec04-oos-2026-11-13-to-2027-02-13",
+  "status": "reserved_unscored",
+  "locked_oos_start": "2026-11-13T17:18:40Z",
+  "locked_oos_end": "2027-02-13T17:18:40Z",
+  "maturity_end": "2027-02-27T17:18:40Z",
+  "external_freshness_attestation_required": true
+}
