@@ -129,7 +129,7 @@ def main():
         if not re.search(pattern,policy_test):
             fail.append("Gold risk policy test missing: "+name)
 
-    compact_ea=re.sub(r"\\s+","",raw)
+    compact_ea="".join(raw.split())
     mtf_final=compact_ea.find("g_topDownMTF.AdjustSetup(sellSetup);")
     buy_diagnostic=compact_ea.find("if(buySetup.active)g_scoring.PopulateConfidenceDiagnostics(buySetup.reasons,buySetup.confidence);")
     sell_diagnostic=compact_ea.find("if(sellSetup.active)g_scoring.PopulateConfidenceDiagnostics(sellSetup.reasons,sellSetup.confidence);")
