@@ -9191,6 +9191,7 @@ public:
             int shift=iBarShift(m_symbol,m_entryTF,p.setup.creation_time,false);
             creationBar=shift>=0 ? iTime(m_symbol,m_entryTF,shift) : p.setup.creation_time;
            }
+
          // Age and decay only while the signal is still unfilled. Apply this
          // before simulated fill detection so the fill bar is included once.
          if(!p.filled && p.lastBarTime!=bar.time)
