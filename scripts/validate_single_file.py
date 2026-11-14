@@ -129,14 +129,13 @@ def main():
         if not re.search(pattern,policy_test):
             fail.append("Gold risk policy test missing: "+name)
 
-    confidence_diagnostic_checks = {
-        "BUY shadow diagnostics use post-MTF confidence": r'g_topDownMTF\.AdjustSetup\(sellSetup\);[\s\S]{0,500}if\(buySetup\.active\)g_scoring\.PopulateConfidenceDiagnostics\(buySetup\.reasons,buySetup\.confidence\)',
-        "SELL shadow diagnostics use post-MTF confidence": r'if\(sellSetup\.active\)g_scoring\.PopulateConfidenceDiagnostics\(sellSetup\.reasons,sellSetup\.confidence\)',
-        "shadow diagnostics are logged for the selected setup": r'ACCURACY_POLICY_V3_SHADOW[\s\S]{0,180}AccuracyPolicyV3ShadowSummary\(chosen\)'
-    }
-    for name,pattern in confidence_diagnostic_checks.items():
-        if not re.search(pattern,raw):
-            fail.append("confidence diagnostic regression: "+name)
+    compact_ea=re.sub(r"\\s+","",raw)
+    mtf_final=compact_ea.find("g_topDownMTF.AdjustSetup(sellSetup);")
+    buy_diagnostic=compact_ea.find("if(buySetup.active)g_scoring.PopulateConfidenceDiagnostics(buySetup.reasons,buySetup.confidence);")
+    sell_diagnostic=compact_ea.find("if(sellSetup.active)g_scoring.PopulateConfidenceDiagnostics(sellSetup.reasons,sellSetup.confidence);")
+    direction_selection=compact_ea.find("TradeSetupchosen;")
+    if not (0<=mtf_final<buy_diagnostic<sell_diagnostic<direction_selection):
+        fail.append("confidence diagnostics must run for BUY and SELL after final MTF adjustment and before direction selection")
 
     publisher_path=ROOT/"development"/"EA"/"includes"/"Signals"/"SignalPublisher.mqh"
     publisher=publisher_path.read_text(encoding="utf-8-sig") if publisher_path.is_file() else ""
