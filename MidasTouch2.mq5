@@ -9213,6 +9213,7 @@ public:
             if(p.barsElapsed>=m_maxBars) Finalize(i,"no_fill",bar.close,bar.time);
             continue;
            }
+
          // The fill bar is already represented by the frozen confidence age.
          // Skip it for post-fill excursion/holding updates.
          if(fshift>=0)
