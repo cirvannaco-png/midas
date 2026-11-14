@@ -9191,6 +9191,8 @@ public:
             int shift=iBarShift(m_symbol,m_entryTF,p.setup.creation_time,false);
             creationBar=shift>=0 ? iTime(m_symbol,m_entryTF,shift) : p.setup.creation_time;
            }
+         // Age and decay only while the signal is still unfilled. Apply this
+         // before simulated fill detection so the fill bar is included once.
          if(!p.filled && p.lastBarTime!=bar.time)
            {
             p.barsElapsed++;
@@ -9209,6 +9211,8 @@ public:
             if(p.barsElapsed>=m_maxBars) Finalize(i,"no_fill",bar.close,bar.time);
             continue;
            }
+         // The fill bar is already represented by the frozen confidence age.
+         // Skip it for post-fill excursion/holding updates.
          if(fshift>=0)
            {
             datetime fillBar=iTime(m_symbol,m_entryTF,fshift);
