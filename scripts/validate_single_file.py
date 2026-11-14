@@ -128,6 +128,56 @@ def main():
     for name,pattern in policy_test_checks.items():
         if not re.search(pattern,policy_test):
             fail.append("Gold risk policy test missing: "+name)
+
+    confidence_diagnostic_checks = {
+        "BUY shadow diagnostics use post-MTF confidence": r'g_topDownMTF\\.AdjustSetup\\(sellSetup\\);[\\s\\S]{0,500}if\\(buySetup\\.active\\)g_scoring\\.PopulateConfidenceDiagnostics\\(buySetup\\.reasons,buySetup\\.confidence\\)',
+        "SELL shadow diagnostics use post-MTF confidence": r'if\\(sellSetup\\.active\\)g_scoring\\.PopulateConfidenceDiagnostics\\(sellSetup\\.reasons,sellSetup\\.confidence\\)',
+        "shadow diagnostics are logged for the selected setup": r'ACCURACY_POLICY_V3_SHADOW[\\s\\S]{0,180}AccuracyPolicyV3ShadowSummary\\(chosen\\)'
+    }
+    for name,pattern in confidence_diagnostic_checks.items():
+        if not re.search(pattern,raw):
+            fail.append("confidence diagnostic regression: "+name)
+
+    # Confidence diagnostics must remain separate from the live router. The
+    # router may use raw confidence and existing environment policy, but not
+    # the candidate multiplicative/contradiction diagnostic fields.
+    decision_engine_path=ROOT/"development"/"EA"/"includes"/"Decision"/"DecisionEngine.mqh"
+    decision_engine=decision_engine_path.read_text(encoding="utf-8-sig") if decision_engine_path.is_file() else ""
+    if "setup.confidence" not in decision_engine:
+        fail.append("decision router no longer references the raw setup confidence")
+    for diagnostic_field in ("env_exec_confidence","contradiction_penalty","env_score","exec_score"):
+        if diagnostic_field in decision_engine:
+            fail.append("diagnostic field leaked into live decision router: "+diagnostic_field)
+
+    # Live confidence decay is signal-age telemetry: it advances while pending,
+    # is recomputed at first fill, and is never updated during the open position.
+    tracker_path=ROOT/"development"/"EA"/"includes"/"Trading"/"OutcomeTrackerLive.mqh"
+    tracker=tracker_path.read_text(encoding="utf-8-sig") if tracker_path.is_file() else ""
+    update_match=re.search(r'void\\s+Update\\(CTFContext\\*\\s*ctx\\)([\\s\\S]*?)bool\\s+GetFillState',tracker)
+    update_body=update_match.group(1) if update_match else ""
+    if not update_match:
+        fail.append("live outcome tracker Update method missing")
+    else:
+        if not re.search(r'if\\s*\\(!p\\.filled\\s*&&\\s*p\\.lastBarTime!=bar\\.time\\)[\\s\\S]{0,180}p\\.decayBars\\+\\+;[\\s\\S]{0,100}ApplyConfidenceDecay\\(p\\)',update_body):
+            fail.append("confidence decay must advance only in the unfilled-signal branch")
+        if update_body.count("ApplyConfidenceDecay(p)")!=1:
+            fail.append("confidence decay must be computed exactly once per pending bar")
+        sim_fill_index=update_body.find("if(!p.filled && !m_liveExecution")
+        if sim_fill_index<0 or update_body.find("ApplyConfidenceDecay(p)")>sim_fill_index:
+            fail.append("pending signal decay must be applied before simulated fill detection")
+        if "p.confidenceDecayed=p.confidenceAtSignal*MathPow" in update_body:
+            fail.append("post-fill path contains direct confidence-decay mutation")
+    if not re.search(r'p\\.fillTime=t;[\\s\\S]{0,500}p\\.barsToFill=p\\.decayBars;[\\s\\S]{0,120}ApplyConfidenceDecay\\(p\\);',tracker):
+        fail.append("first live fill must reconcile and freeze pre-fill confidence age")
+    if "void ApplyConfidenceDecay(PendingSetup &p) const" not in tracker:
+        fail.append("live outcome tracker confidence-decay helper missing")
+
+    # Offline comparison is intentionally read-only. Recalibrated weights
+    # cannot silently enter the MQL5 router or alter production thresholds.
+    research_tool_path=ROOT/"backend"/"source"/"tools"/"medistouch_retrain.py"
+    research_tool=research_tool_path.read_text(encoding="utf-8-sig") if research_tool_path.is_file() else ""
+    if "It does not fit weights" not in research_tool or "does not write anything back into the EA" not in research_tool:
+        fail.append("offline confidence comparison must remain read-only pending validated OOS evidence")
     if re.search(r'^\s*#include\s*"',code,re.MULTILINE): fail.append("custom quoted include remains")
     system=re.findall(r'^\s*#include\s*<([^>]+)>',code,re.MULTILINE)
     if not system: fail.append("standard MQL5 library include missing")
