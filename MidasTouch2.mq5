@@ -9201,6 +9201,7 @@ public:
             p.lastBarTime=bar.time;
             ApplyConfidenceDecay(p);
            }
+
          if(!p.filled && !m_liveExecution && bar.time>creationBar)
            {
             bool touched=buy ? (bar.low<=p.entryRef) : (bar.high>=p.entryRef);
