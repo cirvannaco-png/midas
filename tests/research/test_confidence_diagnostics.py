@@ -61,7 +61,7 @@ def test_excludes_development_ambiguous_no_fill_incomplete_and_unresolved_rows()
     dev = make_row(200, True); dev["signal_time"] = "2026-05-20T00:00:00Z"
     no_fill = make_row(201, True)
     no_fill.update(signal_time="2026-10-01T00:00:00Z", outcome_time="2026-10-01T01:00:00Z",
-                   outcome_status="no_fill", filled="false", realized_r="0")
+                   outcome_status="no_fill", filled="false", position_id="", realized_r="0")
     ambiguous = make_row(202, False)
     ambiguous.update(signal_time="2026-10-02T00:00:00Z", outcome_time="2026-10-02T01:00:00Z",
                      outcome_status="ambiguous", cashflows_known="false")
@@ -128,3 +128,10 @@ def test_bad_market_data_hash_is_rejected():
     bad = make_manifest(); bad["market_data_sha256"] = "not-a-sha256"
     with pytest.raises(EvaluationError, match="market_data_sha256"):
         evaluate_dataset(bad, balanced_rows(), bootstrap_repetitions=100)
+
+
+def test_signal_before_declared_period_is_rejected():
+    rows = balanced_rows()
+    rows[0]["signal_time"] = "2024-12-31T23:59:59Z"
+    with pytest.raises(EvaluationError, match="precedes the declared test period"):
+        evaluate_dataset(make_manifest(), rows, bootstrap_repetitions=100)
