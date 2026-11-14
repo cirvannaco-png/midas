@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "fix/confidence-diagnostics-decay-freeze",
-    "commit": "2755742b1d0df1ef579507d4e45840e03aabd084",
-    "git_tree_sha": "227fc2e2fd361d37d44620f3b302bbcaee0ffb29",
+    "commit": "68b740df6a60e4770ba76d709e19762bedc0e009",
+    "git_tree_sha": "9473367d799f01b104c282aa41b4698264713f02",
     "root": "development/EA",
     "file_count": 95,
     "files": [
@@ -872,8 +872,8 @@
       },
       {
         "path": "development/EA/includes/Trading/OutcomeTrackerLive.mqh",
-        "git_blob_sha": "e3036b139e1e427013850540bfc543353b8fcf11",
-        "size_bytes": 35704
+        "git_blob_sha": "8287df03d2d8c15f5f7cbb0886bdacbfb63828dd",
+        "size_bytes": 35643
       },
       {
         "path": "development/EA/includes/Trading/RiskEngine.mqh",
