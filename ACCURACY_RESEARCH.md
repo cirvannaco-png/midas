@@ -148,3 +148,18 @@ Demo validation must still verify the broker actually supplies the expected KES 
 ## Release decision
 
 **No EA source or trading parameters were changed by this accuracy investigation.** The generated single-file EA remains at the previously compiled baseline. These research results are incomplete and do not authorize live trading. Actual MT5 Strategy Tester validation, broker demo execution, and protective-stop modification/reconciliation remain mandatory.
+
+## Confidence diagnostics integration follow-up — 2026-11-14
+
+The canonical modular EA now calls `CScoringEngine::PopulateConfidenceDiagnostics()` for both active BUY and SELL candidates after any top-down MTF confidence adjustment and before final side selection. The four values remain shadow diagnostics: `ContradictionPenalty`, `EnvScore`, `ExecScore`, and `EnvExecConfidence`. They are written to the signal CSV, included in the signal publisher's `extra` payload, and carried into the outcome publisher's nested `environment.confidence_diagnostics` object. The FastAPI outcome contract already accepts and persists the environment dictionary; no schema migration was needed.
+
+Live signal confidence decay now advances only while the signal is unfilled. Its value is recomputed at the first fill using the observed signal-to-fill bar age where terminal history is available, then frozen for the lifetime of the filled position. The simulated-fill path uses the same frozen value and records the pre-fill wait-bar count.
+
+### Keep these policies distinct
+
+- The main `CDecisionEngine` entry router still evaluates the raw `setup.confidence` against its existing environment-adjusted thresholds. The candidate `env_exec_confidence`, environment score, execution score, and contradiction penalty do not alter setup admission, direction, order authorization, or position sizing.
+- Calibrated probability is **not entirely passive telemetry** in the current architecture. It does not replace the raw-confidence threshold in `CDecisionEngine`, but `CMultiTradeEngine` already consumes calibrated probability and its sample-adequacy flag to decide whether an accepted setup stays single-leg or expands to two or three legs. That is an existing execution/position-allocation policy and must be evaluated separately from the new shadow diagnostics.
+- `backend/source/tools/medistouch_retrain.py` remains an offline, read-only comparison of the additive confidence score against the candidate multiplicative score. It does not fit weights or write them into the EA. It is research tooling, not autonomous self-learning.
+
+The calibration store still uses symbol-scoped fixed confidence buckets and a minimum sample threshold. It does not yet provide the complete timestamped, model-version-scoped chronological dataset required for robust recalibration. A future promotion must use resolved position-level outcomes, locked out-of-sample folds, adequate sample sizes, uncertainty reporting, and matched MT5 diagnostic-on/off evidence. No new confidence weights, entry thresholds, or risk fractions are promoted by this integration.
+
