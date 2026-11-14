@@ -9230,6 +9230,7 @@ public:
             m_pending[i]=p;
             continue;
            }
+
          p.barsElapsed++;
          p.lastBarTime=bar.time;
          if(buy)
