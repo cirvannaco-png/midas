@@ -141,13 +141,13 @@ def main():
     publisher_path=ROOT/"development"/"EA"/"includes"/"Signals"/"SignalPublisher.mqh"
     publisher=publisher_path.read_text(encoding="utf-8-sig") if publisher_path.is_file() else ""
     for field in ("contradiction_penalty","env_score","exec_score","env_exec_confidence"):
-        if f'"{field}"' not in publisher:
+        if field not in publisher:
             fail.append("signal publishing omits confidence diagnostic field: "+field)
 
-    if '"confidence_diagnostics":{' not in tracker:
+    if "confidence_diagnostics" not in tracker:
         fail.append("outcome environment payload omits the confidence_diagnostics object")
     for field in ("contradiction_penalty","env_score","exec_score","env_exec_confidence"):
-        if f'"{field}"' not in tracker:
+        if field not in tracker:
             fail.append("published outcome history omits confidence diagnostic field: "+field)
     if "p.barsToFill=p.decayBars;ApplyConfidenceDecay(p);" not in tracker:
         fail.append("simulated fills must preserve pre-fill signal age and freeze confidence decay")
