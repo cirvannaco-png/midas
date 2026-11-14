@@ -16,13 +16,13 @@ Do not mix Strategy Tester and broker-demo data, symbols, builds, model versions
 
 ## Observation unit and CSV
 
-Use exactly **one row per complete decision-level position outcome**, after aggregating all partial closes/fills for that decision and accounting for known costs in realized R. Do not count individual deal rows as independent trades. A decision ID must occur once.
+Use exactly **one row per complete decision-level position outcome**, after aggregating all partial closes/fills for that decision and accounting for known broker cashflows in realized R. Do not count individual deal rows as independent trades. A decision ID must occur once.
 
 Required CSV header:
 
     decision_id,position_id,signal_time,outcome_time,outcome_status,filled,outcome_history_complete,cashflows_known,confidence_at_signal,env_exec_confidence,realized_r
 
-outcome_status must be win, loss, scratch, no_fill, ambiguous or pending. Boolean fields must be true/false. Flatten env_exec_confidence from environment.confidence_diagnostics.env_exec_confidence in the outcome payload. Both confidence values must be numeric in the EA's 0–100 range. realized_r is net R for the complete position decision; wins are positive, losses negative, scratches exactly zero. Timestamps must include an explicit timezone, preferably UTC Z.
+outcome_status must be win, loss, scratch, no_fill, ambiguous or pending. Boolean fields must be true/false. Flatten env_exec_confidence from environment.confidence_diagnostics.env_exec_confidence in the outcome payload. Both confidence values must be numeric in the EA's 0–100 range. realized_r is R from the EA's cumulative realizedPnL divided by the position's risk-money denominator. In this tracker, realizedPnL accumulates broker deal PnL plus commission, swap and fee cashflows; spread/slippage affect executable fill/exit prices and are also reported as separate diagnostics. Do not subtract the diagnostic spread/slippage estimates a second time. Wins are positive, losses negative, scratches exactly zero. Timestamps must include an explicit timezone, preferably UTC Z.
 
 No-fill, ambiguous, pending, unfilled, incomplete-history, unknown-cashflow and unresolved-at-cutoff outcomes are excluded and counted. Missing fields/columns, duplicate decisions, invalid timestamps, inconsistent status/R values, or out-of-range scores reject the dataset. No silent source-data repair is performed.
 
