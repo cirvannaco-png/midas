@@ -27,7 +27,7 @@ MANIFEST_FIELDS = (
     "evaluation_cutoff"
 ).split()
 ROW_FIELDS = (
-    "decision_id position_id signal_time outcome_time outcome_status filled "
+    "decision_id signal_time outcome_time outcome_status filled "
     "outcome_history_complete cashflows_known confidence_at_signal "
     "env_exec_confidence realized_r"
 ).split()
@@ -84,12 +84,8 @@ def validate_manifest(m):
         raise EvaluationError("initial_balance must be greater than zero")
     t = {k: utc(m[k], k) for k in
          ("period_start", "period_end", "train_end", "holdout_start", "evaluation_cutoff")}
-    if not t["period_start"] < t["period_end"]:
-        raise EvaluationError("period_start must precede period_end")
-    if not t["period_start"] <= t["train_end"] < t["holdout_start"]:
-        raise EvaluationError("chronology must satisfy period_start <= train_end < holdout_start")
-    if t["holdout_start"] > t["evaluation_cutoff"]:
-        raise EvaluationError("holdout_start must not be later than evaluation_cutoff")
+    if not t["period_start"] <= t["train_end"] < t["holdout_start"] <= t["period_end"] <= t["evaluation_cutoff"]:
+        raise EvaluationError("chronology must satisfy period_start <= train_end < holdout_start <= period_end <= evaluation_cutoff")
     return t
 
 
@@ -191,15 +187,18 @@ def evaluate_dataset(manifest, rows, *, min_holdout_positions=100,
         missing = [k for k in ROW_FIELDS if k not in row or row[k] in (None, "")]
         if missing:
             raise EvaluationError(f"row {line} missing fields: " + ", ".join(missing))
-        did, pid = str(row["decision_id"]).strip(), str(row["position_id"]).strip()
-        if not did or not pid:
-            raise EvaluationError(f"row {line} has an empty decision_id or position_id")
+        did = str(row["decision_id"]).strip()
+        pid = str(row.get("position_id") or "").strip()
+        if not did:
+            raise EvaluationError(f"row {line} has an empty decision_id")
         if did in seen:
             raise EvaluationError(f"duplicate decision_id {did}; use one aggregated row per position decision")
         seen.add(did)
         signal, outcome = utc(row["signal_time"], f"row {line} signal_time"), utc(row["outcome_time"], f"row {line} outcome_time")
         if outcome < signal:
             raise EvaluationError(f"row {line} outcome_time precedes signal_time")
+        if signal < t["period_start"]:
+            raise EvaluationError(f"row {line} signal_time precedes the declared test period")
         if signal < t["holdout_start"]:
             excluded["development_before_holdout"] += 1
             continue
@@ -209,14 +208,21 @@ def evaluate_dataset(manifest, rows, *, min_holdout_positions=100,
             excluded["not_resolved_by_evaluation_cutoff"] += 1
             continue
         status = str(row["outcome_status"]).strip().lower()
-        if status in ("no_fill", "ambiguous", "pending"):
+        if status not in ("win", "loss", "scratch", "no_fill", "ambiguous", "pending"):
+            raise EvaluationError(f"row {line} has unsupported outcome_status {status!r}")
+        filled = flag(row["filled"], f"row {line} filled")
+        if filled and not pid:
+            raise EvaluationError(f"row {line} is filled but has no position_id")
+        if status == "no_fill":
+            if filled:
+                raise EvaluationError(f"row {line} has status=no_fill but filled=true")
+            excluded["no_fill"] += 1
+            continue
+        if status in ("ambiguous", "pending"):
             excluded[status] += 1
             continue
-        if status not in ("win", "loss", "scratch"):
-            raise EvaluationError(f"row {line} has unsupported outcome_status {status!r}")
-        if not flag(row["filled"], f"row {line} filled"):
-            excluded["not_filled"] += 1
-            continue
+        if not filled:
+            raise EvaluationError(f"row {line} has a resolved trade outcome but filled=false")
         if not flag(row["outcome_history_complete"], f"row {line} outcome_history_complete"):
             excluded["incomplete_outcome_history"] += 1
             continue
