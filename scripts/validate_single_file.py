@@ -138,6 +138,25 @@ def main():
         if not re.search(pattern,raw):
             fail.append("confidence diagnostic regression: "+name)
 
+    publisher_path=ROOT/"development"/"EA"/"includes"/"Signals"/"SignalPublisher.mqh"
+    publisher=publisher_path.read_text(encoding="utf-8-sig") if publisher_path.is_file() else ""
+    for field in ("contradiction_penalty","env_score","exec_score","env_exec_confidence"):
+        if f'"{field}"' not in publisher:
+            fail.append("signal publishing omits confidence diagnostic field: "+field)
+
+    if '"confidence_diagnostics":{' not in tracker:
+        fail.append("outcome environment payload omits the confidence_diagnostics object")
+    for field in ("contradiction_penalty","env_score","exec_score","env_exec_confidence"):
+        if f'"{field}"' not in tracker:
+            fail.append("published outcome history omits confidence diagnostic field: "+field)
+    if "p.barsToFill=p.decayBars;ApplyConfidenceDecay(p);" not in tracker:
+        fail.append("simulated fills must preserve pre-fill signal age and freeze confidence decay")
+
+    outcome_route_path=ROOT/"backend"/"source"/"telegram-bridge"/"app"/"routes.py"
+    outcome_route=outcome_route_path.read_text(encoding="utf-8-sig") if outcome_route_path.is_file() else ""
+    if "environment: dict | None = Field(default=None)" not in outcome_route or "row.environment = payload.environment" not in outcome_route:
+        fail.append("outcome bridge must accept and persist the confidence_diagnostics environment object")
+
     # Confidence diagnostics must remain separate from the live router. The
     # router may use raw confidence and existing environment policy, but not
     # the candidate multiplicative/contradiction diagnostic fields.
