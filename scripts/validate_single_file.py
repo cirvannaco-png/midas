@@ -140,6 +140,8 @@ def main():
 
     publisher_path=ROOT/"development"/"EA"/"includes"/"Signals"/"SignalPublisher.mqh"
     publisher=publisher_path.read_text(encoding="utf-8-sig") if publisher_path.is_file() else ""
+    tracker_path=ROOT/"development"/"EA"/"includes"/"Trading"/"OutcomeTrackerLive.mqh"
+    tracker=tracker_path.read_text(encoding="utf-8-sig") if tracker_path.is_file() else ""
     for field in ("contradiction_penalty","env_score","exec_score","env_exec_confidence"):
         if field not in publisher:
             fail.append("signal publishing omits confidence diagnostic field: "+field)
@@ -170,8 +172,6 @@ def main():
 
     # Live confidence decay is signal-age telemetry: it advances while pending,
     # is recomputed at first fill, and is never updated during the open position.
-    tracker_path=ROOT/"development"/"EA"/"includes"/"Trading"/"OutcomeTrackerLive.mqh"
-    tracker=tracker_path.read_text(encoding="utf-8-sig") if tracker_path.is_file() else ""
     update_match=re.search(r'void\s+Update\(CTFContext\*\s*ctx\)([\s\S]*?)bool\s+GetFillState',tracker)
     update_body=update_match.group(1) if update_match else ""
     if not update_match:
