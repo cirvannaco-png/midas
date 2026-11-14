@@ -16,7 +16,7 @@ Do not mix Strategy Tester and broker-demo data, symbols, builds, model versions
 
 ## Observation unit and CSV
 
-Use exactly **one row per complete decision-level position outcome**, after aggregating all partial closes/fills for that decision and accounting for known broker cashflows in realized R. Do not count individual deal rows as independent trades. A decision ID must occur once.
+Use exactly **one row per complete decision-level position outcome**, after aggregating all partial closes/fills for that decision and accounting for known broker cashflows in realized R. Do not count individual deal rows as independent trades. A decision ID must occur once. position_id may be blank for no-fill records; it is mandatory for every filled record.
 
 Required CSV header:
 
@@ -30,7 +30,7 @@ No-fill, ambiguous, pending, unfilled, incomplete-history, unknown-cashflow and 
 
 The manifest must satisfy:
 
-    period_start <= train_end < holdout_start <= evaluation_cutoff
+    period_start <= train_end < holdout_start <= period_end <= evaluation_cutoff
 
 Only rows with signal time on/after holdout start and on/before period end enter the locked holdout. Pre-holdout rows are excluded; no model is trained or tuned on the holdout.
 
