@@ -189,6 +189,10 @@ def main():
         fail.append("first live fill must reconcile and freeze pre-fill confidence age")
     if "void ApplyConfidenceDecay(PendingSetup &p) const" not in tracker:
         fail.append("live outcome tracker confidence-decay helper missing")
+    if "void SimFill(PendingSetup &p,double price,datetime t)" not in tracker:
+        fail.append("simulated fill must mutate the caller's pending-setup record")
+    if "if(touched) SimFill(p,p.entryRef,bar.time);" not in update_body or "SimFill(i," in update_body:
+        fail.append("simulated fill must not write through a tracker index while Update holds a stale local copy")
 
     # Offline comparison is intentionally read-only. Recalibrated weights
     # cannot silently enter the MQL5 router or alter production thresholds.
