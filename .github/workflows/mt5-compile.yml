@@ -1,4 +1,4 @@
-name: MidasTouch2 validation and MetaEditor compile
+name: MedisTouch_v2.8 validation and MetaEditor compile
 on:
   push:
     branches: ["build/**", "release/**"]
@@ -63,11 +63,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           if (-not (Test-Path $env:METAEDITOR)) { throw "MetaEditor path missing." }
           if (-not (Test-Path (Join-Path $env:MQL5ROOT "Include\Trade\Trade.mqh"))) { throw "MT5 standard library missing." }
-          $target = Join-Path $env:RUNNER_TEMP "MidasTouch2"
+          $target = Join-Path $env:RUNNER_TEMP "MedisTouch_v2.8"
           New-Item -ItemType Directory -Force -Path $target | Out-Null
-          $source = Join-Path $target "MidasTouch2.mq5"
-          Copy-Item "MidasTouch2.mq5" $source -Force
-          $log = Join-Path $target "MidasTouch2.log"
+          $source = Join-Path $target "MedisTouch_v2.8.mq5"
+          Copy-Item "development/EA/MedisTouch_v2.8.mq5" $source -Force
+          $log = Join-Path $target "MedisTouch_v2.8.log"
           $compileArg = '/compile:"' + $source + '"'
           $includeArg = '/include:"' + $env:MQL5ROOT + '"'
           $proc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($compileArg, $includeArg, "/log") -Wait -PassThru
@@ -127,11 +127,11 @@ jobs:
           if ($policyResult -notmatch "failures=0") { throw "AccountRiskProfilePolicy assertions failed: $policyResult" }
           Write-Host "AccountRiskProfilePolicy runtime assertions: PASS ($policyResult)"
           
-          $ex5 = Join-Path $target "MidasTouch2.ex5"
+          $ex5 = Join-Path $target "MedisTouch_v2.8.ex5"
           if (-not (Test-Path $ex5)) { throw "Compiled EX5 not produced" }
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Copy-Item $ex5 artifacts/MidasTouch2.ex5 -Force
-          Copy-Item $log artifacts/MidasTouch2.MetaEditor.log -Force
+          Copy-Item $ex5 artifacts/MedisTouch_v2.8.ex5 -Force
+          Copy-Item $log artifacts/MedisTouch_v2.8.MetaEditor.log -Force
           Copy-Item $policyTestLog artifacts/AccountRiskProfilePolicy.MetaEditor.log -Force
           Copy-Item $policyTestSource.Replace(".mq5",".ex5") artifacts/AccountRiskProfilePolicy.ex5 -Force
           Copy-Item $policyResultFile artifacts/AccountRiskProfilePolicy-tests.txt -Force
@@ -141,6 +141,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: MidasTouch2-MetaEditor-build
+          name: MedisTouch_v2.8-MetaEditor-build
           path: artifacts/
           if-no-files-found: warn

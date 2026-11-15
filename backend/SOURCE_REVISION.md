@@ -15,8 +15,11 @@ docs/INTEGRATED_TRADING_ARCHITECTURE_AUDIT.md.
 Files nested under backend/source/.github/ are provenance only; GitHub Actions
 does not execute workflows from nested directories.
 
-The canonical distributable EA is the generated root MidasTouch2.mq5, built
-from the active modular source under development/EA/. The imported
+The canonical distributable EA is the generated, self-contained
+`development/EA/MedisTouch_v2.8.mq5`, built from the modular entrypoint
+`development/EA/MedisTouch_v2.8.source.mq5` and local modules under
+`development/EA/includes/`. Native tests remain separate under
+`development/EA/tests/`. The imported
 backend/source/EA/ tree is the upstream reference snapshot, not a second
 active build target. The active MetaEditor workflow is
 .github/workflows/mt5-compile.yml.

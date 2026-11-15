@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE_ROOT=(ROOT/"development"/"EA").resolve()
 MANIFEST=ROOT/"SOURCE_MANIFEST.json"
-OUTPUT=ROOT/"MidasTouch2.mq5"
+OUTPUT=SOURCE_ROOT/"MedisTouch_v2.8.mq5"
 INCLUDE=re.compile(r'^(?P<indent>\s*)#include\s*(?P<quote>[<"])(?P<path>[^">]+)[">](?P<tail>.*)$')
 GUARD=re.compile(r'^\s*#ifndef\s+([A-Za-z_]\w*)\s*[\r\n]+\s*#define\s+\1\b',re.MULTILINE)
 def build(entry,commit,staged_commit):
@@ -39,13 +39,13 @@ def build(entry,commit,staged_commit):
                     out.append(f"{match.group('indent')}// END INLINED MODULE: {rel}")
             if re.match(r"^#\s*endif\b",stripped): depth=max(0,depth-1)
         stack.pop(); return "\n".join(out)
-    prefix=("// MidasTouch2 single-file production build\n"
+    prefix=("// MedisTouch v2.8 self-contained single-file production build\n"
             "// Package version: 1.0.0-rc.1\n"
             f"// Upstream baseline: cirvannaco-png/Midas-touch2-@{commit}\n"
             f"// Staged EA source snapshot: cirvannaco-png/midas@{staged_commit}\n"
-            "// Modular source is preserved under development/EA/.\n"
+            "// Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.\n"
             "// Regenerate with: python scripts/build_single_file.py\n"
-            "// Do not hand-edit this generated file.\n\n")
+            "// Upload this one file to MQL5/Experts/; do not hand-edit it.\n\n")
     result=prefix+expand(entry)+"\n"
     if conditional: raise ValueError("conditional local includes found: "+", ".join(conditional))
     if re.search(r'^\s*#include\s*"',result,re.MULTILINE): raise ValueError("quoted custom includes remain")
