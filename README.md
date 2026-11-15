@@ -1,6 +1,6 @@
 # Midas Touch 2
 
-Midas Touch 2 is a MetaTrader 5 Expert Advisor (EA) with a separately deployed execution-ledger bridge. The distributable EA is the single root file, `MidasTouch2.mq5`; the modular MQL5 development source remains under `development/EA/`.
+Midas Touch 2 is a MetaTrader 5 Expert Advisor (EA) with a separately deployed execution-ledger bridge. The canonical distributable EA is the self-contained `development/EA/MedisTouch_v2.8.mq5`; upload this one EA file to MetaTrader. Its modular entrypoint is `development/EA/MedisTouch_v2.8.source.mq5`, with custom modules in `development/EA/includes/` and separate tests in `development/EA/tests/`.
 
 This repository is a **release candidate**, not a live-trading approval. A successful compile proves source validity only. It does not establish profitability, broker compatibility, position-management safety, or production readiness.
 
@@ -84,7 +84,7 @@ The flattened upload EA is generated from the modular entrypoint and its active 
 
 `backend/source/` contains the full 495-file upstream project snapshot at commit `52d737237c08f36d668853312f643cb74d4548da`: FastAPI services, PostgreSQL migrations, Telegram bridge, deployment manifests, tests, research tooling, documentation, and the original upstream EA. `backend/SOURCE_REVISION.md` records its provenance and the small number of target-specific reconciliations.
 
-The nested `backend/source/EA/` tree is an upstream reference snapshot, **not a second active EA build target**. The active root EA remains `development/EA/` plus the generated `MidasTouch2.mq5`. Workflows under `backend/source/.github/` are imported provenance only; GitHub Actions executes workflows from the root `.github/workflows/` directory.
+The nested `backend/source/EA/` tree is an upstream reference snapshot, **not a second active EA build target**. The active EA build target is `development/EA/MedisTouch_v2.8.mq5`; its modular sources remain under `development/EA/`, and its native tests remain separate under `development/EA/tests/`. Workflows under `backend/source/.github/` are imported provenance only; GitHub Actions executes workflows from the root `.github/workflows/` directory.
 
 ### Research and external validation tools
 
