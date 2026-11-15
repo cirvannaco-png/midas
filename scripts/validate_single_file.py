@@ -2,7 +2,7 @@
 """Static structural checks for flattened MQL5 source; not a compiler."""
 import collections, hashlib, json, re, sys
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1]; EA=ROOT/"MidasTouch2.mq5"; MANIFEST=ROOT/"SOURCE_MANIFEST.json"
+ROOT=Path(__file__).resolve().parents[1]; EA=ROOT/"development"/"EA"/"MedisTouch_v2.8.mq5"; MANIFEST=ROOT/"SOURCE_MANIFEST.json"
 def mask(text):
     out=[]; i=0; state="normal"; quote=""
     while i<len(text):
@@ -36,7 +36,7 @@ def ranges_for_classes(code):
         if depth==0: ranges.append((match.start(),i))
     return ranges
 def main():
-    if not EA.is_file(): raise SystemExit("FAIL: MidasTouch2.mq5 missing")
+    if not EA.is_file(): raise SystemExit("FAIL: development/EA/MedisTouch_v2.8.mq5 missing")
     raw=EA.read_text(encoding="utf-8-sig")
     code=mask(raw); fail=[]
     bridge_checks={
@@ -232,7 +232,7 @@ def main():
         fail.append("current staged EA source snapshot missing from SOURCE_MANIFEST.json")
     else:
         expected={item["path"]:item for item in snapshot_files}
-        actual={p.relative_to(ROOT).as_posix():p for p in source_root.rglob("*") if p.is_file()}
+        actual={p.relative_to(ROOT).as_posix():p for p in source_root.rglob("*") if p.is_file() and p.resolve()!=EA.resolve()}
         missing=sorted(set(expected)-set(actual))
         extra=sorted(set(actual)-set(expected))
         if missing: fail.append("staged source files missing from manifest: "+", ".join(missing))
