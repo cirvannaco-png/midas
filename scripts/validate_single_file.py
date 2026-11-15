@@ -128,6 +128,78 @@ def main():
     for name,pattern in policy_test_checks.items():
         if not re.search(pattern,policy_test):
             fail.append("Gold risk policy test missing: "+name)
+
+    compact_ea="".join(raw.split())
+    mtf_final=compact_ea.find("g_topDownMTF.AdjustSetup(sellSetup);")
+    buy_diagnostic=compact_ea.find("if(buySetup.active)g_scoring.PopulateConfidenceDiagnostics(buySetup.reasons,buySetup.confidence);")
+    sell_diagnostic=compact_ea.find("if(sellSetup.active)g_scoring.PopulateConfidenceDiagnostics(sellSetup.reasons,sellSetup.confidence);")
+    direction_selection=compact_ea.find("TradeSetupchosen;")
+    if not (0<=mtf_final<buy_diagnostic<sell_diagnostic<direction_selection):
+        fail.append("confidence diagnostics must run for BUY and SELL after final MTF adjustment and before direction selection")
+
+    publisher_path=ROOT/"development"/"EA"/"includes"/"Signals"/"SignalPublisher.mqh"
+    publisher=publisher_path.read_text(encoding="utf-8-sig") if publisher_path.is_file() else ""
+    tracker_path=ROOT/"development"/"EA"/"includes"/"Trading"/"OutcomeTrackerLive.mqh"
+    tracker=tracker_path.read_text(encoding="utf-8-sig") if tracker_path.is_file() else ""
+    for field in ("contradiction_penalty","env_score","exec_score","env_exec_confidence"):
+        if field not in publisher:
+            fail.append("signal publishing omits confidence diagnostic field: "+field)
+
+    if "confidence_diagnostics" not in tracker:
+        fail.append("outcome environment payload omits the confidence_diagnostics object")
+    for field in ("contradiction_penalty","env_score","exec_score","env_exec_confidence"):
+        if field not in tracker:
+            fail.append("published outcome history omits confidence diagnostic field: "+field)
+    if "p.barsToFill=p.decayBars;ApplyConfidenceDecay(p);" not in tracker:
+        fail.append("simulated fills must preserve pre-fill signal age and freeze confidence decay")
+
+    outcome_route_path=ROOT/"backend"/"source"/"telegram-bridge"/"app"/"routes.py"
+    outcome_route=outcome_route_path.read_text(encoding="utf-8-sig") if outcome_route_path.is_file() else ""
+    if "environment: dict | None = Field(default=None)" not in outcome_route or "row.environment = payload.environment" not in outcome_route:
+        fail.append("outcome bridge must accept and persist the confidence_diagnostics environment object")
+
+    # Confidence diagnostics must remain separate from the live router. The
+    # router may use raw confidence and existing environment policy, but not
+    # the candidate multiplicative/contradiction diagnostic fields.
+    decision_engine_path=ROOT/"development"/"EA"/"includes"/"Decision"/"DecisionEngine.mqh"
+    decision_engine=decision_engine_path.read_text(encoding="utf-8-sig") if decision_engine_path.is_file() else ""
+    if "setup.confidence" not in decision_engine:
+        fail.append("decision router no longer references the raw setup confidence")
+    for diagnostic_field in ("env_exec_confidence","contradiction_penalty","env_score","exec_score"):
+        if diagnostic_field in decision_engine:
+            fail.append("diagnostic field leaked into live decision router: "+diagnostic_field)
+
+    # Live confidence decay is signal-age telemetry: it advances while pending,
+    # is recomputed at first fill, and is never updated during the open position.
+    update_match=re.search(r'void\s+Update\(CTFContext\*\s*ctx\)([\s\S]*?)bool\s+GetFillState',tracker)
+    update_body=update_match.group(1) if update_match else ""
+    if not update_match:
+        fail.append("live outcome tracker Update method missing")
+    else:
+        if not re.search(r'if\s*\(!p\.filled\s*&&\s*p\.lastBarTime!=bar\.time\)[\s\S]{0,180}p\.decayBars\+\+;[\s\S]{0,100}ApplyConfidenceDecay\(p\)',update_body):
+            fail.append("confidence decay must advance only in the unfilled-signal branch")
+        if update_body.count("ApplyConfidenceDecay(p)")!=1:
+            fail.append("confidence decay must be computed exactly once per pending bar")
+        sim_fill_index=update_body.find("if(!p.filled && !m_liveExecution")
+        if sim_fill_index<0 or update_body.find("ApplyConfidenceDecay(p)")>sim_fill_index:
+            fail.append("pending signal decay must be applied before simulated fill detection")
+        if "p.confidenceDecayed=p.confidenceAtSignal*MathPow" in update_body:
+            fail.append("post-fill path contains direct confidence-decay mutation")
+    if not re.search(r'p\.fillTime=t;[\s\S]{0,500}p\.barsToFill=p\.decayBars;[\s\S]{0,120}ApplyConfidenceDecay\(p\);',tracker):
+        fail.append("first live fill must reconcile and freeze pre-fill confidence age")
+    if "void ApplyConfidenceDecay(PendingSetup &p) const" not in tracker:
+        fail.append("live outcome tracker confidence-decay helper missing")
+    if "void SimFill(PendingSetup &p,double price,datetime t)" not in tracker:
+        fail.append("simulated fill must mutate the caller's pending-setup record")
+    if "if(touched) SimFill(p,p.entryRef,bar.time);" not in update_body or "SimFill(i," in update_body:
+        fail.append("simulated fill must not write through a tracker index while Update holds a stale local copy")
+
+    # Offline comparison is intentionally read-only. Recalibrated weights
+    # cannot silently enter the MQL5 router or alter production thresholds.
+    research_tool_path=ROOT/"backend"/"source"/"tools"/"medistouch_retrain.py"
+    research_tool=research_tool_path.read_text(encoding="utf-8-sig") if research_tool_path.is_file() else ""
+    if "It does not fit weights" not in research_tool or "does not write anything back into the EA" not in research_tool:
+        fail.append("offline confidence comparison must remain read-only pending validated OOS evidence")
     if re.search(r'^\s*#include\s*"',code,re.MULTILINE): fail.append("custom quoted include remains")
     system=re.findall(r'^\s*#include\s*<([^>]+)>',code,re.MULTILINE)
     if not system: fail.append("standard MQL5 library include missing")
