@@ -3,7 +3,7 @@
   "package_status": "release-candidate; compile/test gates pending",
   "source_repository": "cirvannaco-png/Midas-touch2-",
   "source_commit": "3622ed5a434c36f0c05ab9c9863d17b6fd743e9a",
-  "entrypoint": "EA/MedisTouch_v2.8.mq5",
+  "entrypoint": "EA/MedisTouch_v2.8.source.mq5",
   "files": [
     {
       "path": "EA/MedisTouch_Indicator_v2.8.mq5",
@@ -926,7 +926,7 @@
         "size_bytes": 15553
       },
       {
-        "path": "development/EA/MedisTouch_v2.8.mq5",
+        "path": "development/EA/MedisTouch_v2.8.source.mq5",
         "git_blob_sha": "c5b61eda405c9383c6039d657d397632b233dfd3",
         "size_bytes": 113345
       },
