@@ -1,6 +1,6 @@
 # Integrated trading architecture audit
 
-Audit baseline: Midas root EA source plus the pinned Midas-touch2 backend snapshot
+Audit baseline: canonical single-file EA source plus the pinned Midas-touch2 backend snapshot
 at upstream commit 52d737237c08f36d668853312f643cb74d4548da.
 
 This is an implementation audit, not a profitability certification.
@@ -130,7 +130,7 @@ never submits broker orders.
    Introduce an explicit account-level Midas portfolio ID shared by all symbols
    and Midas instances that must share risk.
 2. The EA PortfolioManager does not calculate proposed margin or check
-   ACCOUNT_MARGIN_FREE. No OrderCalcMargin call was found in the root EA.
+   ACCOUNT_MARGIN_FREE. No OrderCalcMargin call was found in the canonical EA.
 3. The backend reserve request carries risk in R and an empty factor map. Its
    active reservation sum does not yet enforce a fresh broker margin snapshot
    or factor/correlation budget.
