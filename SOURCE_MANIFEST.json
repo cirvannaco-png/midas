@@ -486,7 +486,7 @@
     "repository": "cirvannaco-png/midas",
     "branch": "build/single-upload-ea",
     "commit": "92db5d86aedb2030fb48d4f0520515d722b1c1f1",
-    "git_tree_sha": "afb1cd57972fbc8472b45a8030b5a127548f9cd5",
+    "git_tree_sha": "7212b6968ef0bbef369a41614b32c8456853ca5f",
     "root": "development/EA",
     "file_count": 95,
     "files": [
