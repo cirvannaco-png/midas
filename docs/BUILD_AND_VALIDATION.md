@@ -2,7 +2,7 @@
 
 ## Build the one-file MT5 EA
 
-Use modular sources in `development/EA/`. Do not hand-edit `MidasTouch2.mq5`.
+Use modular sources in `development/EA/`. Do not hand-edit `development/EA/MedisTouch_v2.8.mq5`.
 
 ```bash
 python scripts/build_single_file.py
@@ -10,7 +10,7 @@ python scripts/build_single_file.py --check
 python scripts/validate_single_file.py
 ```
 
-The root `MidasTouch2.mq5` is the deployable EA. Custom modules are inlined; MetaTrader's standard `Trade/Trade.mqh` is the one expected platform include.
+The canonical deployable EA is `development/EA/MedisTouch_v2.8.mq5`. All active custom `.mqh` modules are inlined in this file; the only compile-time include is MetaTrader's standard `Trade/Trade.mqh`, supplied by the MT5 terminal. The modular entrypoint is retained separately as `development/EA/MedisTouch_v2.8.source.mq5`; native tests stay in `development/EA/tests/` and are never included in the deployment EA.
 
 ## Bridge and ledger configuration
 
