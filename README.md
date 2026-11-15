@@ -8,7 +8,7 @@ This repository is a **release candidate**, not a live-trading approval. A succe
 
 ### MT5 Expert Advisor
 
-The EA owns market analysis, signal generation, strategy selection, risk sizing, order submission, broker-facing position management, and protective-stop logic. Its custom implementation is flattened into `MidasTouch2.mq5` so it can be installed directly in `MQL5/Experts/`. The only external compile-time include is MetaTrader's standard `Trade/Trade.mqh` library.
+The EA owns market analysis, signal generation, strategy selection, risk sizing, order submission, broker-facing position management, and protective-stop logic. Its custom implementation is flattened into `development/EA/MedisTouch_v2.8.mq5` so that file alone can be installed directly in `MQL5/Experts/`. The only external compile-time include is MetaTrader's standard `Trade/Trade.mqh` library.
 
 ### Execution-ledger bridge
 
@@ -24,7 +24,7 @@ The bridge API uses `X-API-Key`. Configure the HTTPS base URL and key through EA
 
 ## Source and generated file
 
-Edit modular sources in `development/EA/`, not the generated root EA. The generator expands the active local include closure and rejects include cycles, missing dependencies, conditional local includes, and duplicate include guards.
+Edit modular source in `development/EA/MedisTouch_v2.8.source.mq5` and `development/EA/includes/`, not the generated upload EA. The generator expands the active local include closure and rejects include cycles, missing dependencies, conditional local includes, and duplicate include guards.
 
 ```bash
 python scripts/build_single_file.py
@@ -70,15 +70,15 @@ No backtest or win-rate target is a profitability guarantee. Keep live trading d
 
 | Path | Authority / purpose |
 |---|---|
-| `MidasTouch2.mq5` | Generated, distributable single-file MT5 Expert Advisor. Install this file in `MQL5/Experts/`. |
-| `development/EA/` | **Canonical modular MQL5 source** used to generate the root EA. Contains the EA, indicator, all local `.mqh` modules, policy engines, risk/trailing-stop logic, broker execution, recovery, monitoring, UI, and native MQL5 tests. |
+| `development/EA/MedisTouch_v2.8.mq5` | Generated, self-contained single-file MT5 Expert Advisor. This is the only EA file to upload to `MQL5/Experts/`. |
+| `development/EA/MedisTouch_v2.8.source.mq5` and `development/EA/includes/` | **Canonical modular MQL5 source** used to generate the upload EA. `development/EA/tests/` remains separate and is not inlined. |
 | `scripts/build_single_file.py` | Expands the active local include closure into the standalone EA; rejects missing dependencies, include cycles, conditional local includes, and duplicate guards. |
 | `scripts/validate_single_file.py` | Verifies the staged source manifest, generated output, and safety invariants. |
 | `.github/workflows/mt5-compile.yml` | Active MT5 validation workflow, source-consistency checks, official Windows MetaEditor compilation, and supported native policy tests. |
 | `tests/mt5/` and `development/EA/tests/` | MT5 package/demo validation and native MQL5 policy/runtime tests. |
 | `docs/MT5_TESTER_TIMEZONE_PROVENANCE.md` | Rules for timestamp provenance in native Strategy Tester exports. |
 
-The flattened EA is generated from `development/EA/`; do not hand-edit `MidasTouch2.mq5`. The local EA include closure is in this repository. Its only external compile-time include is MetaTrader's standard `Trade/Trade.mqh` library supplied by the installed MT5 terminal. Compiled `.ex5` files are generated locally and are not source-controlled.
+The flattened upload EA is generated from the modular entrypoint and its active local include closure; do not hand-edit `development/EA/MedisTouch_v2.8.mq5`. The local EA include closure is in this repository. Its only external compile-time include is MetaTrader's standard `Trade/Trade.mqh` library supplied by the installed MT5 terminal. Compiled `.ex5` files are generated locally and are not source-controlled.
 
 ### Imported upstream project and supporting services
 
