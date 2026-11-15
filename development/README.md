@@ -1,1 +1,1 @@
-Modular development source pinned to cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a. Edit EA/ modules, then regenerate root MidasTouch2.mq5. Original source tree remains unchanged.
+Modular development source pinned to cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a. Edit `EA/MedisTouch_v2.8.source.mq5` and `EA/includes/`, then regenerate `EA/MedisTouch_v2.8.mq5`. The generated file is the single upload artifact; `EA/tests/` remains outside it. Original source tree remains unchanged.
