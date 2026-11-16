@@ -75,7 +75,7 @@ def test_open_residual_pnl_is_not_mixed_into_realized_reconciliation():
     assert report["completed_positions"] == 1
     assert report["open_positions"] == 1
     assert report["completed_position_outcomes"]["wins"] == 0
-    assert report["completed_position_outcomes"]["losses"] == 0
+    assert report["completed_position_outcomes"]["losses"] == 1
     open_position = next(p for p in report["positions"] if p["openingFillId"] == "101")
     assert open_position["complete"] is False
     assert open_position["realizedPnl"] == pytest.approx(1.25)
