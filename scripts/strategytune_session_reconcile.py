@@ -7,7 +7,7 @@ authoritative source for position-level realized P&L and reconciles their sum
 against the engine's closed P&L.
 
 Input JSON is either one complete get_session_trades response, a list of
-paginated responses, or {"pages": [...]} containing every page.
+paginated responses, or {"pages": [...]} containing every page. The engine summary is a get_run_result JSON response.
 """
 from __future__ import annotations
 
@@ -305,7 +305,7 @@ def engine_pnl_from_summary(payload: Any) -> float:
         if value is not None:
             return _number(value, "summary engine closed P&L")
     raise ReconciliationError(
-        "summary must contain netPnl, engineClosedPnl, stats.stats.totalPnl, or stats.account.closedPnl"
+        "summary must contain stats.stats.totalPnl, stats.account.closedPnl, netPnl, or engineClosedPnl"
     )
 
 
@@ -317,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--engine-closed-pnl", type=float,
                         help="engine stats.totalPnl / account.closedPnl in session currency")
     source.add_argument("--summary-json", type=Path,
-                        help="get_run_result or list_automated_sessions response JSON")
+                        help="get_run_result response JSON")
     parser.add_argument("--tolerance", type=float, default=0.01)
     parser.add_argument("--output", type=Path, help="optional report JSON output path")
     args = parser.parse_args(argv)
