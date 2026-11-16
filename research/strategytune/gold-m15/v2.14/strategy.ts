@@ -1,3 +1,7 @@
+// Exported from StrategyTune; research-only, not MQL5 source.
+// Script ID: uzgla8z1xdjyv3496i28kom3
+// Compiled version: 4
+// Attribution revision: session rows grouped by openingFillId; in-run realized outcomes suppressed.
 class MidasTouch2NoQuotaResearch {
   lastKey:string="";
   volumeRejects:number=0;
