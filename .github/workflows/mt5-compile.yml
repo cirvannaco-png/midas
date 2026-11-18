@@ -1,7 +1,7 @@
 name: MedisTouch_v2.8 validation and MetaEditor compile
 on:
   push:
-    branches: ["build/**", "release/**"]
+    branches: ["build/**", "release/**", "research/**"]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -23,7 +23,6 @@ jobs:
         run: python scripts/validate_single_file.py
 
   metaeditor-compile:
-    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -137,6 +136,71 @@ jobs:
           Copy-Item $policyResultFile artifacts/AccountRiskProfilePolicy-tests.txt -Force
           "MetaEditor result: $errors errors, $warnings warnings" | Out-File artifacts/compile-summary.txt -Encoding utf8
           "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings; runtime assertions: PASS" | Out-File artifacts/policy-test-compile-summary.txt -Encoding utf8
+      - name: Compile FreshSweepAdditiveRouter policy tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $scriptsRoot = Join-Path $env:MQL5ROOT "Scripts\development\EA"
+          $testDir = Join-Path $scriptsRoot "tests"
+          $tradingDir = Join-Path $scriptsRoot "includes\Trading"
+          $coreDir = Join-Path $scriptsRoot "includes\Core"
+          New-Item -ItemType Directory -Force -Path $testDir, $tradingDir, $coreDir | Out-Null
+          Copy-Item "development/EA/tests/FreshSweepAdditiveRouter.mq5" (Join-Path $testDir "FreshSweepAdditiveRouter.mq5") -Force
+          Copy-Item "development/EA/includes/Trading/FreshSweepAdditiveRouter.mqh" (Join-Path $tradingDir "FreshSweepAdditiveRouter.mqh") -Force
+          Copy-Item "development/EA/includes/Core/Config.mqh" (Join-Path $coreDir "Config.mqh") -Force
+          Copy-Item "development/EA/includes/Core/CandleData.mqh" (Join-Path $coreDir "CandleData.mqh") -Force
+          Copy-Item "development/EA/includes/Core/NewsFilter.mqh" (Join-Path $coreDir "NewsFilter.mqh") -Force
+          $source = Join-Path $testDir "FreshSweepAdditiveRouter.mq5"
+          $log = Join-Path $testDir "FreshSweepAdditiveRouter.log"
+          $compileArg = '/compile:"' + $source + '"'
+          $includeArg = '/include:"' + $env:MQL5ROOT + '"'
+          $proc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($compileArg, $includeArg, "/log") -Wait -PassThru
+          if (-not (Test-Path $log)) { throw "FreshSweepAdditiveRouter compile log missing; process exit $($proc.ExitCode)" }
+          $content = Get-Content $log -Raw -Encoding Unicode
+          $match = [regex]::Match($content, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
+          if (-not $match.Success) { throw "Cannot parse FreshSweepAdditiveRouter compile result: $content" }
+          $errors = [int]$match.Groups[1].Value
+          $warnings = [int]$match.Groups[2].Value
+          Write-Host "FreshSweepAdditiveRouter: $errors errors, $warnings warnings"
+          if ($errors -ne 0 -or $warnings -ne 0) { throw "FreshSweepAdditiveRouter test source must compile with zero errors and warnings." }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item $log artifacts/FreshSweepAdditiveRouter.MetaEditor.log -Force
+          $ex5 = Join-Path $testDir "FreshSweepAdditiveRouter.ex5"
+          if (-not (Test-Path $ex5)) { throw "FreshSweepAdditiveRouter.ex5 not produced" }
+          Copy-Item $ex5 artifacts/FreshSweepAdditiveRouter.ex5 -Force
+
+      - name: Run FreshSweepAdditiveRouter policy tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $resultFile = Join-Path $env:MQL5ROOT "Files\FreshSweepAdditiveRouter-tests.txt"
+          if (Test-Path $resultFile) { Remove-Item $resultFile -Force }
+          New-Item -ItemType Directory -Force -Path (Split-Path $resultFile) | Out-Null
+          $target = Join-Path $env:RUNNER_TEMP "FreshSweepAdditiveRouterTest"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $config = Join-Path $target "FreshSweepAdditiveRouterTest.ini"
+          $ini = @"
+          [StartUp]
+          Script=development\EA\tests\FreshSweepAdditiveRouter
+          Symbol=EURUSD
+          Period=M1
+          ShutdownTerminal=Yes
+          "@
+          Set-Content -LiteralPath $config -Value $ini -Encoding Unicode
+          $terminal = Join-Path (Split-Path $env:METAEDITOR) "terminal64.exe"
+          $proc = Start-Process -FilePath $terminal -ArgumentList @("/portable", "/config:$config") -PassThru
+          try {
+            Wait-Process -Id $proc.Id -Timeout 180
+          } catch {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw "FreshSweepAdditiveRouter policy test terminal timed out."
+          }
+          if (-not (Test-Path $resultFile)) { throw "FreshSweepAdditiveRouter policy test did not write its result file." }
+          $result = Get-Content $resultFile -Raw
+          if ($result -notmatch "failures=0") { throw "FreshSweepAdditiveRouter assertions failed: $result" }
+          Write-Host "FreshSweepAdditiveRouter runtime assertions: PASS ($result)"
+          Copy-Item $resultFile artifacts/FreshSweepAdditiveRouter-tests.txt -Force
+
       - name: Upload MetaEditor artifacts
         if: always()
         uses: actions/upload-artifact@v4

@@ -236,6 +236,8 @@ string CSignalLogger::SelectedStrategyLabel(ENUM_SELECTED_STRATEGY s)
       case STRATEGY_MOMENTUM_BREAKOUT:   return "MomentumBreakout";
       case STRATEGY_MEAN_REVERSION:      return "MeanReversion";
       case STRATEGY_KEY_LEVEL:           return "KeyLevel";
+      case STRATEGY_FRESH_SWEEP_CONTINUATION: return "FreshSweepContinuation";
+      case STRATEGY_FRESH_SWEEP_SINGLE_SWING:  return "FreshSweepSingleSwing";
       default:                           return "None";
      }
   }
