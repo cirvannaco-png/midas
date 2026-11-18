@@ -280,3 +280,32 @@ def test_inout_reversal_excludes_entire_stable_position_identifier():
     positions, ignored = reconstruct_positions(rows)
     assert positions == []
     assert ignored["inout_ambiguous"] == 1
+
+
+def test_standard_ledger_refuses_new_forward_locked_oos_entries():
+    rows = [
+        deal(902, "2026-12-15T10:00:00", "in", 1.0, commission=-1.0),
+    ]
+    with pytest.raises(LedgerError, match="registered locked-OOS window"):
+        reject_reserved_oos_entries(rows)
+
+
+def test_new_forward_locked_oos_window_is_start_inclusive_and_end_exclusive():
+    starts_at_lock = [
+        deal(903, "2026-11-13T17:18:40", "in", 1.0, commission=-1.0),
+    ]
+    with pytest.raises(LedgerError, match="registered locked-OOS window"):
+        reject_reserved_oos_entries(starts_at_lock)
+
+    at_end_boundary = [
+        deal(904, "2027-02-13T17:18:40", "in", 1.0, commission=-1.0),
+    ]
+    reject_reserved_oos_entries(at_end_boundary)
+
+
+def test_standard_ledger_withholds_both_old_and_new_locked_oos_windows():
+    old_window = [deal(905, "2026-09-15T10:00:00", "in", 1.0, commission=-1.0)]
+    new_window = [deal(906, "2026-12-15T10:00:00", "in", 1.0, commission=-1.0)]
+    for rows in (old_window, new_window):
+        with pytest.raises(LedgerError, match="registered locked-OOS window"):
+            reject_reserved_oos_entries(rows)
