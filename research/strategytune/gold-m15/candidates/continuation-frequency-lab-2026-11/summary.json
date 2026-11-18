@@ -1,0 +1,41 @@
+{
+  "candidate": {
+    "entries": 613,
+    "completed": 613,
+    "open": 0,
+    "wins": 495,
+    "losses": 118,
+    "winRatePct": 80.75,
+    "netPnlUsd": 138,
+    "grossProfitUsd": 1172.92,
+    "grossLossUsd": 1034.92,
+    "profitFactor": 1.133,
+    "averageWinUsd": 2.37,
+    "averageLossUsd": 8.77
+  },
+  "baseline": {
+    "entries": 531,
+    "completed": 529,
+    "open": 2,
+    "wins": 407,
+    "losses": 122,
+    "winRatePct": 76.94,
+    "netPnlUsd": -134.79,
+    "grossProfitUsd": 899.25,
+    "grossLossUsd": 1034.04,
+    "profitFactor": 0.87,
+    "averageWinUsd": 2.21,
+    "averageLossUsd": 8.48
+  },
+  "tradeCountIncreasePct": 15.44,
+  "netPnlDifferenceUsd": 272.79,
+  "rejectedCap2October": {
+    "entries": 42,
+    "baselineEntries": 60,
+    "winRatePct": 85.71,
+    "netPnlUsd": 23.49,
+    "profitFactor": 1.416,
+    "maxDrawdownUsd": 26.61,
+    "reason": "30% fewer positions than baseline"
+  }
+}

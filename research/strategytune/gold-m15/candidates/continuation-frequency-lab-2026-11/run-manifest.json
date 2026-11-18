@@ -1,0 +1,33 @@
+{
+  "candidateScriptId": "gxd1a9kd9srqr0ca0cvpq809",
+  "candidateScriptVersion": 2,
+  "baselineScriptId": "uzgla8z1xdjyv3496i28kom3",
+  "baselineScriptVersion": 4,
+  "instrument": "Gold",
+  "provider": "IC Markets",
+  "timeframe": "M15",
+  "startingBalance": 10000,
+  "accountCurrency": "USD",
+  "inputOverrides": {
+    "maxDailyTrades": 3
+  },
+  "candidateRunIds": [
+    "63c644e0-18e7-4145-9929-9fc608efee6d",
+    "181ae61a-7b94-415f-994c-ca28e78d015f",
+    "91fcd8da-381d-4640-9be3-6415bc6a5ea3",
+    "9b728054-9a28-4503-afe5-cf834051ba3c",
+    "b4c0ef35-44c7-40fc-a719-f791bb1c5cd5",
+    "1b3436aa-0278-47b4-a692-1ae2c4d53322",
+    "cf377353-5f96-4370-aec8-debfd6f10c65"
+  ],
+  "baselineRunIds": [
+    "bbf0f172-a778-4e44-92e7-d2405ba25cfa",
+    "49e0b497-fa87-45f8-87f9-ed7f2896ef1c",
+    "6bd44acc-2017-4771-a804-7fe729a54af5",
+    "3910dc6b-d34e-4111-9d3f-dafe695bea0e",
+    "8405064e-5306-4f25-813e-03248f090d07",
+    "537de5d2-9cdd-427c-a249-fe81d0ad73a8",
+    "34ea0164-18a8-4f3b-a6a9-5b7137adbfed"
+  ],
+  "note": "Matched results group session close rows by openingFillId; baseline September and October each had one open position at period end."
+}
