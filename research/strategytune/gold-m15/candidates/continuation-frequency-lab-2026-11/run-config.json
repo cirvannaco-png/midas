@@ -1,0 +1,30 @@
+{
+  "candidate": {
+    "scriptId": "gxd1a9kd9srqr0ca0cvpq809",
+    "scriptName": "Midas v2.14 Trend-Continuation Frequency Lab",
+    "version": 2,
+    "overrides": {
+      "maxDailyTrades": 3
+    }
+  },
+  "baseline": {
+    "scriptId": "uzgla8z1xdjyv3496i28kom3",
+    "scriptName": "Midas Gold v2.14 Exit Guard Research",
+    "version": 4,
+    "overrides": {}
+  },
+  "instrument": "Gold",
+  "provider": "IC Markets",
+  "timeframe": "M15",
+  "startingBalance": 10000,
+  "accountCurrency": "USD",
+  "candidateChanges": [
+    "enableSingleSwingFallback=false",
+    "enableContinuationFallback=true",
+    "fallbackQualityFloor=48 (baseline55)",
+    "continuation body ratio floor=0.35 (baseline0.40)",
+    "continuation range/ATR floor=0.45 (baseline0.60)",
+    "continuation pullback-touch scan=8 bars (baseline5)"
+  ],
+  "note": "maxDailyTrades metadata default remains 6; every candidate run explicitly overrides it to 3."
+}
