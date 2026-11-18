@@ -10,6 +10,7 @@
 #include "../Analysis/TFContext.mqh"
 #include "../Analysis/Scoring.mqh"
 #include "StrategySetupBuilders.mqh"
+#include "FreshSweepAdditiveRouter.mqh"
 #include "Targets.mqh"
 #include "EnvironmentStrategyMemory.mqh"
 
@@ -33,6 +34,7 @@ private:
    double                          m_fvgMaxDistATR;
    double                          m_minSelectionScore;
    bool                            m_requireSmcStructuralValidity;
+   CFreshSweepAdditiveRouter       m_freshSweepRouter;
 
    bool FindEntryFVG(ENUM_FVG_DIR dir,FVGZone &out,int requiredBarIndex=-1);
    double EnforceSpreadFloor(string symbol,double entry,double stopLoss,bool isBuy);
@@ -41,6 +43,8 @@ private:
    TradeSetup BuildSMC(bool forBuy,double confidence,const SetupReasons &reasons);
    bool BuildNonSMC(bool forBuy,ENUM_SELECTED_STRATEGY selected,double confidence,const SetupReasons &reasons,TradeSetup &out);
    TradeSetup BuildAuthoritativeStrategy(bool forBuy);
+   bool BuildFreshSweepSetup(bool forBuy,const MidasFreshSweepCandidate &candidate,
+                             ENUM_FRESH_SWEEP_LANE lane,TradeSetup &out);
 
 public:
    CTradeDecision();
@@ -48,6 +52,9 @@ public:
    TradeSetup GenerateBuySetup();
    TradeSetup GenerateSellSetup();
    void ConfigureSMCStructuralGate(bool requireStructuralValidity);
+   void ConfigureFreshSweepAdditiveRouter(bool enabled,bool enableSingleSwingFallback,
+                                          int maxSignalAgeBars=4,double directionalAdvantage=5.0);
+   void GenerateFreshSweepAdditiveSetups(TradeSetup &buySetup,TradeSetup &sellSetup);
    TradeSetup GetLastSetup()const{return m_lastSetup;}
   };
 
@@ -93,6 +100,14 @@ void CTradeDecision::ConfigureSMCStructuralGate(bool requireStructuralValidity)
    m_requireSmcStructuralValidity=requireStructuralValidity;
   }
 
+void CTradeDecision::ConfigureFreshSweepAdditiveRouter(bool enabled,
+                                                       bool enableSingleSwingFallback,
+                                                       int maxSignalAgeBars,double directionalAdvantage)
+  {
+   m_freshSweepRouter.Configure(m_priceRef,enabled,enableSingleSwingFallback,
+                                maxSignalAgeBars,50,directionalAdvantage);
+  }
+
 TradeSetup CTradeDecision::BuildSMC(bool forBuy,double confidence,const SetupReasons &reasons)
   {TradeSetup setup;ZeroMemory(setup);if(m_priceRef==NULL||m_fvgCtx==NULL)return setup;int requiredFvgBarIndex=-1;if(m_requireSmcStructuralValidity){if(!reasons.smc_structural_valid||!reasons.smc_fvg_causal||reasons.smc_entry_fvg_bar_index<=0)return setup;requiredFvgBarIndex=reasons.smc_entry_fvg_bar_index;}FVGZone entryFVG;if(!FindEntryFVG(forBuy?FVG_BULL:FVG_BEAR,entryFVG,requiredFvgBarIndex))return setup;double atr=m_fvgCtx.candles.GetATR(0);if(atr<=0)return setup;setup.type=forBuy?ORDER_TYPE_BUY:ORDER_TYPE_SELL;setup.entry_top=entryFVG.top;setup.entry_bottom=entryFVG.bottom;setup.invalidation=forBuy?(entryFVG.bottom-0.05*atr):(entryFVG.top+0.05*atr);setup.stop_loss=forBuy?(entryFVG.bottom-m_slBufferATR*atr):(entryFVG.top+m_slBufferATR*atr);setup.stop_loss=EnforceSpreadFloor(m_priceRef.Symbol(),forBuy?setup.entry_top:setup.entry_bottom,setup.stop_loss,forBuy);if((forBuy&&setup.stop_loss>=setup.invalidation)||(!forBuy&&setup.stop_loss<=setup.invalidation))return setup;CTargetSelector::AssignTargets(setup,m_liqCtx,m_priceRef.Symbol(),atr,forBuy?setup.entry_bottom:setup.entry_top);setup.confidence=MathMax(0.0,MathMin(confidence,100.0));setup.creation_time=TimeCurrent();setup.active=true;setup.reasons=reasons;return setup;}
 
@@ -120,6 +135,81 @@ bool CTradeDecision::BuildNonSMC(bool forBuy,ENUM_SELECTED_STRATEGY selected,dou
 
 TradeSetup CTradeDecision::BuildAuthoritativeStrategy(bool forBuy)
   {TradeSetup owned;ZeroMemory(owned);if(m_scoring==NULL||m_priceRef==NULL)return owned;SetupReasons reasons;PopulateStrategyReads(forBuy,reasons);ENUM_SELECTED_STRATEGY selected=STRATEGY_NONE;double selectedScore=0.0;SelectPeerStrategy(forBuy,reasons,selected,selectedScore);if(selected==STRATEGY_NONE||selectedScore<m_minSelectionScore){m_lastSetup=owned;return owned;}reasons.selected_strategy=selected;reasons.selected_strategy_score=selectedScore;if(selected==STRATEGY_SMC){m_scoring.PopulateStructuralValidation(forBuy,reasons);if(m_requireSmcStructuralValidity&&!reasons.smc_structural_valid){owned.type=forBuy?ORDER_TYPE_BUY:ORDER_TYPE_SELL;owned.creation_time=TimeCurrent();owned.reasons=reasons;owned.reasons.smc_failure_reason="Execution gate rejected: "+reasons.smc_failure_reason;m_lastSetup=owned;return owned;}owned=BuildSMC(forBuy,selectedScore,reasons);}else if(!BuildNonSMC(forBuy,selected,selectedScore,reasons,owned)){ZeroMemory(owned);m_lastSetup=owned;return owned;}if(!owned.active){ZeroMemory(owned);m_lastSetup=owned;return owned;}owned.reasons.selected_strategy=selected;owned.reasons.selected_strategy_score=selectedScore;m_lastSetup=owned;return owned;}
+
+bool CTradeDecision::BuildFreshSweepSetup(bool forBuy,
+                                               const MidasFreshSweepCandidate &candidate,
+                                               ENUM_FRESH_SWEEP_LANE lane,
+                                               TradeSetup &out)
+  {
+   ZeroMemory(out);
+   if(!candidate.valid || m_priceRef==NULL || m_liqCtx==NULL ||
+      !(candidate.atr>0.0) || !(candidate.invalidation>0.0))
+      return false;
+
+   const string symbol=m_priceRef.Symbol();
+   const double entry=SymbolInfoDouble(symbol,forBuy?SYMBOL_ASK:SYMBOL_BID);
+   if(!MathIsValidNumber(entry) || entry<=0.0)
+      return false;
+
+   const double stopBuffer=m_slBufferATR*candidate.atr;
+   double stopLoss=forBuy?candidate.invalidation-stopBuffer:
+                          candidate.invalidation+stopBuffer;
+   stopLoss=EnforceSpreadFloor(symbol,entry,stopLoss,forBuy);
+
+   // Reject geometrically invalid candidates before they reach the global
+   // native CRiskEngine validation. This does not weaken or replace that gate.
+   if(forBuy ? !(stopLoss<candidate.invalidation && candidate.invalidation<entry)
+             : !(stopLoss>candidate.invalidation && candidate.invalidation>entry))
+      return false;
+   // StrategyTune candidate caps both fallback families at four ATR of stop
+   // distance. This is an additional entry-quality constraint; native risk
+   // validation and sizing remain authoritative after setup creation.
+   if(MathAbs(entry-stopLoss)/candidate.atr>4.0)
+      return false;
+
+   out.type=forBuy?ORDER_TYPE_BUY:ORDER_TYPE_SELL;
+   out.entry_top=entry;
+   out.entry_bottom=entry;
+   out.invalidation=candidate.invalidation;
+   out.stop_loss=stopLoss;
+   CTargetSelector::AssignTargets(out,m_liqCtx,symbol,candidate.atr,entry);
+   out.confidence=MathMax(0.0,MathMin(candidate.quality,100.0));
+   out.creation_time=TimeCurrent();
+   out.active=true;
+   out.reasons.selected_strategy=(lane==FRESH_SWEEP_SINGLE_SWING
+      ?STRATEGY_FRESH_SWEEP_SINGLE_SWING:STRATEGY_FRESH_SWEEP_CONTINUATION);
+   out.reasons.selected_strategy_score=candidate.quality;
+   out.reasons.bos_confirmed=true;
+   out.reasons.trend_aligned=true;
+   out.reasons.liquidity_swept=candidate.has_sweep;
+   out.reasons.sweep_grade=(ENUM_SWEEP_GRADE)candidate.sweep_grade;
+   out.reasons.bos_strength=candidate.bos_strength;
+   out.reasons.risk_warning=StringFormat(
+      "Research fallback: %s; quality %.1f; sweep_shift=%d; native risk/exits",
+      lane==FRESH_SWEEP_SINGLE_SWING?"single-swing":"continuation",
+      candidate.quality,candidate.sweep_shift);
+   return true;
+  }
+
+void CTradeDecision::GenerateFreshSweepAdditiveSetups(TradeSetup &buySetup,
+                                                       TradeSetup &sellSetup)
+  {
+   ZeroMemory(buySetup);
+   ZeroMemory(sellSetup);
+   MidasFreshSweepCandidate selected;
+   bool forBuy=false;
+   ENUM_FRESH_SWEEP_LANE lane=FRESH_SWEEP_NONE;
+   if(!m_freshSweepRouter.Select(selected,forBuy,lane))
+      return;
+
+   TradeSetup fallback;
+   if(!BuildFreshSweepSetup(forBuy,selected,lane,fallback))
+      return;
+
+   if(forBuy) buySetup=fallback;
+   else       sellSetup=fallback;
+   m_lastSetup=fallback;
+  }
 
 TradeSetup CTradeDecision::GenerateBuySetup(){return BuildAuthoritativeStrategy(true);}TradeSetup CTradeDecision::GenerateSellSetup(){return BuildAuthoritativeStrategy(false);}
 

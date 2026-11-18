@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@92db5d86aedb2030fb48d4f0520515d722b1c1f1
+// Staged EA source snapshot: cirvannaco-png/midas@f9e894e1aff5938bb149316fcd10ab5f3859a1e5
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -215,7 +215,7 @@ enum ENUM_BREAKOUT_CLASS { BREAKOUT_NONE, BREAKOUT_EXPANSION, BREAKOUT_LIQUIDITY
 enum ENUM_REVERSION_CLASS { REVERSION_NONE, REVERSION_VALUE_FADE, REVERSION_LEVEL_REJECTION, REVERSION_TREND_CONFLICT };
 enum ENUM_KEYLEVEL_SOURCE { LEVEL_NONE, LEVEL_SR, LEVEL_ORDER_BLOCK, LEVEL_VALUE_AREA, LEVEL_LIQUIDITY_POOL, LEVEL_PREV_WEEK, LEVEL_SESSION, LEVEL_PSYCHOLOGICAL };
 enum ENUM_KEYLEVEL_REACTION { REACTION_NONE, REACTION_REJECTION, REACTION_BREAK, REACTION_RETEST, REACTION_FAILED_BREAK, REACTION_ACCEPTANCE, REACTION_ABSORPTION };
-enum ENUM_SELECTED_STRATEGY { STRATEGY_NONE, STRATEGY_SMC, STRATEGY_MOMENTUM_BREAKOUT, STRATEGY_MEAN_REVERSION, STRATEGY_KEY_LEVEL };
+enum ENUM_SELECTED_STRATEGY { STRATEGY_NONE, STRATEGY_SMC, STRATEGY_MOMENTUM_BREAKOUT, STRATEGY_MEAN_REVERSION, STRATEGY_KEY_LEVEL, STRATEGY_FRESH_SWEEP_CONTINUATION, STRATEGY_FRESH_SWEEP_SINGLE_SWING };
 enum ENUM_SWEEP_GRADE { SWEEP_GRADE_NONE, SWEEP_GRADE_C, SWEEP_GRADE_B, SWEEP_GRADE_A };
 
 struct ImpulseLeg { bool valid; datetime start_time; datetime end_time; int start_bar; int end_bar; int displacement_bar; double start_price; double end_price; bool bullish; double strength; };
@@ -858,6 +858,8 @@ string CSignalLogger::SelectedStrategyLabel(ENUM_SELECTED_STRATEGY s)
       case STRATEGY_MOMENTUM_BREAKOUT:   return "MomentumBreakout";
       case STRATEGY_MEAN_REVERSION:      return "MeanReversion";
       case STRATEGY_KEY_LEVEL:           return "KeyLevel";
+      case STRATEGY_FRESH_SWEEP_CONTINUATION: return "FreshSweepContinuation";
+      case STRATEGY_FRESH_SWEEP_SINGLE_SWING:  return "FreshSweepSingleSwing";
       default:                           return "None";
      }
   }
@@ -7450,6 +7452,526 @@ public:
 #endif
 //+------------------------------------------------------------------+
 // END INLINED MODULE: includes/Trading/StrategySetupBuilders.mqh
+// BEGIN INLINED MODULE: includes/Trading/FreshSweepAdditiveRouter.mqh
+//+------------------------------------------------------------------+
+//| Trading/FreshSweepAdditiveRouter.mqh                              |
+//| Research port of StrategyTune Midas Fresh-Sweep Additive Router. |
+//| Entry-selection only: sizing, risk, orders and exits stay native. |
+//+------------------------------------------------------------------+
+#ifndef FRESH_SWEEP_ADDITIVE_ROUTER_MQH
+#define FRESH_SWEEP_ADDITIVE_ROUTER_MQH
+
+// already inlined once under include guard: includes/Core/Config.mqh
+// already inlined once under include guard: includes/Core/CandleData.mqh
+
+enum ENUM_FRESH_SWEEP_LANE
+  {
+   FRESH_SWEEP_NONE = 0,
+   FRESH_SWEEP_CONTINUATION,
+   FRESH_SWEEP_SINGLE_SWING
+  };
+
+struct MidasFreshSweepCandidate
+  {
+   bool   valid;
+   double quality;
+   double rank_score;
+   double invalidation;
+   double atr;
+   double rejection_ratio;
+   double sweep_level;
+   double bos_level;
+   int    sweep_shift;
+   int    sweep_grade;
+   double sweep_grade_score;
+   double bos_strength;
+   bool   has_sweep;
+  };
+
+// This router reproduces the StrategyTune v3 entry-selection formulas and
+// completed-bar indexing. It intentionally does NOT reproduce StrategyTune's
+// custom order sizing or custom exits. Native Midas remains the execution owner.
+class CFreshSweepAdditiveRouter
+  {
+private:
+   CCandleData *m_candles;
+   bool         m_enabled;
+   bool         m_enable_single_swing;
+   int          m_max_signal_age_bars;
+   int          m_lookback_bars;
+   double       m_directional_advantage;
+
+   double ATR(int back) const
+     {
+      if(m_candles == NULL) return 0.0;
+      const int period = 14;
+      const int total = m_candles.Total();
+      if(back < 0 || total < back + period + 2) return 0.0;
+
+      double sum = 0.0;
+      for(int i = back; i < back + period; i++)
+        {
+         CandleData c = m_candles.GetCandle(i);
+         CandleData previous = m_candles.GetCandle(i + 1);
+         double tr = MathMax(c.high - c.low,
+                             MathMax(MathAbs(c.high - previous.close),
+                                     MathAbs(c.low - previous.close)));
+         if(!MathIsValidNumber(tr) || tr < 0.0) return 0.0;
+         sum += tr;
+        }
+      return sum / (double)period;
+     }
+
+   double BodyRatio(int shift) const
+     {
+      if(m_candles == NULL) return 0.0;
+      CandleData c = m_candles.GetCandle(shift);
+      double range = c.high - c.low;
+      return (range > 0.0 ? MathAbs(c.close - c.open) / range : 0.0);
+     }
+
+   bool IsSwingHigh(int shift) const
+     {
+      if(m_candles == NULL || shift < 2 || shift + 1 >= m_candles.Total())
+         return false;
+      double value = m_candles.GetCandle(shift).high;
+      return value >= m_candles.GetCandle(shift - 1).high &&
+             value >= m_candles.GetCandle(shift + 1).high;
+     }
+
+   bool IsSwingLow(int shift) const
+     {
+      if(m_candles == NULL || shift < 2 || shift + 1 >= m_candles.Total())
+         return false;
+      double value = m_candles.GetCandle(shift).low;
+      return value <= m_candles.GetCandle(shift - 1).low &&
+             value <= m_candles.GetCandle(shift + 1).low;
+     }
+
+   double TrendSlopeProxyATR() const
+     {
+      const double atr = ATR(1);
+      if(!(atr > 0.0) || m_candles == NULL || m_candles.Total() < 25)
+         return -1.0;
+
+      double fast = 0.0;
+      double slow = 0.0;
+      for(int i = 1; i <= 8; i++)
+         fast += m_candles.GetCandle(i).close;
+      for(int i = 1; i <= 21; i++)
+         slow += m_candles.GetCandle(i).close;
+
+      return MathAbs(fast / 8.0 - slow / 21.0) / atr;
+     }
+
+   MidasFreshSweepCandidate EmptyCandidate() const
+     {
+      MidasFreshSweepCandidate out;
+      ZeroMemory(out);
+      return out;
+     }
+
+   MidasFreshSweepCandidate BuildContinuation(bool forBuy) const
+     {
+      MidasFreshSweepCandidate out = EmptyCandidate();
+      if(m_candles == NULL || m_candles.Total() < 60) return out;
+
+      const double atr = ATR(1);
+      if(!(atr > 0.0)) return out;
+
+      double fast = 0.0;
+      double slow = 0.0;
+      for(int i = 1; i <= 20; i++)
+         fast += m_candles.GetCandle(i).close;
+      for(int i = 1; i <= 50; i++)
+         slow += m_candles.GetCandle(i).close;
+      fast /= 20.0;
+      slow /= 50.0;
+
+      const double close1 = m_candles.GetCandle(1).close;
+      const double close2 = m_candles.GetCandle(2).close;
+      if(forBuy ? !(close1 > fast && fast > slow)
+                : !(close1 < fast && fast < slow))
+         return out;
+
+      const double body = BodyRatio(1);
+      const double range = m_candles.GetCandle(1).high -
+                           m_candles.GetCandle(1).low;
+      if(body < 0.35 || range / atr < 0.45) return out;
+
+      bool touched = false;
+      for(int i = 1; i <= 8; i++)
+        {
+         CandleData c = m_candles.GetCandle(i);
+         if(forBuy)
+           {
+            if(c.low <= fast + 0.20 * atr &&
+               c.high >= fast - 0.20 * atr)
+               touched = true;
+           }
+         else
+           {
+            if(c.high >= fast - 0.20 * atr &&
+               c.low <= fast + 0.20 * atr)
+               touched = true;
+           }
+        }
+      if(!touched) return out;
+
+      double level = forBuy ? -DBL_MAX : DBL_MAX;
+      for(int i = 2; i <= 5; i++)
+        {
+         CandleData c = m_candles.GetCandle(i);
+         if(forBuy) level = MathMax(level, c.high);
+         else       level = MathMin(level, c.low);
+        }
+
+      const bool crossed = forBuy ? (close1 > level && close2 <= level)
+                                  : (close1 < level && close2 >= level);
+      if(!crossed) return out;
+
+      const double strength = MathMax(0.0,
+         MathMin(1.0, MathAbs(close1 - level) / (0.25 * atr)));
+      const double quality = 100.0 *
+         (0.45 * MathMin(body / 0.7, 1.0) +
+          0.35 * strength +
+          0.20 * MathMin(MathAbs(close1 - fast) / atr, 1.0));
+      if(quality < 48.0) return out;
+
+      double invalidation = forBuy ? m_candles.GetCandle(1).low
+                                   : m_candles.GetCandle(1).high;
+      for(int i = 2; i <= 5; i++)
+        {
+         CandleData c = m_candles.GetCandle(i);
+         if(forBuy) invalidation = MathMin(invalidation, c.low);
+         else       invalidation = MathMax(invalidation, c.high);
+        }
+
+      out.valid = true;
+      out.quality = quality;
+      out.rank_score = NormalizeCandidateScore(quality, 48.0);
+      out.invalidation = invalidation;
+      out.atr = atr;
+      out.rejection_ratio = body;
+      out.bos_level = level;
+      out.bos_strength = strength;
+      out.sweep_grade = 0;
+      out.sweep_grade_score = 0.0;
+      out.sweep_shift = 0;
+      out.has_sweep = false;
+      return out;
+     }
+
+   MidasFreshSweepCandidate BuildSingleSwing(bool forBuy) const
+     {
+      MidasFreshSweepCandidate out = EmptyCandidate();
+      if(m_candles == NULL || m_candles.Total() < 60) return out;
+
+      const double atr = ATR(1);
+      const double trendSlope = TrendSlopeProxyATR();
+      if(!(atr > 0.0) || trendSlope < 0.0) return out;
+
+      // StrategyTune defaults: adaptiveFallbackPD=true, range threshold=0.20,
+      // transition band [0.20,0.45) is rejected, trend slope >=0.45 uses
+      // a 1.5 ATR signal-range ceiling. Range-like bars (<0.20) use a
+      // midpoint premium/discount check and a 10 ATR range ceiling.
+      if(!IsSingleSwingSlopeAllowed(trendSlope)) return out;
+      const bool rangeRegime = (trendSlope < 0.20);
+
+      const int maxPivot = MathMin(MathMin(m_lookback_bars, 45),
+                                   m_candles.Total() - 2);
+      const int maxAge = 8; // min(fallbackMaxSweepBars=8, maxSweepAgeBars=8 + 2)
+      MidasFreshSweepCandidate best = EmptyCandidate();
+
+      for(int pivot = 3; pivot <= maxPivot; pivot++)
+        {
+         if(forBuy ? !IsSwingLow(pivot) : !IsSwingHigh(pivot))
+            continue;
+
+         const double level = forBuy ? m_candles.GetCandle(pivot).low
+                                     : m_candles.GetCandle(pivot).high;
+         const int oldestShift = MathMax(2, pivot - maxAge);
+
+         for(int sw = pivot - 1; sw >= oldestShift; sw--)
+           {
+            if(!IsSignalAgeAllowed(sw, m_max_signal_age_bars))
+               continue;
+
+            CandleData sweep = m_candles.GetCandle(sw);
+            const bool swept = forBuy ? (sweep.low < level && sweep.close > level)
+                                      : (sweep.high > level && sweep.close < level);
+            if(!swept) continue;
+
+            const double wick = forBuy ? level - sweep.low : sweep.high - level;
+            const double reclaim = forBuy ? sweep.close - level : level - sweep.close;
+            if(!(wick > 0.0)) continue;
+
+            const double rejection = MathMax(0.0,
+               MathMin(1.0, reclaim / wick));
+            if(rejection < 0.20 * 0.65) continue;
+
+            double micro = forBuy ? -DBL_MAX : DBL_MAX;
+            for(int k = 2; k < sw; k++)
+              {
+               CandleData c = m_candles.GetCandle(k);
+               if(forBuy) micro = MathMax(micro, c.high);
+               else       micro = MathMin(micro, c.low);
+              }
+            if(!MathIsValidNumber(micro) ||
+               (forBuy && micro == -DBL_MAX) ||
+               (!forBuy && micro == DBL_MAX))
+               continue;
+
+            CandleData signal = m_candles.GetCandle(1);
+            CandleData previous = m_candles.GetCandle(2);
+            const bool crossed = forBuy
+               ? (signal.close > micro && previous.close <= micro &&
+                  signal.close > signal.open)
+               : (signal.close < micro && previous.close >= micro &&
+                  signal.close < signal.open);
+            if(!crossed) continue;
+
+            const double body = BodyRatio(1);
+            const double range = signal.high - signal.low;
+            const double rangeATR = range / atr;
+            const double effectiveRangeCap = rangeRegime ? 10.0 : 1.5;
+            if(body < 0.40 * 0.75 || rangeATR < 0.55 ||
+               rangeATR > effectiveRangeCap)
+               continue;
+
+            // Adaptive fallback PD is applied only in range-like conditions.
+            if(rangeRegime)
+              {
+               double rangeHigh = -DBL_MAX;
+               double rangeLow = DBL_MAX;
+               const int rangeLimit = MathMin(40, m_candles.Total() - 2);
+               for(int k = 2; k <= rangeLimit; k++)
+                 {
+                  CandleData c = m_candles.GetCandle(k);
+                  rangeHigh = MathMax(rangeHigh, c.high);
+                  rangeLow = MathMin(rangeLow, c.low);
+                 }
+               if(!(rangeHigh > rangeLow)) continue;
+               const double midpoint = (rangeHigh + rangeLow) / 2.0;
+               const double price = m_candles.GetCandle(1).close;
+               if(forBuy ? (price > midpoint) : (price < midpoint))
+                  continue;
+              }
+
+            const double breakQ = MathMax(0.0,
+               MathMin(1.0, MathAbs(signal.close - micro) / (0.25 * atr)));
+            const double rejectQ = MathMax(0.0,
+               MathMin(1.0, rejection / 0.65));
+            const double bodyQ = MathMax(0.0,
+               MathMin(1.0, body / 0.65));
+            const double quality = 100.0 *
+               (0.35 * rejectQ + 0.40 * breakQ + 0.25 * bodyQ);
+            if(quality < 55.0) continue;
+
+            MidasFreshSweepCandidate candidate = EmptyCandidate();
+            candidate.valid = true;
+            candidate.quality = quality;
+            candidate.rank_score = NormalizeCandidateScore(quality, 55.0);
+            candidate.invalidation = forBuy ? sweep.low : sweep.high;
+            candidate.atr = atr;
+            candidate.rejection_ratio = rejection;
+            candidate.sweep_level = level;
+            candidate.bos_level = signal.close;
+            candidate.sweep_shift = sw;
+            candidate.has_sweep = true;
+
+            const double sweepATR = ATR(sw);
+            if(!(sweepATR > 0.0)) continue;
+            const double sweepPenATR = wick / sweepATR;
+            const double shapeScore =
+               (sweepPenATR >= 0.03 && sweepPenATR <= 0.60)
+               ? 1.0
+               : MathMax(0.0, 1.0 - MathAbs(sweepPenATR - 0.30) / 0.60);
+
+            const int followIdx = sw - 1;
+            bool followThrough = false;
+            if(followIdx >= 1)
+              {
+               const double followATR = ATR(followIdx);
+               CandleData follow = m_candles.GetCandle(followIdx);
+               const double followRange = follow.high - follow.low;
+               const bool followDirectional = forBuy
+                  ? (follow.close > follow.open)
+                  : (follow.close < follow.open);
+               const double followBody = (followRange > 0.0
+                  ? MathAbs(follow.close - follow.open) / followRange : 0.0);
+               const double oppositeWick = forBuy
+                  ? follow.open - follow.low
+                  : follow.high - follow.open;
+               followThrough = followDirectional && followATR > 0.0 &&
+                  followRange / followATR >= 1.2 && followBody >= 0.6 &&
+                  oppositeWick <= 0.3 * followRange;
+              }
+
+            candidate.sweep_grade_score = MathMax(0.0, MathMin(1.0,
+               0.4 * rejection + 0.3 * shapeScore +
+               0.3 * (followThrough ? 1.0 : 0.0)));
+            candidate.sweep_grade = (candidate.sweep_grade_score >= 0.70
+               ? 3 : (candidate.sweep_grade_score >= 0.40 ? 2 : 1));
+
+            const double bosBreak = forBuy
+               ? signal.close - micro : micro - signal.close;
+            const double bosDistScore = MathMax(0.0,
+               MathMin(bosBreak / (0.5 * atr), 1.0));
+            candidate.bos_strength = MathMax(0.0,
+               MathMin(0.6 * bosDistScore + 0.4 * body, 1.0));
+
+            if(!best.valid || candidate.quality > best.quality)
+               best = candidate;
+           }
+        }
+      return best;
+     }
+
+public:
+                     CFreshSweepAdditiveRouter()
+      : m_candles(NULL), m_enabled(false), m_enable_single_swing(false),
+        m_max_signal_age_bars(4), m_lookback_bars(50),
+        m_directional_advantage(5.0)
+     {
+     }
+
+   void Configure(CCandleData *candles, bool enabled,
+                  bool enableSingleSwingFallback, int maxSignalAgeBars = 4,
+                  int lookbackBars = 50, double directionalAdvantage = 5.0)
+     {
+      m_candles = candles;
+      m_enabled = enabled;
+      m_enable_single_swing = enableSingleSwingFallback;
+      m_max_signal_age_bars = MathMax(1, MathMin(20, maxSignalAgeBars));
+      m_lookback_bars = MathMax(10, MathMin(100, lookbackBars));
+      m_directional_advantage = (directionalAdvantage >= 0.0 &&
+                                 directionalAdvantage <= 100.0)
+                                ? directionalAdvantage : 5.0;
+     }
+
+   static double NormalizeCandidateScore(double quality, double floor)
+     {
+      const double span = MathMax(1.0, 100.0 - floor);
+      return MathMax(0.0,
+         MathMin(100.0, 100.0 * (quality - floor) / span));
+     }
+
+   static bool IsSignalAgeAllowed(int shift, int maxAgeBars)
+     {
+      return shift >= 2 && maxAgeBars >= 2 && shift <= maxAgeBars;
+     }
+
+   static bool IsSingleSwingSlopeAllowed(double trendSlopeATR)
+     {
+      // StrategyTune adaptiveFallbackPD: range <0.20, reject [0.20,0.45),
+      // trend >=0.45. Negative/invalid slope values fail closed.
+      return trendSlopeATR >= 0.0 &&
+             (trendSlopeATR < 0.20 || trendSlopeATR >= 0.45);
+     }
+
+   static bool SelectDirection(const MidasFreshSweepCandidate &buy,
+                               const MidasFreshSweepCandidate &sell,
+                               double directionalAdvantage,
+                               MidasFreshSweepCandidate &chosen,
+                               bool &forBuy)
+     {
+      ZeroMemory(chosen);
+      forBuy = false;
+      if(!buy.valid && !sell.valid) return false;
+      if(buy.valid && !sell.valid)
+        {
+         chosen = buy;
+         forBuy = true;
+         return true;
+        }
+      if(sell.valid && !buy.valid)
+        {
+         chosen = sell;
+         forBuy = false;
+         return true;
+        }
+
+      const double delta = buy.rank_score - sell.rank_score;
+      if(delta >= directionalAdvantage)
+        {
+         chosen = buy;
+         forBuy = true;
+         return true;
+        }
+      if(-delta >= directionalAdvantage)
+        {
+         chosen = sell;
+         forBuy = false;
+         return true;
+        }
+      return false;
+     }
+
+   // Mirrors the StrategyTune v3 source exactly: continuation has priority.
+   // If it cannot select a direction (including a close opposing-candidate
+   // conflict), enabled single-swing candidates may be considered.
+   static bool SelectLanes(const MidasFreshSweepCandidate &continuationBuy,
+                           const MidasFreshSweepCandidate &continuationSell,
+                           const MidasFreshSweepCandidate &singleSwingBuy,
+                           const MidasFreshSweepCandidate &singleSwingSell,
+                           bool enableSingleSwingFallback,
+                           double directionalAdvantage,
+                           MidasFreshSweepCandidate &chosen,
+                           bool &forBuy,
+                           ENUM_FRESH_SWEEP_LANE &lane)
+     {
+      lane = FRESH_SWEEP_NONE;
+      if(SelectDirection(continuationBuy, continuationSell,
+                         directionalAdvantage, chosen, forBuy))
+        {
+         lane = FRESH_SWEEP_CONTINUATION;
+         return true;
+        }
+
+      if(!enableSingleSwingFallback)
+         return false;
+
+      if(SelectDirection(singleSwingBuy, singleSwingSell,
+                         directionalAdvantage, chosen, forBuy))
+        {
+         lane = FRESH_SWEEP_SINGLE_SWING;
+         return true;
+        }
+      return false;
+     }
+
+   bool Select(MidasFreshSweepCandidate &chosen,
+               bool &forBuy,
+               ENUM_FRESH_SWEEP_LANE &lane) const
+     {
+      ZeroMemory(chosen);
+      forBuy = false;
+      lane = FRESH_SWEEP_NONE;
+      if(!m_enabled || m_candles == NULL || m_candles.Total() < 60)
+         return false;
+
+      MidasFreshSweepCandidate continuationBuy = BuildContinuation(true);
+      MidasFreshSweepCandidate continuationSell = BuildContinuation(false);
+      MidasFreshSweepCandidate singleSwingBuy = EmptyCandidate();
+      MidasFreshSweepCandidate singleSwingSell = EmptyCandidate();
+
+      if(m_enable_single_swing)
+        {
+         singleSwingBuy = BuildSingleSwing(true);
+         singleSwingSell = BuildSingleSwing(false);
+        }
+
+      return SelectLanes(continuationBuy, continuationSell,
+                         singleSwingBuy, singleSwingSell,
+                         m_enable_single_swing, m_directional_advantage,
+                         chosen, forBuy, lane);
+     }
+  };
+
+#endif
+//+------------------------------------------------------------------+
+// END INLINED MODULE: includes/Trading/FreshSweepAdditiveRouter.mqh
 // already inlined once under include guard: includes/Trading/Targets.mqh
 // BEGIN INLINED MODULE: includes/Trading/EnvironmentStrategyMemory.mqh
 //+------------------------------------------------------------------+
@@ -7507,6 +8029,7 @@ private:
    double                          m_fvgMaxDistATR;
    double                          m_minSelectionScore;
    bool                            m_requireSmcStructuralValidity;
+   CFreshSweepAdditiveRouter       m_freshSweepRouter;
 
    bool FindEntryFVG(ENUM_FVG_DIR dir,FVGZone &out,int requiredBarIndex=-1);
    double EnforceSpreadFloor(string symbol,double entry,double stopLoss,bool isBuy);
@@ -7515,6 +8038,8 @@ private:
    TradeSetup BuildSMC(bool forBuy,double confidence,const SetupReasons &reasons);
    bool BuildNonSMC(bool forBuy,ENUM_SELECTED_STRATEGY selected,double confidence,const SetupReasons &reasons,TradeSetup &out);
    TradeSetup BuildAuthoritativeStrategy(bool forBuy);
+   bool BuildFreshSweepSetup(bool forBuy,const MidasFreshSweepCandidate &candidate,
+                             ENUM_FRESH_SWEEP_LANE lane,TradeSetup &out);
 
 public:
    CTradeDecision();
@@ -7522,6 +8047,9 @@ public:
    TradeSetup GenerateBuySetup();
    TradeSetup GenerateSellSetup();
    void ConfigureSMCStructuralGate(bool requireStructuralValidity);
+   void ConfigureFreshSweepAdditiveRouter(bool enabled,bool enableSingleSwingFallback,
+                                          int maxSignalAgeBars=4,double directionalAdvantage=5.0);
+   void GenerateFreshSweepAdditiveSetups(TradeSetup &buySetup,TradeSetup &sellSetup);
    TradeSetup GetLastSetup()const{return m_lastSetup;}
   };
 
@@ -7567,6 +8095,14 @@ void CTradeDecision::ConfigureSMCStructuralGate(bool requireStructuralValidity)
    m_requireSmcStructuralValidity=requireStructuralValidity;
   }
 
+void CTradeDecision::ConfigureFreshSweepAdditiveRouter(bool enabled,
+                                                       bool enableSingleSwingFallback,
+                                                       int maxSignalAgeBars,double directionalAdvantage)
+  {
+   m_freshSweepRouter.Configure(m_priceRef,enabled,enableSingleSwingFallback,
+                                maxSignalAgeBars,50,directionalAdvantage);
+  }
+
 TradeSetup CTradeDecision::BuildSMC(bool forBuy,double confidence,const SetupReasons &reasons)
   {TradeSetup setup;ZeroMemory(setup);if(m_priceRef==NULL||m_fvgCtx==NULL)return setup;int requiredFvgBarIndex=-1;if(m_requireSmcStructuralValidity){if(!reasons.smc_structural_valid||!reasons.smc_fvg_causal||reasons.smc_entry_fvg_bar_index<=0)return setup;requiredFvgBarIndex=reasons.smc_entry_fvg_bar_index;}FVGZone entryFVG;if(!FindEntryFVG(forBuy?FVG_BULL:FVG_BEAR,entryFVG,requiredFvgBarIndex))return setup;double atr=m_fvgCtx.candles.GetATR(0);if(atr<=0)return setup;setup.type=forBuy?ORDER_TYPE_BUY:ORDER_TYPE_SELL;setup.entry_top=entryFVG.top;setup.entry_bottom=entryFVG.bottom;setup.invalidation=forBuy?(entryFVG.bottom-0.05*atr):(entryFVG.top+0.05*atr);setup.stop_loss=forBuy?(entryFVG.bottom-m_slBufferATR*atr):(entryFVG.top+m_slBufferATR*atr);setup.stop_loss=EnforceSpreadFloor(m_priceRef.Symbol(),forBuy?setup.entry_top:setup.entry_bottom,setup.stop_loss,forBuy);if((forBuy&&setup.stop_loss>=setup.invalidation)||(!forBuy&&setup.stop_loss<=setup.invalidation))return setup;CTargetSelector::AssignTargets(setup,m_liqCtx,m_priceRef.Symbol(),atr,forBuy?setup.entry_bottom:setup.entry_top);setup.confidence=MathMax(0.0,MathMin(confidence,100.0));setup.creation_time=TimeCurrent();setup.active=true;setup.reasons=reasons;return setup;}
 
@@ -7594,6 +8130,81 @@ bool CTradeDecision::BuildNonSMC(bool forBuy,ENUM_SELECTED_STRATEGY selected,dou
 
 TradeSetup CTradeDecision::BuildAuthoritativeStrategy(bool forBuy)
   {TradeSetup owned;ZeroMemory(owned);if(m_scoring==NULL||m_priceRef==NULL)return owned;SetupReasons reasons;PopulateStrategyReads(forBuy,reasons);ENUM_SELECTED_STRATEGY selected=STRATEGY_NONE;double selectedScore=0.0;SelectPeerStrategy(forBuy,reasons,selected,selectedScore);if(selected==STRATEGY_NONE||selectedScore<m_minSelectionScore){m_lastSetup=owned;return owned;}reasons.selected_strategy=selected;reasons.selected_strategy_score=selectedScore;if(selected==STRATEGY_SMC){m_scoring.PopulateStructuralValidation(forBuy,reasons);if(m_requireSmcStructuralValidity&&!reasons.smc_structural_valid){owned.type=forBuy?ORDER_TYPE_BUY:ORDER_TYPE_SELL;owned.creation_time=TimeCurrent();owned.reasons=reasons;owned.reasons.smc_failure_reason="Execution gate rejected: "+reasons.smc_failure_reason;m_lastSetup=owned;return owned;}owned=BuildSMC(forBuy,selectedScore,reasons);}else if(!BuildNonSMC(forBuy,selected,selectedScore,reasons,owned)){ZeroMemory(owned);m_lastSetup=owned;return owned;}if(!owned.active){ZeroMemory(owned);m_lastSetup=owned;return owned;}owned.reasons.selected_strategy=selected;owned.reasons.selected_strategy_score=selectedScore;m_lastSetup=owned;return owned;}
+
+bool CTradeDecision::BuildFreshSweepSetup(bool forBuy,
+                                               const MidasFreshSweepCandidate &candidate,
+                                               ENUM_FRESH_SWEEP_LANE lane,
+                                               TradeSetup &out)
+  {
+   ZeroMemory(out);
+   if(!candidate.valid || m_priceRef==NULL || m_liqCtx==NULL ||
+      !(candidate.atr>0.0) || !(candidate.invalidation>0.0))
+      return false;
+
+   const string symbol=m_priceRef.Symbol();
+   const double entry=SymbolInfoDouble(symbol,forBuy?SYMBOL_ASK:SYMBOL_BID);
+   if(!MathIsValidNumber(entry) || entry<=0.0)
+      return false;
+
+   const double stopBuffer=m_slBufferATR*candidate.atr;
+   double stopLoss=forBuy?candidate.invalidation-stopBuffer:
+                          candidate.invalidation+stopBuffer;
+   stopLoss=EnforceSpreadFloor(symbol,entry,stopLoss,forBuy);
+
+   // Reject geometrically invalid candidates before they reach the global
+   // native CRiskEngine validation. This does not weaken or replace that gate.
+   if(forBuy ? !(stopLoss<candidate.invalidation && candidate.invalidation<entry)
+             : !(stopLoss>candidate.invalidation && candidate.invalidation>entry))
+      return false;
+   // StrategyTune candidate caps both fallback families at four ATR of stop
+   // distance. This is an additional entry-quality constraint; native risk
+   // validation and sizing remain authoritative after setup creation.
+   if(MathAbs(entry-stopLoss)/candidate.atr>4.0)
+      return false;
+
+   out.type=forBuy?ORDER_TYPE_BUY:ORDER_TYPE_SELL;
+   out.entry_top=entry;
+   out.entry_bottom=entry;
+   out.invalidation=candidate.invalidation;
+   out.stop_loss=stopLoss;
+   CTargetSelector::AssignTargets(out,m_liqCtx,symbol,candidate.atr,entry);
+   out.confidence=MathMax(0.0,MathMin(candidate.quality,100.0));
+   out.creation_time=TimeCurrent();
+   out.active=true;
+   out.reasons.selected_strategy=(lane==FRESH_SWEEP_SINGLE_SWING
+      ?STRATEGY_FRESH_SWEEP_SINGLE_SWING:STRATEGY_FRESH_SWEEP_CONTINUATION);
+   out.reasons.selected_strategy_score=candidate.quality;
+   out.reasons.bos_confirmed=true;
+   out.reasons.trend_aligned=true;
+   out.reasons.liquidity_swept=candidate.has_sweep;
+   out.reasons.sweep_grade=(ENUM_SWEEP_GRADE)candidate.sweep_grade;
+   out.reasons.bos_strength=candidate.bos_strength;
+   out.reasons.risk_warning=StringFormat(
+      "Research fallback: %s; quality %.1f; sweep_shift=%d; native risk/exits",
+      lane==FRESH_SWEEP_SINGLE_SWING?"single-swing":"continuation",
+      candidate.quality,candidate.sweep_shift);
+   return true;
+  }
+
+void CTradeDecision::GenerateFreshSweepAdditiveSetups(TradeSetup &buySetup,
+                                                       TradeSetup &sellSetup)
+  {
+   ZeroMemory(buySetup);
+   ZeroMemory(sellSetup);
+   MidasFreshSweepCandidate selected;
+   bool forBuy=false;
+   ENUM_FRESH_SWEEP_LANE lane=FRESH_SWEEP_NONE;
+   if(!m_freshSweepRouter.Select(selected,forBuy,lane))
+      return;
+
+   TradeSetup fallback;
+   if(!BuildFreshSweepSetup(forBuy,selected,lane,fallback))
+      return;
+
+   if(forBuy) buySetup=fallback;
+   else       sellSetup=fallback;
+   m_lastSetup=fallback;
+  }
 
 TradeSetup CTradeDecision::GenerateBuySetup(){return BuildAuthoritativeStrategy(true);}TradeSetup CTradeDecision::GenerateSellSetup(){return BuildAuthoritativeStrategy(false);}
 
@@ -14376,6 +14987,12 @@ input group "SMC Structural Gate (research)"
 input bool InpRequireSMCStructuralValidity=false; // OFF until matched ablation and OOS evidence support promotion
 input group "Strategy Selection (v2.15) - measured, NOT acted on"
 input double InpMinSelectionScore=60.0;
+input group "Fresh-Sweep Additive Router (research candidate; disabled by default)"
+input bool InpEnableFreshSweepAdditiveRouter=false; // only consulted when both native directional setups are inactive
+input bool InpFreshSweepEnableSingleSwingFallback=false; // mirrors StrategyTune candidate default
+input int InpFreshSweepMaxSignalAgeBars=4; // closed-bar sweep age, matching StrategyTune v3
+input double InpFreshSweepDirectionalAdvantage=5.0; // normalized lane-score separation
+
 input group "Adaptive Environment Memory"
 input int InpEnvironmentMemoryMinSample=30;
 input double InpEnvironmentMemoryBonus=2.0;
@@ -15106,7 +15723,7 @@ int OnInit()
       Print("Midas: direction-agnostic D1/H4/H1/M30/M15/M5/M1 scoring enabled; matched validation is required before production activation.");
      }
    g_scoring.Init(g_trendCtx,g_bosCtx,g_liqCtx,g_fvgCtx,g_chartCtx,&g_chartCtx.candles);g_scoring.ConfigureMTFStructureAlignment(InpRequireMtfStructureAlignment,InpMtfMaxBosAgeBars);g_scoring.ConfigureInducement(InpImpulseLookbackBars,InpImpulseATRMult,InpImpulseBodyRatio,InpEqualTolATR,InpMaxLegExtend,InpRequirePremiumDiscount,InpRequireDistributionPhase,InpPhaseRangeLookback,InpPhaseCompressionATRMult);g_scoring.ConfigureVolumeFibonacci(InpRequireVolumeConfirmation,InpRVOLThreshold,InpRequireFibonacciZone,InpFibZoneMinPct,InpFibZoneMaxPct);g_scoring.ConfigureValueArea(InpRequireValueAreaLocation,InpBlockValueAreaContradictions);g_scoring.ConfigureHtfOrderBlock(g_htfObCtx,InpRequireHtfOB,InpOBDistATRMax);g_scoring.ConfigureVolatilityRegime(InpBlockLowVolRegime,InpVolRegimeLookback,InpVolRegimeLowPct,InpVolRegimeHighPct);g_scoring.ConfigureSessionFilter(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_operatorSessionFilter.Configure(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_scoring.ConfigureSweepQuality(InpRequireMinSweepGrade,(ENUM_SWEEP_GRADE)InpMinSweepGrade,InpRequireFreshSetup,InpMaxBarsSinceBOS);g_scoring.ConfigureChaseFilter(InpRequireChaseFilter,InpMaxChaseDistATR);g_scoring.ConfigureFVGProximity(InpFVGMaxDistATR);g_scoring.ConfigureLearnedDiagnostics(InpDiagContradictionWeight,InpDiagEnvWeight,InpDiagExecWeight);g_scoring.ConfigureStrategyDiagnostics(InpMomentumBreakoutRecencyBars,InpBreakoutLiqOverlapBars,InpBreakoutExtensionLookbackBars,InpBreakoutExhaustionATRMult,InpMomentumLookbackBars);g_scoring.ConfigureMeanReversionDiagnostics(InpReversionMinStretchATR,InpReversionSRZoneATRTolerance,InpReversionWickRejectionRatio,InpReversionLiqRecencyBars,InpReversionTrendConflictRecencyBars,InpReversionTrendConflictMinStrength);g_scoring.ConfigureKeyLevelDiagnostics(InpKeyLevelLookbackBars,InpKeyLevelSearchATRMax,InpKeyLevelTouchToleranceATRMult,InpKeyLevelAbsorptionMinTouches,InpKeyLevelWickRejectionRatio,InpKeyLevelRoundStep);g_scoring.ConfigureStrategySelection(InpMinSelectionScore);
-   g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride);g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
+   g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_decision.ConfigureFreshSweepAdditiveRouter(InpEnableFreshSweepAdditiveRouter,InpFreshSweepEnableSingleSwingFallback,InpFreshSweepMaxSignalAgeBars,InpFreshSweepDirectionalAdvantage);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride);g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
    if(StringLen(InpConfigSyncEndpoint)>0){g_configSync.Init(_Symbol,InpConfigSyncEndpoint,InpBridgeApiKey,InpWeightSetVersion,InpWebRequestTimeoutMs);EventSetTimer(MathMax(60,InpConfigSyncPollMinutes*60));}g_tracker.ConfigurePublishing(&g_publisher,InpWeightSetVersion);g_portfolio.Init(g_activeRiskLimits.maxPortfolioRiskPercent,g_activeRiskLimits.maxPositionsPerSymbol,g_activeRiskLimits.maxPositionsPerGroup,InpMagicNumber,&g_risk);g_riskGuard.Init(_Symbol,g_activeRiskLimits.maxDailyLossPercent,g_activeRiskLimits.maxDrawdownPercent,g_activeRiskLimits.deriskStartPercent,g_activeRiskLimits.deriskFloor,InpEnableProgressiveDailyLossDeRisk);if(InpUseNewsFilter)g_newsFilter.Load(InpNewsFilterFile,InpNewsMinutesBefore,InpNewsMinutesAfter);g_scoring.ConfigureNewsAwareness(GetPointer(g_newsFilter),InpNewsWarnMinutesBefore,InpNewsWarnMinutesAfter,InpNewsWarnMultiplier);g_recovery.Init(&g_store,&g_orders,InpMagicNumber,_Symbol);int restored=g_recovery.Recover();if(restored>0)PrintFormat("MedisTouch EA: recovery restored %d live trade(s).",restored);TradeDecisionRecord prior[];int n=g_store.LoadAll(prior);long maxId=0;for(int i=0;i<n;i++)if(prior[i].decision_id>maxId)maxId=prior[i].decision_id;if(maxId>0)g_router.SeedNextId(maxId+1);
    if(InpEnableExecution && g_executionLedger.Ready())
      {
@@ -15175,7 +15792,7 @@ void OnTimer()
      }
   }
 void CheckSignalLifecycle(double atr){if(g_lifecycleDecisionId==0)return;bool filled;double fillPrice;datetime fillTime;int barsToFill;if(!g_tracker.GetFillState(g_lifecycleCreationTime,g_lifecycleDecisionId,filled,fillPrice,fillTime,barsToFill)){g_lifecycleDecisionId=0;return;}if(filled){g_lifecycleDecisionId=0;return;}bool buy=g_lifecycleSetup.type==ORDER_TYPE_BUY;int barsSince=iBarShift(_Symbol,_Period,g_lifecycleCreationTime,false);if(barsSince>=InpSignalExpiryBars){if(g_lifecycleStatus!="expired"){g_publisher.PublishStatusUpdate(g_lifecycleDecisionId,"expired",StringFormat("Unfilled for %d execution bars",barsSince));g_lifecycleStatus="expired";}g_lifecycleDecisionId=0;return;}double opposite=g_scoring.CalculateConfidence(!buy);if(opposite>=InpInvalidateOpposingConfidence){if(g_lifecycleStatus!="invalidated"){g_publisher.PublishStatusUpdate(g_lifecycleDecisionId,"invalidated",StringFormat("Opposing confidence %.0f",opposite));g_lifecycleStatus="invalidated";}g_lifecycleDecisionId=0;return;}if(atr>0){double entry=ResolveExecutionEntry(g_lifecycleSetup);double price=buy?SymbolInfoDouble(_Symbol,SYMBOL_ASK):SymbolInfoDouble(_Symbol,SYMBOL_BID);double drift=MathAbs(price-entry)/atr;bool wrong=buy?(price>entry):(price<entry);if(wrong&&drift>=InpSignalStaleChaseATR){if(g_lifecycleStatus!="stale"){g_publisher.PublishStatusUpdate(g_lifecycleDecisionId,"stale",StringFormat("Price drifted %.2f ATR past entry",drift));g_lifecycleStatus="stale";}}else if(g_lifecycleStatus=="stale"&&drift<InpSignalStaleChaseATR*0.5){g_publisher.PublishStatusUpdate(g_lifecycleDecisionId,"valid","Price returned toward entry");g_lifecycleStatus="valid";}}}
-void OnTick(){g_testerDealExport.ObserveSpread(_Symbol);g_monitor.OnTickCheck();g_dailyTradeTarget.OnTick();g_pool.DetectAll();if(g_chartCtx==NULL||!g_chartCtx.candles.IsReady())return;double atr=g_chartCtx.candles.GetATR(0);g_positions.OnTick(atr);g_orders.Prune();g_riskGuard.OnTick();RefreshTradeControlPanel();if(g_emergencyStop)return;if(InpPublishLifecycleUpdates)CheckSignalLifecycle(atr);datetime barTime=iTime(_Symbol,_Period,0);bool isNewBar=(barTime!=g_lastBarTime);g_lastBarTime=barTime;if(!isNewBar)return;if(InpTrackOutcomes)g_tracker.Update(g_chartCtx);string haltReason;if(g_riskGuard.IsHardHalted(haltReason))return;if(g_riskGuard.IsDailyLossLimitHit(haltReason))return;string newsReason;if(InpUseNewsFilter&&g_newsFilter.IsLocked(newsReason))return;if(!IsConfiguredSessionAllowed()){if(TimeCurrent()-g_lastSessionBlockLog>=900){g_execAudit.Log("SESSION_BLOCK","new automated entries suppressed outside configured session windows");g_lastSessionBlockLog=TimeCurrent();}return;}g_dailyTradeTarget.LogSearchProgress();TradeSetup buySetup=g_decision.GenerateBuySetup();TradeSetup sellSetup=g_decision.GenerateSellSetup();if(InpLogSignals){if(buySetup.reasons.selected_strategy==STRATEGY_SMC)g_logger.LogSMCStructure(buySetup,_Symbol,InpFVGTF);if(sellSetup.reasons.selected_strategy==STRATEGY_SMC)g_logger.LogSMCStructure(sellSetup,_Symbol,InpFVGTF);}
+void OnTick(){g_testerDealExport.ObserveSpread(_Symbol);g_monitor.OnTickCheck();g_dailyTradeTarget.OnTick();g_pool.DetectAll();if(g_chartCtx==NULL||!g_chartCtx.candles.IsReady())return;double atr=g_chartCtx.candles.GetATR(0);g_positions.OnTick(atr);g_orders.Prune();g_riskGuard.OnTick();RefreshTradeControlPanel();if(g_emergencyStop)return;if(InpPublishLifecycleUpdates)CheckSignalLifecycle(atr);datetime barTime=iTime(_Symbol,_Period,0);bool isNewBar=(barTime!=g_lastBarTime);g_lastBarTime=barTime;if(!isNewBar)return;if(InpTrackOutcomes)g_tracker.Update(g_chartCtx);string haltReason;if(g_riskGuard.IsHardHalted(haltReason))return;if(g_riskGuard.IsDailyLossLimitHit(haltReason))return;string newsReason;if(InpUseNewsFilter&&g_newsFilter.IsLocked(newsReason))return;if(!IsConfiguredSessionAllowed()){if(TimeCurrent()-g_lastSessionBlockLog>=900){g_execAudit.Log("SESSION_BLOCK","new automated entries suppressed outside configured session windows");g_lastSessionBlockLog=TimeCurrent();}return;}g_dailyTradeTarget.LogSearchProgress();TradeSetup buySetup=g_decision.GenerateBuySetup();TradeSetup sellSetup=g_decision.GenerateSellSetup();if(InpEnableFreshSweepAdditiveRouter&&!buySetup.active&&!sellSetup.active)g_decision.GenerateFreshSweepAdditiveSetups(buySetup,sellSetup);if(InpLogSignals){if(buySetup.reasons.selected_strategy==STRATEGY_SMC)g_logger.LogSMCStructure(buySetup,_Symbol,InpFVGTF);if(sellSetup.reasons.selected_strategy==STRATEGY_SMC)g_logger.LogSMCStructure(sellSetup,_Symbol,InpFVGTF);}
    // Evaluate both sides independently. The MTF layer adjusts confidence only;
    // it does not hard-block every countertrend setup or manufacture a trade.
    if(InpEnableTopDownMTF)
