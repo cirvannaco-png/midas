@@ -15,7 +15,13 @@ Production defaults remain unchanged:
 - InpFreshSweepEnableSingleSwingFallback=false.
 - The candidate MT5 .set file may set only InpEnableFreshSweepAdditiveRouter=true.
 - Both presets must leave single-swing fallback disabled.
-- No risk, sizing, drawdown, daily loss, open-position, stop, partial-close, trailing, execution, or recovery input may differ between the pair.
+- Both presets must keep InpEnableExecution=true, InpEnableDynamicStop=true, InpTrackOutcomes=true, and InpAllowMinLotOverride=false.
+- Both presets use InpAccountRiskProfile=1 (small account), keep InpSmallMinimumRiskPercentPerTrade=15 and InpSmallRiskPercentPerTrade=20, and may not raise the existing small-account ceilings: daily loss 25%, drawdown 35%, portfolio risk 20%, Gold stop-risk KES 7.50, or position counts above 3.
+- Both presets must set InpRequireExecutionLedger=false **only for the Strategy Tester run**. MT5 Strategy Tester agents cannot call WebRequest, so leaving the production default true blocks new EA entries and yields a misleading zero-trade run. Midas now enforces the bypass as tester-only: outside Strategy Tester the runtime always treats the ledger as required even when an imported .set says false. The remote ledger is not used in the tester; native CRiskEngine sizing, local order/position management, protective stops, partial closes, recovery and tester deal export remain active. Do not use this test preset on a live/demo chart.
+- The tester's InpTesterServerUtcOffsetMinutes must be the verified historical broker-server UTC offset for the tested date segment. Split the experiment at DST changes rather than applying one guessed offset across a DST transition.
+- Preserve the original matched-experiment manifest horizon (it includes the registered locked-OOS interval because the shared comparator schema requires that chronology), but the actual MT5 terminal launch file must not run into the holdout. Its FromDate must equal the broker-local calendar date of the development start, with that start aligned to broker midnight. Its ToDate must be the broker-local calendar day immediately before the exclusive locked-OOS start date. The comparator derives this from the verified server offset, checks the exact .ini, and rejects an OOS-day ToDate. For this test fixture only, UTC+03:00 gives FromDate=2026.10.02 and ToDate=2026.11.12; production dates must be recalculated from the verified broker offset and reservation timestamp.
+- For a KES account, leave InpAccountCurrencyPerKES=0; the engine uses 1.0 for a KES account. For a non-KES account, provide a verified positive account-currency-units-per-KES conversion in the tester preset. No FX rate is guessed.
+- No risk, sizing, drawdown, daily loss, open-position, stop, partial-close, trailing, execution, or recovery input may differ between the pair. The only allowed .set difference is the router-enable flag.
 
 ## Native matched pair
 
@@ -25,17 +31,18 @@ Prepare two .set files:
 1. baseline.set: router disabled.
 2. continuation.set: same exact values as baseline except router enabled.
 
-Both keep InpFreshSweepEnableSingleSwingFallback=false. The matcher in tools/compare_mt5_continuation_runs.py rejects any other .set difference, mismatched run context, reused run IDs/artifacts, hash mismatch, missing commission/swap/fee columns, and missing strategy attribution. The report only scores development entries before the declared locked-OOS boundary; OOS outcomes stay withheld.
+Both keep InpFreshSweepEnableSingleSwingFallback=false. The same InpTesterExportRunId label is used in both .set files; the exporter appends a runtime suffix, and the manifest run_id must match the resulting MidasTesterMeta_*.json run_id. The matcher in tools/compare_mt5_continuation_runs.py rejects any other .set difference, a tester preset that would block execution, any weakened small-account ceiling, mismatched run context, reused run IDs/artifacts, hash mismatch, missing tester metadata or launch .ini, a non-real-tick tester model, zero execution delay, mismatched tester execution settings, missing broker/server/symbol contract/spread observations, missing commission/swap/fee columns, and missing strategy attribution. It checks cash-per-point-per-lot against point/tick-size/tick-value and requires metadata server offset to match the preset. It also validates the real MT5 launch date range in the verified broker-local timezone and rejects a ToDate that reaches the locked-OOS start day. The report only scores development entries before the declared locked-OOS boundary; OOS outcomes stay withheld and are not run by the paired development tester configuration.
 
 Run the complete EA in MT5 Strategy Tester for both presets using Every tick based on real ticks when the chosen broker's genuine tick history is available. Export and retain for both variants:
 - actual .set file;
+- exact MT5 [Tester] launch .ini used for the run. It must use Model=4 (Every tick based on real ticks), Optimization=0, ForwardMode=0, and a matched non-zero ExecutionMode (-1 random delay or a positive fixed delay in milliseconds); symbol, period, dates, deposit/currency/leverage and expert preset must be explicit;
 - native HTML tester report including balance/equity graph and tick-level equity drawdown;
 - complete tester deal CSV with profit, commission, swap, fee, partial-close rows, risk cash, requested/actual fill price and slippage evidence, strategy attribution, and position identifier;
 - open-position ID CSV (header-only when no position remains open);
-- tester metadata from MidasTesterMeta_*.json, including point, tick size, tick value, cash-per-point per lot, account currency, leverage, broker/server, terminal build, fill mode and spread observations;
+- tester metadata from MidasTesterMeta_*.json, including run_id, point, tick size, tick value, cash-per-point per lot, account currency, leverage, broker/server, terminal build, fill mode, server UTC offset and spread observations;
 - immutable tick-data/archive file and SHA-256.
 
-Use the exact cash-per-point-per-lot value from the tester metadata/symbol specification in the cost tool. Never substitute a generic Gold pip value. For real ticks the observed baseline spread is already in fills; only incremental spread widening is added by the stress analyzer.
+Use the exact cash-per-point-per-lot value from each validated tester metadata file/symbol specification in the cost tool. Never substitute a generic Gold pip value. For real ticks the observed baseline spread is already in fills; only incremental spread widening is added by the stress analyzer. The comparator requires the two metadata exports to match in broker/server, account currency, leverage, terminal build, point/tick contract, fill mode, UTC offset and spread observations before treating the pair as matched.
 
 ## Cost and adverse-condition matrix
 
@@ -44,13 +51,15 @@ Run tools/cost_stress_monte_carlo.py independently on both deal exports with ide
 - additional slippage: 0, 1, 2 points per executed deal-side fill;
 - additional commission: zero and any broker-sourced surcharges that are actually applicable.
 
-Actual commission/swap/fee remain in each position's base P&L. Additional commission sensitivity is a surcharge per 1.0 lot per deal-side fill. Only use values backed by the selected broker's current published contract/tariff or measured commission records. Do not guess an amount.
+Actual commission/swap/fee remain in each position's base P&L. Additional commission sensitivity is a surcharge per 1.0 lot per deal-side fill. Only use values backed by the selected broker's current published contract/tariff or measured commission records. Do not guess an amount. Realised commission cashflows are not to be replaced with a generic commission assumption.
+
+Important scope distinction: the cost-stress tool is a post-run settlement sensitivity. It deducts incremental spread/slippage/commission from each completed position based on executed volume; it does not re-simulate altered bid/ask ticks or model whether a widened spread would have changed an entry, stop, partial close or fill. To measure that path-dependent effect, run additional native MT5 Strategy Tester variants on a separately defined adverse tick stream / spread model and label them as separate matched experiments. Never describe a post-hoc cost deduction as a full re-simulation of execution.
 
 Include chronological trend, range/chop, transition, high/low-volatility and major-session periods in the native test corpus. Inspect rollover/illiquid periods and recorded spread spikes. Where the source history lacks gaps or stress events, label the limitation; do not claim a gap test was performed. Retain all walk-forward fold outputs and 10,000-run sequence-shuffle/bootstrap drawdown diagnostics at fixed seed. These are settlement diagnostics; native MT5 tick-level equity drawdown is still mandatory.
 
 ## Whole-EA test scope
 
-The existing Windows mt5-compile.yml job compiles the consolidated EA and runs deterministic no-order native policy suites for account risk profiles, config contract, decision geometry, dynamic stops, Fresh-Sweep router policy, opposing exposure and position-management policy. The Python test suites cover whole-position broker-deal accounting, partial-close reconstruction, cost stress and the backend's durable execution-recovery journal.
+The existing Windows mt5-compile.yml job compiles the consolidated EA and runs deterministic no-order native policy suites for account risk profiles, config contract, decision geometry, dynamic stops, Fresh-Sweep router policy, opposing exposure and position-management policy. The Python test suites cover whole-position broker-deal accounting, partial-close reconstruction, cost stress and the backend's durable execution-recovery journal. The comparator now requires tester metadata and an explicitly configured isolated tester preset; its local tests also reject accidental live/demo use of the external-ledger bypass.
 
 These are necessary engineering tests, not a substitute for a native Strategy Tester run or broker demo. In a demo environment, separately fault-inject ambiguous submit timeouts, partial fills followed by cancellation/late fill, rejected/invalid stop amendments, terminal restart with open positions, duplicate/replayed deal events, and ledger reconciliation. Verify no duplicate order is sent, no unknown exposure is silently resumed, the original protective stop is not loosened, every partial exit is reconciled by position/deal identity, and the risk gate stays closed until authoritative broker state is restored.
 

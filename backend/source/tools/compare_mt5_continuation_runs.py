@@ -12,6 +12,7 @@ import json
 import math
 import re
 import sys
+from datetime import time, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,7 @@ ALLOWED_ROOT = {"schema_version", "experiment_id", "test_context", "dataset_path
 ALLOWED_VARIANT = {
     "role", "run_id", "observed_context", "parameters",
     "input_preset", "report_path", "deals_csv", "open_positions_csv",
+    "tester_metadata_path", "tester_config_path",
 }
 BOOL_FALSE = {"false", "0", "no", "off"}
 BOOL_TRUE = {"true", "1", "yes", "on"}
@@ -82,7 +84,293 @@ def _bool_value(values: dict[str, str], key: str, name: str) -> bool:
     raise ComparisonError(f"{name}.{key} must be an explicit boolean value")
 
 
-def _validate_presets(baseline_path: Path, candidate_path: Path) -> tuple[dict, dict]:
+def _numeric_value(values: dict[str, str], key: str, name: str) -> float:
+    if key not in values:
+        raise ComparisonError(f"{name} is missing required input {key}")
+    token = values[key].split("||", 1)[0].strip()
+    try:
+        value = float(token)
+    except ValueError as exc:
+        raise ComparisonError(f"{name}.{key} must be numeric") from exc
+    if not math.isfinite(value):
+        raise ComparisonError(f"{name}.{key} must be finite")
+    return value
+
+
+def _integer_value(values: dict[str, str], key: str, name: str) -> int:
+    value = _numeric_value(values, key, name)
+    if not value.is_integer():
+        raise ComparisonError(f"{name}.{key} must be an integer")
+    return int(value)
+
+
+def _parse_tester_ini(path: Path, name: str) -> dict[str, str]:
+    """Read the [Tester] section from the exact MT5 terminal launch INI."""
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ComparisonError(f"{name} cannot read tester configuration INI: {path}") from exc
+
+    section = ""
+    values: dict[str, str] = {}
+    for line_number, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith((";", "#")):
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped[1:-1].strip().casefold()
+            continue
+        if section != "tester":
+            continue
+        if "=" not in stripped:
+            raise ComparisonError(f"{name} tester INI line {line_number} is not key=value")
+        key, value = stripped.split("=", 1)
+        key, value = key.strip(), value.strip()
+        normalized = key.casefold()
+        if not normalized or normalized in values:
+            raise ComparisonError(f"{name} tester INI has an empty or duplicate [Tester] key")
+        values[normalized] = value
+
+    if not values:
+        raise ComparisonError(f"{name} tester INI is missing a non-empty [Tester] section")
+    return values
+
+
+def _validate_tester_config(
+    config_path: Path,
+    *,
+    context: dict[str, Any],
+    preset_path: Path,
+    server_utc_offset_minutes: int,
+    name: str,
+) -> dict[str, Any]:
+    values = _parse_tester_ini(config_path, name)
+    required = {
+        "expert", "expertparameters", "symbol", "period", "model", "executionmode",
+        "optimization", "fromdate", "todate", "deposit", "currency", "leverage",
+        "forwardmode", "report",
+    }
+    missing = sorted(required - set(values))
+    if missing:
+        raise ComparisonError(f"{name} tester INI is missing required [Tester] keys: {missing}")
+
+    expert_name = values["expert"].replace("/", chr(92)).rsplit(chr(92), 1)[-1].rsplit(".", 1)[0].casefold()
+    if "medistouch_v2.8" not in expert_name:
+        raise ComparisonError(f"{name} tester INI must run the consolidated MedisTouch_v2.8 EA")
+
+    preset_name = values["expertparameters"].replace("/", chr(92)).rsplit(chr(92), 1)[-1].casefold()
+    if preset_name != preset_path.name.casefold():
+        raise ComparisonError(f"{name} tester INI ExpertParameters does not point to its hashed .set file")
+
+    if values["symbol"].casefold() != context["symbol"].casefold():
+        raise ComparisonError(f"{name} tester INI symbol does not match the matched test context")
+    if values["period"].casefold() != context["timeframe"].casefold():
+        raise ComparisonError(f"{name} tester INI period does not match the matched test context")
+
+    try:
+        model = int(values["model"])
+        execution_mode = int(values["executionmode"])
+        optimization = int(values["optimization"])
+        forward_mode = int(values["forwardmode"])
+    except ValueError as exc:
+        raise ComparisonError(f"{name} tester INI model/execution/optimization modes must be integers") from exc
+
+    # MetaTrader 5 Model=4 is "Every tick based on real ticks".
+    if model != 4:
+        raise ComparisonError(f"{name} tester INI must use Model=4 (Every tick based on real ticks)")
+    # MT5 ExecutionMode=0 is normal/no emulated delay; -1 is random delay and
+    # positive values are fixed milliseconds. Require a non-zero delay and
+    # require the paired runs to use the same value.
+    if execution_mode == 0 or execution_mode < -1 or execution_mode > 600000:
+        raise ComparisonError(
+            f"{name} tester INI ExecutionMode must be -1 (random) or 1..600000 ms"
+        )
+    if optimization != 0:
+        raise ComparisonError(f"{name} tester INI must disable optimization (Optimization=0)")
+    if forward_mode != 0:
+        raise ComparisonError(f"{name} tester INI must disable embedded forward mode (ForwardMode=0)")
+
+    def parse_ini_date(key: str) -> str:
+        try:
+            from datetime import datetime
+            return datetime.strptime(values[key], "%Y.%m.%d").date().isoformat()
+        except ValueError as exc:
+            raise ComparisonError(f"{name} tester INI {key} must use YYYY.MM.DD") from exc
+
+    broker_tz = timezone(timedelta(minutes=server_utc_offset_minutes))
+    start_local = context["period_start"].astimezone(broker_tz)
+    locked_start_local = context["locked_oos_start"].astimezone(broker_tz)
+    # MT5's tester INI accepts calendar dates, not timestamps. Require the
+    # development start at broker midnight and stop on the complete broker-local
+    # day before the reserved OOS entry date. This prevents the terminal from
+    # touching holdout ticks even though the manifest also declares its horizon.
+    if start_local.time() != time.min:
+        raise ComparisonError(
+            f"{name} tester FromDate boundary must align to midnight in the verified broker-server timezone"
+        )
+    expected_from = start_local.date().isoformat()
+    expected_to_date = locked_start_local.date() - timedelta(days=1)
+    expected_to = expected_to_date.isoformat()
+    if expected_to_date < start_local.date():
+        raise ComparisonError(f"{name} tester development range is empty before locked OOS")
+    if parse_ini_date("fromdate") != expected_from:
+        raise ComparisonError(f"{name} tester INI FromDate does not match the verified broker-local start date")
+    if parse_ini_date("todate") != expected_to:
+        raise ComparisonError(
+            f"{name} tester INI ToDate must be the day before the exclusive locked-OOS start"
+        )
+
+    try:
+        deposit = float(values["deposit"])
+    except ValueError as exc:
+        raise ComparisonError(f"{name} tester INI Deposit must be numeric") from exc
+    if not math.isfinite(deposit) or not math.isclose(
+        deposit, context["initial_balance"], rel_tol=1e-8, abs_tol=1e-6
+    ):
+        raise ComparisonError(f"{name} tester INI Deposit does not match the matched test context")
+
+    if values["currency"].upper() != context["account_currency"].upper():
+        raise ComparisonError(f"{name} tester INI Currency does not match the matched test context")
+    if values["leverage"] != context["leverage"]:
+        raise ComparisonError(f"{name} tester INI Leverage does not match the matched test context")
+    report_name = values["report"].strip()
+    if not report_name:
+        raise ComparisonError(f"{name} tester INI Report must be non-empty")
+
+    return {
+        "expert": values["expert"],
+        "expert_parameters": values["expertparameters"],
+        "symbol": values["symbol"],
+        "period": values["period"],
+        "model": model,
+        "model_name": "every_tick_based_on_real_ticks",
+        "execution_mode": execution_mode,
+        "optimization": optimization,
+        "from_date": values["fromdate"],
+        "to_date": values["todate"],
+        "deposit": deposit,
+        "currency": values["currency"],
+        "leverage": values["leverage"],
+        "forward_mode": forward_mode,
+        "report": report_name,
+    }
+
+
+def _validate_tester_metadata(
+    metadata_path: Path,
+    *,
+    run_id: str,
+    context: dict[str, Any],
+    preset: dict[str, str],
+    name: str,
+) -> dict[str, Any]:
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ComparisonError(f"{name} cannot read valid tester metadata JSON: {metadata_path}") from exc
+
+    required = {
+        "run_id", "symbol", "server", "account_currency", "leverage",
+        "initial_balance", "terminal_build", "point", "tick_size", "tick_value",
+        "cash_per_point_per_lot", "spread_points_mean", "spread_points_max",
+        "spread_samples", "fill_mode", "server_utc_offset_minutes", "timestamp_basis",
+    }
+    if not isinstance(metadata, dict) or set(metadata) != required:
+        raise ComparisonError(
+            f"{name} tester metadata keys invalid; required exactly: {sorted(required)}"
+        )
+
+    for key in ("run_id", "symbol", "server", "account_currency", "timestamp_basis"):
+        if not isinstance(metadata[key], str) or not metadata[key].strip():
+            raise ComparisonError(f"{name} tester metadata {key} must be non-empty")
+    if metadata["run_id"] != run_id:
+        raise ComparisonError(f"{name} manifest run_id does not match exported tester metadata run_id")
+    if metadata["symbol"].casefold() != context["symbol"].casefold():
+        raise ComparisonError(f"{name} metadata symbol does not match the matched test context")
+    if metadata["account_currency"].upper() != context["account_currency"].upper():
+        raise ComparisonError(f"{name} metadata account currency does not match the matched test context")
+    if str(metadata["terminal_build"]) != context["terminal_build"]:
+        raise ComparisonError(f"{name} metadata terminal build does not match the matched test context")
+    if metadata["timestamp_basis"] != "broker_wall_clock_with_explicit_offset":
+        raise ComparisonError(f"{name} metadata timestamp basis is unsupported")
+
+    numeric = (
+        "initial_balance", "point", "tick_size", "tick_value",
+        "cash_per_point_per_lot", "spread_points_mean", "spread_points_max",
+    )
+    for key in numeric:
+        if isinstance(metadata[key], bool) or not isinstance(metadata[key], (int, float)):
+            raise ComparisonError(f"{name} tester metadata {key} must be numeric")
+        if not math.isfinite(float(metadata[key])):
+            raise ComparisonError(f"{name} tester metadata {key} must be finite")
+    if not math.isclose(
+        float(metadata["initial_balance"]), context["initial_balance"],
+        rel_tol=1e-8, abs_tol=1e-6,
+    ):
+        raise ComparisonError(f"{name} metadata initial balance does not match the matched test context")
+
+    for key in ("point", "tick_size", "tick_value", "cash_per_point_per_lot"):
+        if float(metadata[key]) <= 0.0:
+            raise ComparisonError(f"{name} metadata {key} must be positive")
+    calculated_cash_per_point = float(metadata["tick_value"]) * float(metadata["point"]) / float(metadata["tick_size"])
+    if not math.isclose(
+        calculated_cash_per_point, float(metadata["cash_per_point_per_lot"]),
+        rel_tol=1e-7, abs_tol=1e-8,
+    ):
+        raise ComparisonError(f"{name} metadata cash_per_point_per_lot does not reconcile to tick value/size/point")
+
+    mean_spread = float(metadata["spread_points_mean"])
+    max_spread = float(metadata["spread_points_max"])
+    samples = metadata["spread_samples"]
+    fill_mode = metadata["fill_mode"]
+    if isinstance(fill_mode, bool) or not isinstance(fill_mode, int) or fill_mode < 0:
+        raise ComparisonError(f"{name} tester metadata fill_mode must be a non-negative integer")
+    if isinstance(samples, bool) or not isinstance(samples, int) or samples <= 0:
+        raise ComparisonError(f"{name} tester metadata spread_samples must be a positive integer")
+    if mean_spread < 0.0 or max_spread < mean_spread:
+        raise ComparisonError(f"{name} tester metadata spread observations are invalid")
+
+    leverage = metadata["leverage"]
+    if isinstance(leverage, bool) or not isinstance(leverage, int) or leverage <= 0:
+        raise ComparisonError(f"{name} tester metadata leverage must be a positive integer")
+    expected_leverage = f"1:{leverage}"
+    if expected_leverage != context["leverage"]:
+        raise ComparisonError(f"{name} metadata leverage does not match the matched test context")
+
+    offset = metadata["server_utc_offset_minutes"]
+    if isinstance(offset, bool) or not isinstance(offset, int) or not -840 <= offset <= 840:
+        raise ComparisonError(f"{name} tester metadata server UTC offset is invalid")
+    if offset != _integer_value(preset, "InpTesterServerUtcOffsetMinutes", name):
+        raise ComparisonError(f"{name} exported server UTC offset does not match the preset input")
+
+    label = preset.get("InpTesterExportRunId", "").split("||", 1)[0].strip()
+    if not label or not metadata["run_id"].startswith(label + "_"):
+        raise ComparisonError(f"{name} exported metadata run_id does not match InpTesterExportRunId")
+
+    return {
+        "run_id": metadata["run_id"],
+        "symbol": metadata["symbol"],
+        "server": metadata["server"],
+        "account_currency": metadata["account_currency"],
+        "leverage": metadata["leverage"],
+        "initial_balance": float(metadata["initial_balance"]),
+        "terminal_build": str(metadata["terminal_build"]),
+        "point": float(metadata["point"]),
+        "tick_size": float(metadata["tick_size"]),
+        "tick_value": float(metadata["tick_value"]),
+        "cash_per_point_per_lot": float(metadata["cash_per_point_per_lot"]),
+        "spread_points_mean": mean_spread,
+        "spread_points_max": max_spread,
+        "spread_samples": samples,
+        "fill_mode": fill_mode,
+        "server_utc_offset_minutes": offset,
+        "timestamp_basis": metadata["timestamp_basis"],
+    }
+
+
+def _validate_presets(
+    baseline_path: Path, candidate_path: Path, context: dict[str, Any]
+) -> tuple[dict, dict]:
     baseline = _parse_set(baseline_path, "baseline preset")
     candidate = _parse_set(candidate_path, "continuation preset")
     if set(baseline) != set(candidate):
@@ -103,6 +391,80 @@ def _validate_presets(baseline_path: Path, candidate_path: Path) -> tuple[dict, 
         raise ComparisonError("baseline must keep InpFreshSweepEnableSingleSwingFallback=false")
     if _bool_value(candidate, fallback, "continuation") is not False:
         raise ComparisonError("continuation must keep InpFreshSweepEnableSingleSwingFallback=false")
+
+    # WebRequest is disabled by MT5 Strategy Tester agents. The external
+    # execution ledger must therefore be bypassed explicitly in this isolated
+    # simulation only; local native sizing, order management and deal export
+    # remain active. Live/demo defaults are not changed by this preset.
+    required_true = (
+        "InpEnableExecution",
+        "InpEnableDynamicStop",
+        "InpTrackOutcomes",
+        "InpSmallAccountProfileConfigured",
+    )
+    for key in required_true:
+        if _bool_value(baseline, key, "baseline") is not True:
+            raise ComparisonError(f"baseline must set {key}=true")
+        if _bool_value(candidate, key, "continuation") is not True:
+            raise ComparisonError(f"continuation must set {key}=true")
+
+    required_false = ("InpRequireExecutionLedger", "InpAllowMinLotOverride")
+    for key in required_false:
+        if _bool_value(baseline, key, "baseline") is not False:
+            raise ComparisonError(
+                f"baseline must set {key}=false for isolated Strategy Tester execution"
+            )
+        if _bool_value(candidate, key, "continuation") is not False:
+            raise ComparisonError(
+                f"continuation must set {key}=false for isolated Strategy Tester execution"
+            )
+
+    if _integer_value(baseline, "InpAccountRiskProfile", "baseline") != 1:
+        raise ComparisonError("baseline must use ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT")
+    if _integer_value(candidate, "InpAccountRiskProfile", "continuation") != 1:
+        raise ComparisonError("continuation must use ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT")
+
+    # The paired comparison must not relax the current small-account hard
+    # limits. The minimum planned risk stays at 15%; target risk cannot exceed
+    # 20%; drawdown, daily-loss, portfolio and Gold KES ceilings cannot rise.
+    for role, values in (("baseline", baseline), ("continuation", candidate)):
+        minimum_risk = _numeric_value(values, "InpSmallMinimumRiskPercentPerTrade", role)
+        target_risk = _numeric_value(values, "InpSmallRiskPercentPerTrade", role)
+        if not math.isclose(minimum_risk, 15.0, abs_tol=1e-8):
+            raise ComparisonError(f"{role} must preserve the 15% small-account minimum-risk floor")
+        if target_risk < minimum_risk or target_risk > 20.0:
+            raise ComparisonError(f"{role} small-account target risk must be within [15%, 20%]")
+        if not math.isclose(target_risk, context["risk_percent"], abs_tol=1e-8):
+            raise ComparisonError(f"{role} InpSmallRiskPercentPerTrade does not match test_context.risk_percent")
+        ceilings = {
+            "InpSmallMaxDailyLossPercent": 25.0,
+            "InpSmallMaxDrawdownPercent": 35.0,
+            "InpSmallMaxPortfolioRiskPercent": 20.0,
+            "InpSmallGoldMaxStopRiskKES": 7.50,
+        }
+        for key, maximum in ceilings.items():
+            if _numeric_value(values, key, role) > maximum + 1e-8:
+                raise ComparisonError(f"{role} {key} exceeds the existing small-account safety ceiling")
+        if _integer_value(values, "InpSmallMaxOpenTrades", role) > 3:
+            raise ComparisonError(f"{role} InpSmallMaxOpenTrades exceeds the existing cap of 3")
+        if _integer_value(values, "InpSmallMaxPositionsPerSymbol", role) > 3:
+            raise ComparisonError(f"{role} InpSmallMaxPositionsPerSymbol exceeds the existing cap of 3")
+        if _integer_value(values, "InpSmallMaxPositionsPerGroup", role) > 3:
+            raise ComparisonError(f"{role} InpSmallMaxPositionsPerGroup exceeds the existing cap of 3")
+        conversion = _numeric_value(values, "InpAccountCurrencyPerKES", role)
+        if context["account_currency"].upper() == "KES":
+            if not math.isclose(conversion, 0.0, abs_tol=1e-12):
+                raise ComparisonError(f"{role} KES account must not inject a non-KES conversion override")
+        elif conversion <= 0.0:
+            raise ComparisonError(
+                f"{role} non-KES Strategy Tester account requires an explicit InpAccountCurrencyPerKES rate"
+            )
+        offset = _integer_value(values, "InpTesterServerUtcOffsetMinutes", role)
+        if not -840 <= offset <= 840:
+            raise ComparisonError(f"{role} InpTesterServerUtcOffsetMinutes must be verified within [-840, 840]")
+        export_label = values.get("InpTesterExportRunId", "").split("||", 1)[0].strip()
+        if not export_label:
+            raise ComparisonError(f"{role} must set a non-empty InpTesterExportRunId")
 
     changed = [key for key in baseline if baseline[key] != candidate[key]]
     if changed != [toggle] and set(changed) != {toggle}:
@@ -134,7 +496,10 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
     context = _normalize_context(manifest["test_context"], "test_context")
     period_start, period_end = context["period_start"], context["period_end"]
     locked_oos_start, locked_oos_end = context["locked_oos_start"], context["locked_oos_end"]
-    # Development analysis is required to stop precisely at the OOS entry boundary.
+    if context["spread_model"].casefold() != "real_ticks":
+        raise ComparisonError("matched MT5 comparison requires test_context.spread_model=real_ticks")
+    # Matched development backtests must not touch any registered reserved
+    # holdout, even when their outcomes would later be filtered from the report.
     reject_reserved_oos_overlap(period_start, locked_oos_start)
 
     dataset = _resolve_file(source_path, manifest["dataset_path"], "dataset_path")
@@ -183,13 +548,36 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
         open_path = _resolve_file(
             source_path, raw["open_positions_csv"], f"{name}.open_positions_csv", allow_empty=False
         )
+        metadata_path = _resolve_file(
+            source_path, raw["tester_metadata_path"], f"{name}.tester_metadata_path", allow_empty=False
+        )
+        tester_config_path = _resolve_file(
+            source_path, raw["tester_config_path"], f"{name}.tester_config_path", allow_empty=False
+        )
+        if tester_config_path.suffix.lower() != ".ini":
+            raise ComparisonError(f"{name}.tester_config_path must be an MT5 .ini launch configuration")
         if preset.suffix.lower() != ".set":
             raise ComparisonError(f"{name}.input_preset must be an MT5 .set file")
-        for artifact in (preset, report, deals_path, open_path):
+        for artifact in (preset, report, deals_path, open_path, metadata_path, tester_config_path):
             if artifact in artifact_paths:
                 raise ComparisonError(f"artifact path reused across variants: {artifact}")
             artifact_paths.add(artifact)
         preset_paths[role] = preset
+        preset_values = _parse_set(preset, f"{role} preset")
+        metadata = _validate_tester_metadata(
+            metadata_path,
+            run_id=run_id,
+            context=context,
+            preset=preset_values,
+            name=name,
+        )
+        tester_config = _validate_tester_config(
+            tester_config_path,
+            context=context,
+            preset_path=preset,
+            server_utc_offset_minutes=metadata["server_utc_offset_minutes"],
+            name=name,
+        )
         preset_hash = _sha256(preset)
         if preset_hash in preset_hashes:
             raise ComparisonError("baseline and continuation .set files must have different SHA-256 hashes")
@@ -235,12 +623,16 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
             "role": role,
             "run_id": run_id,
             "parameters": parameters,
-            "input_preset_values": _parse_set(preset, f"{role} preset"),
+            "input_preset_values": preset_values,
+            "tester_metadata": metadata,
+            "tester_config": tester_config,
             "artifacts": {
                 "input_preset": {"path": str(preset), "sha256": preset_hash},
                 "report": {"path": str(report), "sha256": _sha256(report)},
                 "deals_csv": {"path": str(deals_path), "sha256": _sha256(deals_path)},
                 "open_positions_csv": {"path": str(open_path), "sha256": _sha256(open_path)},
+                "tester_metadata": {"path": str(metadata_path), "sha256": _sha256(metadata_path)},
+                "tester_config": {"path": str(tester_config_path), "sha256": _sha256(tester_config_path)},
             },
             "metrics": {"development": _metrics_for(development, context["initial_balance"])},
             "ledger_diagnostics": {
@@ -257,9 +649,41 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
     missing_roles = [role for role in ROLES if role not in by_role]
     if missing_roles:
         raise ComparisonError(f"manifest missing roles: {missing_roles}")
-    _validate_presets(preset_paths["baseline"], preset_paths["continuation"])
+    _validate_presets(preset_paths["baseline"], preset_paths["continuation"], context)
     baseline = by_role["baseline"]
     candidate = by_role["continuation"]
+    baseline_metadata = baseline["tester_metadata"]
+    candidate_metadata = candidate["tester_metadata"]
+    metadata_match_keys = (
+        "symbol", "server", "account_currency", "leverage", "initial_balance",
+        "terminal_build", "point", "tick_size", "tick_value",
+        "cash_per_point_per_lot", "spread_points_mean", "spread_points_max",
+        "spread_samples", "fill_mode", "server_utc_offset_minutes", "timestamp_basis",
+    )
+    mismatched_metadata = [
+        key for key in metadata_match_keys
+        if baseline_metadata[key] != candidate_metadata[key]
+    ]
+    if mismatched_metadata:
+        raise ComparisonError(
+            "baseline and continuation tester metadata differ for matched broker/tick conditions: "
+            + ", ".join(mismatched_metadata)
+        )
+    baseline_config = baseline["tester_config"]
+    candidate_config = candidate["tester_config"]
+    config_match_keys = (
+        "expert", "symbol", "period", "model", "execution_mode", "optimization",
+        "from_date", "to_date", "deposit", "currency", "leverage", "forward_mode",
+    )
+    mismatched_config = [
+        key for key in config_match_keys
+        if baseline_config[key] != candidate_config[key]
+    ]
+    if mismatched_config:
+        raise ComparisonError(
+            "baseline and continuation MT5 tester launch configurations differ: "
+            + ", ".join(mismatched_config)
+        )
     if baseline["continuation_router_positions"] != 0:
         raise ComparisonError("baseline contains continuation-router strategy trades; the baseline is not isolated")
     if candidate["continuation_router_positions"] == 0:
@@ -302,6 +726,14 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
         "dataset_digest_verified": True,
         "only_router_enable_input_differs": True,
         "single_swing_fallback_disabled_in_both": True,
+        "tester_execution_enabled_in_both": True,
+        "external_execution_ledger_disabled_for_strategy_tester_only": True,
+        "dynamic_stops_enabled_in_both": True,
+        "small_account_safety_ceilings_verified": True,
+        "broker_metadata_validated_for_cost_stress": True,
+        "mt5_every_tick_real_ticks_model_verified": True,
+        "nonzero_matched_execution_delay_verified": True,
+        "tester_optimization_disabled": True,
         "continuation_router_exercised": router_observed,
         "locked_oos_scored": False,
         "mt5_run_performed_by_this_tool": False,

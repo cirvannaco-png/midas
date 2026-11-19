@@ -137,3 +137,16 @@ def test_native_continuation_chain_matches_frequency_lab_signal_thresholds():
     assert "if(quality<ctx.inputs.fallbackQualityFloor)returnnull;" in research
     assert "0.45*MathMin(body/0.7,1.0)+0.35*strength+0.20*MathMin(MathAbs(close1-fast)/atr,1.0)" in native
     assert "0.45*Math.min(body/0.7,1)+0.35*strength+0.20*Math.min(Math.abs(close1-fast)/atr,1)" in research
+
+
+def test_external_execution_ledger_bypass_is_tester_only_and_explicit():
+    compact = "".join(ENTRY.split())
+    # WebRequest is prohibited in Strategy Tester agents. The test preset must
+    # explicitly request the isolated bypass; live/demo always force the remote
+    # ledger requirement even when a tester .set is accidentally imported.
+    assert "inputboolInpRequireExecutionLedger=true;" in compact
+    assert "g_requireExecutionLedgerRuntime=(InpRequireExecutionLedger||!testerMode);" in compact
+    assert "if(!testerMode&&StringLen(InpExecutionLedgerBaseUrl)>0" in compact
+    assert "if(testerMode&&!InpRequireExecutionLedger)" in compact
+    assert "return!g_requireExecutionLedgerRuntime;" in compact
+    assert "if(!testerMode&& !InpRequireExecutionLedger)" not in compact
