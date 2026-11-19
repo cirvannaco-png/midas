@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "test/integrated-policy-coverage-20261119",
-    "commit": "3152846f05f4b6264d1cdb3b3d238cf6740102d5",
-    "git_tree_sha": "98d723cc8fc6b07a1ab38b369ce9cdc93eaac2ee",
+    "commit": "532c2c92cd0559462c4863135b9eeaf6648e8400",
+    "git_tree_sha": "0d783150dab4659397d3c24ab309871cfd841b8d",
     "root": "development/EA",
     "file_count": 98,
     "files": [
@@ -977,8 +977,8 @@
       },
       {
         "path": "development/EA/tests/TestHarness.mqh",
-        "git_blob_sha": "ebf7f5405364519d7ba71e2f98b62bd247d7f8b6",
-        "size_bytes": 865
+        "git_blob_sha": "b3d1768a9b6da99b9175832ea0425f5ebd564c39",
+        "size_bytes": 877
       }
     ],
     "generated_artifact": "development/EA/MedisTouch_v2.8.mq5",
