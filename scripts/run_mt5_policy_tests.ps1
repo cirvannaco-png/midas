@@ -32,10 +32,11 @@ foreach ($testSource in $testSources) {
   $errors = [int]$match.Groups[1].Value
   $warnings = [int]$match.Groups[2].Value
   Write-Host "$($testSource.Name): $errors errors, $warnings warnings"
+  # Preserve the compiler log even when the zero-warning gate fails.
+  Copy-Item $log ("artifacts/" + $testSource.BaseName + ".MetaEditor.log") -Force
   if ($errors -ne 0 -or $warnings -ne 0) {
     throw "Native test source $($testSource.Name) must compile with zero errors and zero warnings."
   }
-  Copy-Item $log ("artifacts/" + $testSource.BaseName + ".MetaEditor.log") -Force
 }
 
 $runtimeTests = @(
