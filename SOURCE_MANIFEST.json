@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "test/integrated-policy-coverage-20261119",
-    "commit": "532c2c92cd0559462c4863135b9eeaf6648e8400",
-    "git_tree_sha": "0d783150dab4659397d3c24ab309871cfd841b8d",
+    "commit": "8d4d2a238b1001d779018b325d2803cbf32e2ccf",
+    "git_tree_sha": "f4738080467d0fa0a7b673ac5384638896163857",
     "root": "development/EA",
     "file_count": 98,
     "files": [
@@ -942,8 +942,8 @@
       },
       {
         "path": "development/EA/tests/ConfigSyncContract.mq5",
-        "git_blob_sha": "e05e945ffc3f2cfbd175a7e51ef0e7a080160229",
-        "size_bytes": 1958
+        "git_blob_sha": "fa9c1b0cddeee4ddb988984c2a64c7d9eba6cfe4",
+        "size_bytes": 1956
       },
       {
         "path": "development/EA/tests/DecisionEngineGeometry.mq5",
