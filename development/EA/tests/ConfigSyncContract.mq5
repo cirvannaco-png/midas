@@ -28,7 +28,7 @@ void OnStart()
    bool ok = true;
 
    contract.SetEnvelope("hash-a", "SMC", "XAUUSD", "M15",
-                        "data-1", "optimizer-1", "CHALLENGER", 1);
+                        "data-1", "optimizer-1", "CHAMPION", 1);
    ok &= Expect(contract.ValidateMetadata("XAUUSD", "M15", "SMC", reason),
                 "matching metadata must validate");
    ok &= Expect(!contract.ValidateMetadata("EURUSD", "M15", "SMC", reason),
