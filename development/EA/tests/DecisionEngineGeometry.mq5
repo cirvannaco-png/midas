@@ -5,6 +5,9 @@
 #property strict
 
 #include "../includes/Decision/DecisionEngine.mqh"
+#include "TestHarness.mqh"
+
+int failures=0;
 
 bool ExpectIgnored(CDecisionEngine &engine, TradeSetup &setup, string label)
   {
@@ -12,6 +15,7 @@ bool ExpectIgnored(CDecisionEngine &engine, TradeSetup &setup, string label)
    if(rec.action!=POLICY_IGNORE || rec.valid)
      {
       Print("FAIL: ",label," action=",TradePolicyToString(rec.action)," valid=",rec.valid," reason=",rec.reason);
+      failures++;
       return false;
      }
    return true;
@@ -23,6 +27,7 @@ bool ExpectAccepted(CDecisionEngine &engine, TradeSetup &setup, string label)
    if(rec.action==POLICY_IGNORE || !rec.valid || rec.decision_id<=0)
      {
       Print("FAIL: ",label," action=",TradePolicyToString(rec.action)," valid=",rec.valid," reason=",rec.reason);
+      failures++;
       return false;
      }
    return true;
@@ -71,7 +76,7 @@ void OnStart()
    badConfidence.confidence=101.0;
    ok=ExpectIgnored(engine,badConfidence,"confidence outside range") && ok;
 
-   if(!ok) ExpertRemove();
-   else Print("PASS: decision setup geometry invariants");
+   PrintFormat("DecisionEngineGeometry tests: %d failure(s)",failures);
+   MidasTestFinish("DecisionEngineGeometry-tests.txt",failures);
   }
 //+------------------------------------------------------------------+
