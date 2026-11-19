@@ -27,6 +27,7 @@ foreach ($testSource in $testSources) {
   if (-not (Test-Path $log)) { throw "MetaEditor log missing for $($testSource.Name); process exit $($proc.ExitCode)." }
 
   $content = Get-Content $log -Raw -Encoding Unicode
+  Copy-Item $log ("artifacts/" + $testSource.BaseName + ".MetaEditor.log") -Force
   $match = [regex]::Match($content, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
   if (-not $match.Success) { throw "Cannot parse MetaEditor result for $($testSource.Name): $content" }
   $errors = [int]$match.Groups[1].Value
@@ -35,7 +36,6 @@ foreach ($testSource in $testSources) {
   if ($errors -ne 0 -or $warnings -ne 0) {
     throw "Native test source $($testSource.Name) must compile with zero errors and zero warnings."
   }
-  Copy-Item $log ("artifacts/" + $testSource.BaseName + ".MetaEditor.log") -Force
 }
 
 $runtimeTests = @(
