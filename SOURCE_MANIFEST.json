@@ -484,22 +484,12 @@
   "note": "files[] is the immutable upstream baseline snapshot. current_source_snapshot pins the complete staged EA development tree used to generate the distributable root EA. The validator checks every staged file's exact Git blob SHA and ensures no unmanifested source file is present.",
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
-    "branch": "research/fresh-sweep-additive-router",
-    "commit": "f53af7cd45395a8a2677eef1a3c3927e0b60ca98",
-    "git_tree_sha": "8d84731aa6a3d1953ef11d264f088c2ab67031ac",
+    "branch": "test/integrated-policy-coverage-20261119",
+    "commit": "3152846f05f4b6264d1cdb3b3d238cf6740102d5",
+    "git_tree_sha": "98d723cc8fc6b07a1ab38b369ce9cdc93eaac2ee",
     "root": "development/EA",
-    "file_count": 97,
+    "file_count": 98,
     "files": [
-      {
-        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
-        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
-        "size_bytes": 15553
-      },
-      {
-        "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "38fcdb498262e639ada4341275f967b25c31f451",
-        "size_bytes": 114150
-      },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
         "git_blob_sha": "589618f324666c242e5982f30271fd959791241b",
@@ -761,14 +751,14 @@
         "size_bytes": 8538
       },
       {
-        "path": "development/EA/includes/SmartMoney/FVG.mqh",
-        "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
-        "size_bytes": 5668
-      },
-      {
         "path": "development/EA/includes/SmartMoney/FibonacciEngine.mqh",
         "git_blob_sha": "74df9e8c41352e1c43ad99d83e1aa0992b367380",
         "size_bytes": 8793
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/FVG.mqh",
+        "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
+        "size_bytes": 5668
       },
       {
         "path": "development/EA/includes/SmartMoney/Inducement.mqh",
@@ -936,44 +926,59 @@
         "size_bytes": 1047
       },
       {
+        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
+        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
+        "size_bytes": 15553
+      },
+      {
+        "path": "development/EA/MedisTouch_v2.8.source.mq5",
+        "git_blob_sha": "38fcdb498262e639ada4341275f967b25c31f451",
+        "size_bytes": 114150
+      },
+      {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
-        "git_blob_sha": "6ae451d7d4986fdecfd418b2ade45b7737a11836",
-        "size_bytes": 10863
+        "git_blob_sha": "54f0cdb1daee940d45076dc05e910ea49de94fcb",
+        "size_bytes": 10291
       },
       {
         "path": "development/EA/tests/ConfigSyncContract.mq5",
-        "git_blob_sha": "063c1470d8792f57c61da2597b4a7eb50d401256",
-        "size_bytes": 1813
+        "git_blob_sha": "e05e945ffc3f2cfbd175a7e51ef0e7a080160229",
+        "size_bytes": 1958
       },
       {
         "path": "development/EA/tests/DecisionEngineGeometry.mq5",
-        "git_blob_sha": "041cdeec7b29d95f5724c415b72412a8819f6105",
-        "size_bytes": 2423
+        "git_blob_sha": "eef9c4d3b8d5d75277863ffd384c0f1a3c71c439",
+        "size_bytes": 2554
       },
       {
         "path": "development/EA/tests/DynamicStopEngine.mq5",
-        "git_blob_sha": "4ad59767bbd3fa7a7030fccaad1ae383d624af8c",
-        "size_bytes": 8333
+        "git_blob_sha": "5f7934f1d8231643a147c8afdcf8281ba59703e6",
+        "size_bytes": 8368
       },
       {
         "path": "development/EA/tests/FreshSweepAdditiveRouter.mq5",
-        "git_blob_sha": "571ae541c18a526bd6c34278b4c0947c1282feba",
-        "size_bytes": 4175
+        "git_blob_sha": "fcca5f9bd703ebecc2b632d5d08931419dc88b47",
+        "size_bytes": 3763
       },
       {
         "path": "development/EA/tests/OpposingPositionPolicy.mq5",
-        "git_blob_sha": "d7ebd3ab49430be34fa937b68996f2955b922103",
-        "size_bytes": 4290
+        "git_blob_sha": "fe5db91a0e6a38733bde69ae23df2f13041051d8",
+        "size_bytes": 4330
       },
       {
         "path": "development/EA/tests/PositionManagementPolicy.mq5",
-        "git_blob_sha": "bf9f3034f06a347383b19b2780912405d864139b",
-        "size_bytes": 1275
+        "git_blob_sha": "fc41ebb21109384a13965d577784a4764d14e386",
+        "size_bytes": 1317
       },
       {
         "path": "development/EA/tests/ProductionRuntimePreflight.mq5",
         "git_blob_sha": "950880379115e3769cf5f770b08670c54d940146",
         "size_bytes": 6984
+      },
+      {
+        "path": "development/EA/tests/TestHarness.mqh",
+        "git_blob_sha": "ebf7f5405364519d7ba71e2f98b62bd247d7f8b6",
+        "size_bytes": 865
       }
     ],
     "generated_artifact": "development/EA/MedisTouch_v2.8.mq5",
