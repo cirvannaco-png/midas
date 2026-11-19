@@ -484,9 +484,9 @@
   "note": "files[] is the immutable upstream baseline snapshot. current_source_snapshot pins the complete staged EA development tree used to generate the distributable root EA. The validator checks every staged file's exact Git blob SHA and ensures no unmanifested source file is present.",
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
-    "branch": "test/integrated-policy-coverage-20261119",
-    "commit": "bcb7e029611b382a103395e778aa24c8b8666243",
-    "git_tree_sha": "15fca60a2993743885f8a406024d653745f9a208",
+    "branch": "fix/mt5-continuation-tester-readiness",
+    "commit": "c1a5fb8da5b8a77a60524e26ff807a81fe9f76bd",
+    "git_tree_sha": "4ff5b3435745b69193ef5d3a038bc74126b3f173",
     "root": "development/EA",
     "file_count": 98,
     "files": [
@@ -497,8 +497,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "38fcdb498262e639ada4341275f967b25c31f451",
-        "size_bytes": 114150
+        "git_blob_sha": "4007fee0e8a5610f7aa1c87ca41222807139d96d",
+        "size_bytes": 115182
       },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
