@@ -4,7 +4,7 @@
 // Shared one-shot result writer for deterministic MT5 policy scripts.
 // CI launches each script with /config; TerminalClose then propagates the
 // assertion result as the terminal process exit code. Manual launches stay open.
-void MidasTestFinish(const string resultFile,const int failures)
+void MidasTestFinish(const string resultFile,const int failureCount)
   {
    int resultHandle=FileOpen(resultFile,FILE_WRITE|FILE_TXT|FILE_ANSI);
    if(resultHandle==INVALID_HANDLE)
@@ -15,11 +15,11 @@ void MidasTestFinish(const string resultFile,const int failures)
       return;
      }
 
-   FileWrite(resultHandle,StringFormat("failures=%d",failures));
+   FileWrite(resultHandle,StringFormat("failures=%d",failureCount));
    FileClose(resultHandle);
 
    if(MQLInfoInteger(MQL_STARTED_FROM_CONFIG))
-      TerminalClose(failures==0 ? 0 : 1);
+      TerminalClose(failureCount==0 ? 0 : 1);
   }
 
 #endif
