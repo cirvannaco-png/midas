@@ -32,35 +32,56 @@ class CostStressError(ValueError):
     """Input data cannot support a cost-complete stress report."""
 
 
-def reserved_oos_window() -> tuple[datetime, datetime] | None:
-    """Read the repository's registered holdout; fail closed if it is malformed."""
-    reservation_path = Path(__file__).resolve().parents[1] / "docs" / "LOCKED_OOS_RESERVATION_2026-09-01_TO_2026-10-01.json"
-    try:
-        reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
-        if reservation.get("status") != "reserved_unscored":
-            return None
-        start, end = _dt(reservation.get("locked_oos_start"), "reservation.locked_oos_start"), _dt(
-            reservation.get("locked_oos_end"), "reservation.locked_oos_end"
-        )
-        if not start < end:
-            raise CostStressError("registered locked-OOS window has invalid boundaries")
-        return start, end
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise CostStressError(f"cannot read registered locked-OOS reservation: {reservation_path}") from exc
+def reserved_oos_windows() -> list[tuple[datetime, datetime, str]]:
+    """Load every immutable OOS reservation; consumed windows stay protected."""
+    docs_path = Path(__file__).resolve().parents[1] / "docs"
+    paths = sorted(docs_path.glob("LOCKED_OOS_RESERVATION_*.json"))
+    if not paths:
+        raise CostStressError(f"no locked-OOS reservation files found in {docs_path}")
+
+    valid_statuses = {
+        "reserved_unscored",
+        "consumed_evaluation_started",
+        "consumed_evaluation_complete",
+    }
+    required = {
+        "schema_version", "reservation_id", "status", "locked_oos_start",
+        "locked_oos_end", "maturity_end", "external_freshness_attestation_required",
+    }
+    windows = []
+    for path in paths:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or set(payload) != required:
+                raise ValueError("reservation has missing or unsupported fields")
+            if payload["schema_version"] != 1:
+                raise ValueError("unsupported reservation schema")
+            if not isinstance(payload["reservation_id"], str) or not payload["reservation_id"].strip():
+                raise ValueError("reservation_id must be non-empty")
+            if payload["status"] not in valid_statuses:
+                raise ValueError("reservation status is not an active or consumed lock")
+            if payload["external_freshness_attestation_required"] is not True:
+                raise ValueError("external freshness attestation must remain required")
+            start = _dt(payload["locked_oos_start"], f"{path.name}.locked_oos_start")
+            end = _dt(payload["locked_oos_end"], f"{path.name}.locked_oos_end")
+            maturity = _dt(payload["maturity_end"], f"{path.name}.maturity_end")
+            if not start < end <= maturity:
+                raise ValueError("invalid locked-OOS interval or maturity cut")
+            windows.append((start, end, payload["reservation_id"]))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError,
+                KeyError, TypeError, ValueError) as exc:
+            raise CostStressError(f"cannot validate locked-OOS reservation file: {path}") from exc
+    return windows
 
 
 def reject_reserved_oos_overlap(start: datetime, end: datetime) -> None:
-    reserved = reserved_oos_window()
-    if reserved is None:
-        return
-    reserved_start, reserved_end = reserved
-    if start < reserved_end and end > reserved_start:
-        raise CostStressError(
-            "requested analysis overlaps the registered locked-OOS entry window "
-            f"[{reserved_start.isoformat()}, {reserved_end.isoformat()}); "
-            "standard cost-stress CLI withholds it. Use the one-shot evaluator only "
-            "after the strategy/cost assumptions are frozen and untouched status is attested."
-        )
+    for reserved_start, reserved_end, reservation_id in reserved_oos_windows():
+        if start < reserved_end and end > reserved_start:
+            raise CostStressError(
+                "requested analysis overlaps the registered locked-OOS entry window "
+                f"{reservation_id} [{reserved_start.isoformat()}, {reserved_end.isoformat()}); "
+                "ordinary cost-stress analysis withholds every registered reservation."
+            )
 
 
 def _norm(value: str) -> str:
@@ -157,24 +178,33 @@ def performance_metrics(pnls: list[float], initial_balance: float) -> dict:
 
 def incremental_cost_for_position(turnover_volume: float, point_value_per_lot: float,
                                   spread_widening_points: float,
-                                  slippage_points_per_fill: float) -> float:
-    """Cost using all opening/closing deal volumes, without double-charging baseline spread.
+                                  slippage_points_per_fill: float,
+                                  additional_commission_per_lot_per_fill: float = 0.0) -> float:
+    """Incremental costs over all opening/closing deal fills.
 
     Spread widening is a change in full spread, so each executed side pays half
-    of that expansion. Slippage applies independently to each deal-side fill.
+    of that expansion. Slippage and additional commission apply to each deal-side
+    fill. Existing MT5 commission/swap/fee cashflows remain in the base P&L.
     """
+    values = (turnover_volume, point_value_per_lot, spread_widening_points,
+              slippage_points_per_fill, additional_commission_per_lot_per_fill)
+    if any(not math.isfinite(value) for value in values):
+        raise CostStressError("incremental cost assumptions must be finite")
     if turnover_volume < 0 or point_value_per_lot <= 0:
         raise CostStressError("turnover volume must be >= 0 and point value must be > 0")
-    if min(spread_widening_points, slippage_points_per_fill) < 0:
+    if min(spread_widening_points, slippage_points_per_fill,
+           additional_commission_per_lot_per_fill) < 0:
         raise CostStressError("incremental cost assumptions cannot be negative")
     points_per_side = spread_widening_points / 2.0 + slippage_points_per_fill
-    return turnover_volume * point_value_per_lot * points_per_side
+    per_lot_fill_cost = point_value_per_lot * points_per_side + additional_commission_per_lot_per_fill
+    return turnover_volume * per_lot_fill_cost
 
 
 def _walk_forward_folds(positions: list[dict], start: datetime, end: datetime,
                         train_months: int, test_months: int, folds: int,
                         spread_points: float, slippage_points: float,
-                        point_value: float, initial_balance: float) -> list[dict]:
+                        point_value: float, initial_balance: float,
+                        commission_per_lot_per_fill: float = 0.0) -> list[dict]:
     def shift_months(value: datetime, months: int) -> datetime:
         month_index = value.year * 12 + value.month - 1 + months
         year, month0 = divmod(month_index, 12)
@@ -184,7 +214,8 @@ def _walk_forward_folds(positions: list[dict], start: datetime, end: datetime,
 
     def adjusted(rows):
         return [p["net_pnl"] - incremental_cost_for_position(
-            p["turnover_volume"], point_value, spread_points, slippage_points
+            p["turnover_volume"], point_value, spread_points, slippage_points,
+            commission_per_lot_per_fill
         ) for p in rows]
 
     output = []
@@ -256,6 +287,7 @@ def monte_carlo_drawdown(pnls: list[float], initial_balance: float, simulations:
 
 def build_report(deals_path: Path, open_ids_path: Path, *, point_value_per_lot: float,
                  initial_balance: float, spread_stresses: list[float], slippage_stresses: list[float],
+                 commission_stresses: list[float],
                  start: datetime, end: datetime, train_months: int, test_months: int, folds: int,
                  simulations: int, seed: int) -> dict:
     require_explicit_cost_columns(deals_path)
@@ -285,6 +317,7 @@ def build_report(deals_path: Path, open_ids_path: Path, *, point_value_per_lot: 
             "commission_swap_and_fee": "from explicit deal-history columns; do not add commission a second time",
             "baseline_spread": "assumed embedded in MT5 fill profit; stress cases add only spread widening beyond baseline",
             "slippage": "incremental per executed deal-side fill; specified in points",
+            "additional_commission": "incremental account-currency commission per lot per executed deal-side fill; actual deal commission remains included in base P&L",
             "ignored_ledger_groups": ignored,
             "completed_positions_in_window": len(positions),
         },
@@ -292,23 +325,25 @@ def build_report(deals_path: Path, open_ids_path: Path, *, point_value_per_lot: 
     }
     for spread in spread_stresses:
         for slippage in slippage_stresses:
-            pnls = [
-                p["net_pnl"] - incremental_cost_for_position(
-                    p["turnover_volume"], point_value_per_lot, spread, slippage
-                ) for p in positions
-            ]
-            total_cost = sum(p["net_pnl"] - pnl for p, pnl in zip(positions, pnls))
-            report["scenarios"].append({
-                "incremental_spread_widening_points": spread,
-                "incremental_slippage_points_per_fill": slippage,
-                "incremental_stress_cost": round(total_cost, 8),
-                "metrics": performance_metrics(pnls, initial_balance),
-                "walk_forward": _walk_forward_folds(
-                    positions, start, end, train_months, test_months, folds, spread, slippage,
-                    point_value_per_lot, initial_balance
-                ),
-                "monte_carlo": monte_carlo_drawdown(pnls, initial_balance, simulations, seed),
-            })
+            for commission in commission_stresses:
+                pnls = [
+                    p["net_pnl"] - incremental_cost_for_position(
+                        p["turnover_volume"], point_value_per_lot, spread, slippage, commission
+                    ) for p in positions
+                ]
+                total_cost = sum(p["net_pnl"] - pnl for p, pnl in zip(positions, pnls))
+                report["scenarios"].append({
+                    "incremental_spread_widening_points": spread,
+                    "incremental_slippage_points_per_fill": slippage,
+                    "additional_commission_per_lot_per_fill": commission,
+                    "incremental_stress_cost": round(total_cost, 8),
+                    "metrics": performance_metrics(pnls, initial_balance),
+                    "walk_forward": _walk_forward_folds(
+                        positions, start, end, train_months, test_months, folds, spread, slippage,
+                        point_value_per_lot, initial_balance, commission
+                    ),
+                    "monte_carlo": monte_carlo_drawdown(pnls, initial_balance, simulations, seed),
+                })
     return report
 
 
@@ -322,6 +357,10 @@ def main() -> int:
     parser.add_argument("--end", required=True, help="exclusive, timezone-aware ISO-8601 end")
     parser.add_argument("--spread-widening-points", default="0,2,5")
     parser.add_argument("--slippage-points-per-fill", default="0,1,2")
+    parser.add_argument(
+        "--additional-commission-per-lot-per-fill", default="0",
+        help="additional account-currency commission per 1.0 lot per executed deal-side fill; supply broker-sourced stress values",
+    )
     parser.add_argument("--train-months", type=int, default=6)
     parser.add_argument("--test-months", type=int, default=2)
     parser.add_argument("--folds", type=int, default=4)
@@ -342,9 +381,13 @@ def main() -> int:
             raise CostStressError("train-months, test-months, and folds must be > 0")
         spreads = parse_csv_numbers(args.spread_widening_points, "spread-widening-points")
         slippages = parse_csv_numbers(args.slippage_points_per_fill, "slippage-points-per-fill")
+        commissions = parse_csv_numbers(
+            args.additional_commission_per_lot_per_fill, "additional-commission-per-lot-per-fill"
+        )
         report = build_report(
             args.deals, args.open_positions, point_value_per_lot=args.point_value_per_lot,
             initial_balance=args.initial_balance, spread_stresses=spreads, slippage_stresses=slippages,
+            commission_stresses=commissions,
             start=start, end=end, train_months=args.train_months, test_months=args.test_months,
             folds=args.folds, simulations=args.simulations, seed=args.seed,
         )

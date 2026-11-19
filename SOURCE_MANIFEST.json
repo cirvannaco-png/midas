@@ -485,15 +485,25 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "test/integrated-policy-coverage-20261119",
-    "commit": "8d4d2a238b1001d779018b325d2803cbf32e2ccf",
-    "git_tree_sha": "f4738080467d0fa0a7b673ac5384638896163857",
+    "commit": "bcb7e029611b382a103395e778aa24c8b8666243",
+    "git_tree_sha": "15fca60a2993743885f8a406024d653745f9a208",
     "root": "development/EA",
     "file_count": 98,
     "files": [
       {
+        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
+        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
+        "size_bytes": 15553
+      },
+      {
+        "path": "development/EA/MedisTouch_v2.8.source.mq5",
+        "git_blob_sha": "38fcdb498262e639ada4341275f967b25c31f451",
+        "size_bytes": 114150
+      },
+      {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
-        "git_blob_sha": "589618f324666c242e5982f30271fd959791241b",
-        "size_bytes": 58341
+        "git_blob_sha": "0334cc0535829b03a1b3733f2e546354600727b1",
+        "size_bytes": 59115
       },
       {
         "path": "development/EA/includes/Analysis/TFContext.mqh",
@@ -751,14 +761,14 @@
         "size_bytes": 8538
       },
       {
-        "path": "development/EA/includes/SmartMoney/FibonacciEngine.mqh",
-        "git_blob_sha": "74df9e8c41352e1c43ad99d83e1aa0992b367380",
-        "size_bytes": 8793
-      },
-      {
         "path": "development/EA/includes/SmartMoney/FVG.mqh",
         "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
         "size_bytes": 5668
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/FibonacciEngine.mqh",
+        "git_blob_sha": "74df9e8c41352e1c43ad99d83e1aa0992b367380",
+        "size_bytes": 8793
       },
       {
         "path": "development/EA/includes/SmartMoney/Inducement.mqh",
@@ -892,8 +902,8 @@
       },
       {
         "path": "development/EA/includes/Trading/StrategyTradeZone.mqh",
-        "git_blob_sha": "2b194d3b6c020ea326e51c8b1a763c3a51af4fba",
-        "size_bytes": 17644
+        "git_blob_sha": "a9317495d7c9e0fb9028d14308df7cc0cbe87e5a",
+        "size_bytes": 17907
       },
       {
         "path": "development/EA/includes/Trading/Targets.mqh",
@@ -924,16 +934,6 @@
         "path": "development/EA/includes/VolatilityRegime.mqh",
         "git_blob_sha": "26f21d5a2d07ec4e1f48f89669053a82f96f6781",
         "size_bytes": 1047
-      },
-      {
-        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
-        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
-        "size_bytes": 15553
-      },
-      {
-        "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "38fcdb498262e639ada4341275f967b25c31f451",
-        "size_bytes": 114150
       },
       {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
@@ -980,8 +980,6 @@
         "git_blob_sha": "b3d1768a9b6da99b9175832ea0425f5ebd564c39",
         "size_bytes": 877
       }
-    ],
-    "generated_artifact": "development/EA/MedisTouch_v2.8.mq5",
-    "generated_artifact_excluded_from_source_files": true
+    ]
   }
 }

@@ -28,7 +28,13 @@ jobs:
           PYTHONPATH: backend/source
         run: |
           python -m pip install pytest
-          python -m pytest backend/source/tools/tests/test_position_ledger_metrics.py backend/source/tools/tests/test_tester_deal_export_contract.py backend/source/tools/tests/test_ea_deal_accounting_contract.py backend/source/tools/tests/test_strategytune_position_ledger.py -q
+          python -m pytest backend/source/tools/tests/test_position_ledger_metrics.py backend/source/tools/tests/test_tester_deal_export_contract.py backend/source/tools/tests/test_ea_deal_accounting_contract.py backend/source/tools/tests/test_strategytune_position_ledger.py backend/source/tools/tests/test_cost_stress_monte_carlo.py backend/source/tools/tests/test_compare_mt5_variant_runs.py backend/source/tools/tests/test_compare_mt5_continuation_runs.py -q
+      - name: Test continuation guardrails and durable execution recovery
+        env:
+          PYTHONPATH: backend/source
+        run: |
+          python -m pytest tests/research/test_fresh_sweep_additive_router_contract.py -q
+          python -m pytest backend/source/medis_touch/tests/test_execution_recovery.py backend/source/medis_touch/tests/test_execution_recovery_faults.py backend/source/medis_touch/tests/test_execution_flow_invariants.py backend/source/medis_touch/tests/test_execution_governance_and_costs.py -q
       - name: Test StrategyTune session-row attribution and P&L reconciliation
         run: python -m pytest tests/research/test_strategytune_session_reconcile.py -q
       - name: Test confidence diagnostics OOS evaluator

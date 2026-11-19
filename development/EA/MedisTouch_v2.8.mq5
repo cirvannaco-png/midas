@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@8d4d2a238b1001d779018b325d2803cbf32e2ccf
+// Staged EA source snapshot: cirvannaco-png/midas@bcb7e029611b382a103395e778aa24c8b8666243
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -6403,6 +6403,9 @@ public:
    // you've run the comparison on a Windows VPS/terminal.
    void              ConfigureVolumeFibonacci(bool requireVolumeConfirmation, double rvolThreshold,
                                               bool requireFibonacciZone, double fibZoneMinPct, double fibZoneMaxPct);
+   // Reuse mandatory native entry filters when a fallback strategy is selected.
+   // The fallback router must not bypass configured volume/Fibonacci gates.
+   bool              PassesConfiguredVolumeFibonacciFilters(bool forBuy);
    // v2.20: separate the legacy location gate from the production
    // contradiction gate. The latter only blocks when a sufficiently good
    // profile actively conflicts with the trade thesis. Missing/low-quality
@@ -6620,6 +6623,23 @@ void CScoringEngine::ConfigureVolumeFibonacci(bool requireVolumeConfirmation, do
    m_requireFibonacciZone = requireFibonacciZone;
    m_fibZoneMinPct = fibZoneMinPct;
    m_fibZoneMaxPct = fibZoneMaxPct;
+  }
+//+------------------------------------------------------------------+
+bool CScoringEngine::PassesConfiguredVolumeFibonacciFilters(bool forBuy)
+  {
+   if(m_requireVolumeConfirmation)
+     {
+      if(m_bosCtx==NULL || m_bosCtx.volume.RVOL(1)<m_rvolThreshold)
+         return false;
+     }
+   if(m_requireFibonacciZone)
+     {
+      double price=CurrentPrice();
+      if(price<=0.0 || m_bosCtx==NULL ||
+         !m_bosCtx.fibonacci.InPullbackZone(forBuy,price,m_fibZoneMinPct,m_fibZoneMaxPct))
+         return false;
+     }
+   return true;
   }
 //+------------------------------------------------------------------+
 void CScoringEngine::ConfigureValueArea(bool requireValueAreaLocation, bool blockValueAreaContradictions)
@@ -8139,6 +8159,11 @@ bool CTradeDecision::BuildFreshSweepSetup(bool forBuy,
    ZeroMemory(out);
    if(!candidate.valid || m_priceRef==NULL || m_liqCtx==NULL ||
       !(candidate.atr>0.0) || !(candidate.invalidation>0.0))
+      return false;
+
+   // Continuation research must respect the same mandatory RVOL/Fibonacci
+   // settings as native strategy selection. Missing scoring context fails closed.
+   if(m_scoring==NULL || !m_scoring.PassesConfiguredVolumeFibonacciFilters(forBuy))
       return false;
 
    const string symbol=m_priceRef.Symbol();
