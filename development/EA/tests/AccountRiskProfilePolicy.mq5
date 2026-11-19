@@ -1,5 +1,6 @@
 #property strict
 #include "../includes/Portfolio/AccountRiskProfilePolicy.mqh"
+#include "TestHarness.mqh"
 
 int failures=0;
 
@@ -203,18 +204,5 @@ void OnStart()
       "future-dated conversion ticks are rejected");
 
    PrintFormat("AccountRiskProfilePolicy tests: %d failure(s)",failures);
-   int resultHandle=FileOpen("AccountRiskProfilePolicy-tests.txt",FILE_WRITE|FILE_TXT|FILE_ANSI);
-   if(resultHandle==INVALID_HANDLE)
-     {
-      PrintFormat("FAIL: could not write policy test result file (error=%d)",GetLastError());
-      if(MQLInfoInteger(MQL_STARTED_FROM_CONFIG)) TerminalClose(2);
-      return;
-     }
-   FileWrite(resultHandle,StringFormat("failures=%d",failures));
-   FileClose(resultHandle);
-
-   // CI starts this as a one-shot startup script; close the portable terminal
-   // with the test result as its process exit code. Manual launches stay open.
-   if(MQLInfoInteger(MQL_STARTED_FROM_CONFIG))
-      TerminalClose(failures==0 ? 0 : 1);
+   MidasTestFinish("AccountRiskProfilePolicy-tests.txt",failures);
   }
