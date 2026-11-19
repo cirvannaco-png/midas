@@ -1,4 +1,4 @@
-name: MedisTouch_v2.8 validation and MetaEditor compile
+name: Midas v2.8 validation and MetaEditor compile
 on:
   push:
     branches: ["build/**", "release/**", "research/**"]
@@ -22,9 +22,9 @@ jobs:
       - name: Validate flattened source and safety defaults
         run: python scripts/validate_single_file.py
 
-  metaeditor-compile:
+  metaeditor-compile-and-policy-tests:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,7 +44,8 @@ jobs:
           if (-not (Test-Path $editor) -or -not (Test-Path $terminalExe)) {
             throw "MetaTrader 5 did not install at the requested path. Installer exit: $($proc.ExitCode)"
           }
-          # First launch initializes the portable MQL5 data tree and standard library; no account login is supplied.
+
+          # First launch initializes the portable MQL5 data tree and standard library.
           $terminalProcess = Start-Process -FilePath $terminalExe -ArgumentList "/portable" -PassThru
           Start-Sleep -Seconds 8
           Stop-Process -Id $terminalProcess.Id -Force -ErrorAction SilentlyContinue
@@ -56,14 +57,12 @@ jobs:
           "MQL5ROOT=$mql5" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "MetaEditor: $editor"
           Write-Host "MQL5 root: $mql5"
-      - name: Compile with MetaEditor64
+      - name: Compile complete Midas EA
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          if (-not (Test-Path $env:METAEDITOR)) { throw "MetaEditor path missing." }
-          if (-not (Test-Path (Join-Path $env:MQL5ROOT "Include\Trade\Trade.mqh"))) { throw "MT5 standard library missing." }
-          $target = Join-Path $env:RUNNER_TEMP "MedisTouch_v2.8"
-          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $target = Join-Path $env:RUNNER_TEMP "Midas_v2.8"
+          New-Item -ItemType Directory -Force -Path $target, "artifacts" | Out-Null
           $source = Join-Path $target "MedisTouch_v2.8.mq5"
           Copy-Item "development/EA/MedisTouch_v2.8.mq5" $source -Force
           $log = Join-Path $target "MedisTouch_v2.8.log"
@@ -76,135 +75,20 @@ jobs:
           if (-not $match.Success) { throw "Cannot parse MetaEditor result: $content" }
           $errors = [int]$match.Groups[1].Value
           $warnings = [int]$match.Groups[2].Value
-          Write-Host "MetaEditor: $errors errors, $warnings warnings"
+          Write-Host "Midas EA: $errors errors, $warnings warnings"
           if ($errors -ne 0 -or $warnings -ne 0) { throw "Release compile gate requires zero errors and zero warnings; found $errors errors and $warnings warnings." }
-
-          # Install the pure policy test and its relative include tree as a terminal Script.
-          # It performs no trading and uses no account credentials.
-          $policyScriptRoot = Join-Path $env:MQL5ROOT "Scripts\development\EA"
-          $policyTestDir = Join-Path $policyScriptRoot "tests"
-          $policyIncludeDir = Join-Path $policyScriptRoot "includes\Portfolio"
-          New-Item -ItemType Directory -Force -Path $policyTestDir, $policyIncludeDir | Out-Null
-          Copy-Item "development/EA/tests/AccountRiskProfilePolicy.mq5" (Join-Path $policyTestDir "AccountRiskProfilePolicy.mq5") -Force
-          Copy-Item "development/EA/includes/Portfolio/AccountRiskProfilePolicy.mqh" (Join-Path $policyIncludeDir "AccountRiskProfilePolicy.mqh") -Force
-          $policyTestSource = Join-Path $policyTestDir "AccountRiskProfilePolicy.mq5"
-          $policyTestLog = Join-Path $policyTestDir "AccountRiskProfilePolicy.log"
-          $policyCompileArg = '/compile:"' + $policyTestSource + '"'
-          $policyProc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($policyCompileArg, $includeArg, "/log") -Wait -PassThru
-          if (-not (Test-Path $policyTestLog)) { throw "Risk-policy test compile log missing; process exit $($policyProc.ExitCode)" }
-          $policyContent = Get-Content $policyTestLog -Raw -Encoding Unicode
-          $policyMatch = [regex]::Match($policyContent, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
-          if (-not $policyMatch.Success) { throw "Cannot parse risk-policy test compile result: $policyContent" }
-          $policyErrors = [int]$policyMatch.Groups[1].Value
-          $policyWarnings = [int]$policyMatch.Groups[2].Value
-          Write-Host "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings"
-          if ($policyErrors -ne 0 -or $policyWarnings -ne 0) { throw "Risk-policy test source must compile with zero errors and warnings." }
-
-          # Execute the test Script from a one-shot terminal startup config.
-          $policyResultFile = Join-Path $env:MQL5ROOT "Files\AccountRiskProfilePolicy-tests.txt"
-          if (Test-Path $policyResultFile) { Remove-Item $policyResultFile -Force }
-          New-Item -ItemType Directory -Force -Path (Split-Path $policyResultFile) | Out-Null
-          $policyConfig = Join-Path $target "AccountRiskPolicyTest.ini"
-          $policyIniContent = @"
-          [StartUp]
-          Script=development\EA\tests\AccountRiskProfilePolicy
-          Symbol=EURUSD
-          Period=M1
-          ShutdownTerminal=Yes
-          "@
-          Set-Content -LiteralPath $policyConfig -Value $policyIniContent -Encoding Unicode
-          $terminal = Join-Path (Split-Path $env:METAEDITOR) "terminal64.exe"
-          $policyTerminal = Start-Process -FilePath $terminal -ArgumentList @("/portable", "/config:$policyConfig") -PassThru
-          try {
-            Wait-Process -Id $policyTerminal.Id -Timeout 180
-          } catch {
-            Stop-Process -Id $policyTerminal.Id -Force -ErrorAction SilentlyContinue
-            throw "Policy-test MT5 terminal did not close after the script timeout."
-          }
-          if (-not (Test-Path $policyResultFile)) { throw "Policy test did not write its result file; startup script may not have executed." }
-          $policyResult = Get-Content $policyResultFile -Raw
-          if ($policyResult -notmatch "failures=0") { throw "AccountRiskProfilePolicy assertions failed: $policyResult" }
-          Write-Host "AccountRiskProfilePolicy runtime assertions: PASS ($policyResult)"
-          
           $ex5 = Join-Path $target "MedisTouch_v2.8.ex5"
           if (-not (Test-Path $ex5)) { throw "Compiled EX5 not produced" }
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Copy-Item $ex5 artifacts/MedisTouch_v2.8.ex5 -Force
-          Copy-Item $log artifacts/MedisTouch_v2.8.MetaEditor.log -Force
-          Copy-Item $policyTestLog artifacts/AccountRiskProfilePolicy.MetaEditor.log -Force
-          Copy-Item $policyTestSource.Replace(".mq5",".ex5") artifacts/AccountRiskProfilePolicy.ex5 -Force
-          Copy-Item $policyResultFile artifacts/AccountRiskProfilePolicy-tests.txt -Force
-          "MetaEditor result: $errors errors, $warnings warnings" | Out-File artifacts/compile-summary.txt -Encoding utf8
-          "AccountRiskProfilePolicy test source: $policyErrors errors, $policyWarnings warnings; runtime assertions: PASS" | Out-File artifacts/policy-test-compile-summary.txt -Encoding utf8
-      - name: Compile FreshSweepAdditiveRouter policy tests
+          Copy-Item $ex5 "artifacts/MedisTouch_v2.8.ex5" -Force
+          Copy-Item $log "artifacts/MedisTouch_v2.8.MetaEditor.log" -Force
+          "Midas EA compile: $errors errors, $warnings warnings" | Out-File "artifacts/compile-summary.txt" -Encoding utf8
+      - name: Compile and run all deterministic native MT5 policy tests
         shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $scriptsRoot = Join-Path $env:MQL5ROOT "Scripts\development\EA"
-          $testDir = Join-Path $scriptsRoot "tests"
-          $tradingDir = Join-Path $scriptsRoot "includes\Trading"
-          $coreDir = Join-Path $scriptsRoot "includes\Core"
-          New-Item -ItemType Directory -Force -Path $testDir, $tradingDir, $coreDir | Out-Null
-          Copy-Item "development/EA/tests/FreshSweepAdditiveRouter.mq5" (Join-Path $testDir "FreshSweepAdditiveRouter.mq5") -Force
-          Copy-Item "development/EA/includes/Trading/FreshSweepAdditiveRouter.mqh" (Join-Path $tradingDir "FreshSweepAdditiveRouter.mqh") -Force
-          Copy-Item "development/EA/includes/Core/Config.mqh" (Join-Path $coreDir "Config.mqh") -Force
-          Copy-Item "development/EA/includes/Core/CandleData.mqh" (Join-Path $coreDir "CandleData.mqh") -Force
-          Copy-Item "development/EA/includes/Core/NewsFilter.mqh" (Join-Path $coreDir "NewsFilter.mqh") -Force
-          $source = Join-Path $testDir "FreshSweepAdditiveRouter.mq5"
-          $log = Join-Path $testDir "FreshSweepAdditiveRouter.log"
-          $compileArg = '/compile:"' + $source + '"'
-          $includeArg = '/include:"' + $env:MQL5ROOT + '"'
-          $proc = Start-Process -FilePath $env:METAEDITOR -ArgumentList @($compileArg, $includeArg, "/log") -Wait -PassThru
-          if (-not (Test-Path $log)) { throw "FreshSweepAdditiveRouter compile log missing; process exit $($proc.ExitCode)" }
-          $content = Get-Content $log -Raw -Encoding Unicode
-          $match = [regex]::Match($content, "Result:\s*(\d+)\s+errors?,\s*(\d+)\s+warnings?")
-          if (-not $match.Success) { throw "Cannot parse FreshSweepAdditiveRouter compile result: $content" }
-          $errors = [int]$match.Groups[1].Value
-          $warnings = [int]$match.Groups[2].Value
-          Write-Host "FreshSweepAdditiveRouter: $errors errors, $warnings warnings"
-          if ($errors -ne 0 -or $warnings -ne 0) { throw "FreshSweepAdditiveRouter test source must compile with zero errors and warnings." }
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Copy-Item $log artifacts/FreshSweepAdditiveRouter.MetaEditor.log -Force
-          $ex5 = Join-Path $testDir "FreshSweepAdditiveRouter.ex5"
-          if (-not (Test-Path $ex5)) { throw "FreshSweepAdditiveRouter.ex5 not produced" }
-          Copy-Item $ex5 artifacts/FreshSweepAdditiveRouter.ex5 -Force
-
-      - name: Run FreshSweepAdditiveRouter policy tests
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $resultFile = Join-Path $env:MQL5ROOT "Files\FreshSweepAdditiveRouter-tests.txt"
-          if (Test-Path $resultFile) { Remove-Item $resultFile -Force }
-          New-Item -ItemType Directory -Force -Path (Split-Path $resultFile) | Out-Null
-          $target = Join-Path $env:RUNNER_TEMP "FreshSweepAdditiveRouterTest"
-          New-Item -ItemType Directory -Force -Path $target | Out-Null
-          $config = Join-Path $target "FreshSweepAdditiveRouterTest.ini"
-          $ini = @"
-          [StartUp]
-          Script=development\EA\tests\FreshSweepAdditiveRouter
-          Symbol=EURUSD
-          Period=M1
-          ShutdownTerminal=Yes
-          "@
-          Set-Content -LiteralPath $config -Value $ini -Encoding Unicode
-          $terminal = Join-Path (Split-Path $env:METAEDITOR) "terminal64.exe"
-          $proc = Start-Process -FilePath $terminal -ArgumentList @("/portable", "/config:$config") -PassThru
-          try {
-            Wait-Process -Id $proc.Id -Timeout 180
-          } catch {
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            throw "FreshSweepAdditiveRouter policy test terminal timed out."
-          }
-          if (-not (Test-Path $resultFile)) { throw "FreshSweepAdditiveRouter policy test did not write its result file." }
-          $result = Get-Content $resultFile -Raw
-          if ($result -notmatch "failures=0") { throw "FreshSweepAdditiveRouter assertions failed: $result" }
-          Write-Host "FreshSweepAdditiveRouter runtime assertions: PASS ($result)"
-          Copy-Item $resultFile artifacts/FreshSweepAdditiveRouter-tests.txt -Force
-
-      - name: Upload MetaEditor artifacts
+        run: ./scripts/run_mt5_policy_tests.ps1
+      - name: Upload MetaEditor and native-test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: MedisTouch_v2.8-MetaEditor-build
+          name: Midas-v2.8-MetaEditor-and-policy-tests
           path: artifacts/
           if-no-files-found: warn
