@@ -1,5 +1,6 @@
 #property strict
 #include "../includes/Execution/PositionManagementPolicy.mqh"
+#include "TestHarness.mqh"
 
 int failures=0;
 void AssertTrue(bool condition,string name)
@@ -8,7 +9,7 @@ void AssertTrue(bool condition,string name)
    else PrintFormat("PASS: %s",name);
   }
 
-int OnInit()
+void OnStart()
   {
    AssertTrue(ShouldTakePartialAtR(TS_FILLED,2.0,2.0),"filled position reaches partial target without a trailing-stop edit");
    AssertTrue(ShouldTakePartialAtR(TS_PROTECTED,2.5,2.0),"protected position reaches partial target");
@@ -19,5 +20,5 @@ int OnInit()
    AssertTrue(!ShouldTakePartialAtR(TS_PROTECTED,1.99,2.0),"protected position below partial target stays whole");
    AssertTrue(!ShouldTakePartialAtR(TS_CLOSED,3.0,2.0),"closed position is not eligible for partial close");
    PrintFormat("PositionManagementPolicy tests: %d failure(s)",failures);
-   return failures==0 ? INIT_SUCCEEDED : INIT_FAILED;
+   MidasTestFinish("PositionManagementPolicy-tests.txt",failures);
   }

@@ -201,6 +201,9 @@ public:
    // you've run the comparison on a Windows VPS/terminal.
    void              ConfigureVolumeFibonacci(bool requireVolumeConfirmation, double rvolThreshold,
                                               bool requireFibonacciZone, double fibZoneMinPct, double fibZoneMaxPct);
+   // Reuse mandatory native entry filters when a fallback strategy is selected.
+   // The fallback router must not bypass configured volume/Fibonacci gates.
+   bool              PassesConfiguredVolumeFibonacciFilters(bool forBuy);
    // v2.20: separate the legacy location gate from the production
    // contradiction gate. The latter only blocks when a sufficiently good
    // profile actively conflicts with the trade thesis. Missing/low-quality
@@ -418,6 +421,23 @@ void CScoringEngine::ConfigureVolumeFibonacci(bool requireVolumeConfirmation, do
    m_requireFibonacciZone = requireFibonacciZone;
    m_fibZoneMinPct = fibZoneMinPct;
    m_fibZoneMaxPct = fibZoneMaxPct;
+  }
+//+------------------------------------------------------------------+
+bool CScoringEngine::PassesConfiguredVolumeFibonacciFilters(bool forBuy)
+  {
+   if(m_requireVolumeConfirmation)
+     {
+      if(m_bosCtx==NULL || m_bosCtx.volume.RVOL(1)<m_rvolThreshold)
+         return false;
+     }
+   if(m_requireFibonacciZone)
+     {
+      double price=CurrentPrice();
+      if(price<=0.0 || m_bosCtx==NULL ||
+         !m_bosCtx.fibonacci.InPullbackZone(forBuy,price,m_fibZoneMinPct,m_fibZoneMaxPct))
+         return false;
+     }
+   return true;
   }
 //+------------------------------------------------------------------+
 void CScoringEngine::ConfigureValueArea(bool requireValueAreaLocation, bool blockValueAreaContradictions)

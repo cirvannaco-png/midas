@@ -146,6 +146,11 @@ bool CTradeDecision::BuildFreshSweepSetup(bool forBuy,
       !(candidate.atr>0.0) || !(candidate.invalidation>0.0))
       return false;
 
+   // Continuation research must respect the same mandatory RVOL/Fibonacci
+   // settings as native strategy selection. Missing scoring context fails closed.
+   if(m_scoring==NULL || !m_scoring.PassesConfiguredVolumeFibonacciFilters(forBuy))
+      return false;
+
    const string symbol=m_priceRef.Symbol();
    const double entry=SymbolInfoDouble(symbol,forBuy?SYMBOL_ASK:SYMBOL_BID);
    if(!MathIsValidNumber(entry) || entry<=0.0)

@@ -1,5 +1,6 @@
 #property strict
 #include "../includes/Trading/FreshSweepAdditiveRouter.mqh"
+#include "TestHarness.mqh"
 
 int failures=0;
 
@@ -75,15 +76,5 @@ void OnStart()
               "router abstains when neither lane has an admissible candidate");
 
    PrintFormat("FreshSweepAdditiveRouter tests: %d failure(s)",failures);
-   int resultHandle=FileOpen("FreshSweepAdditiveRouter-tests.txt",FILE_WRITE|FILE_TXT|FILE_ANSI);
-   if(resultHandle==INVALID_HANDLE)
-     {
-      PrintFormat("FAIL: could not write router test result file (error=%d)",GetLastError());
-      if(MQLInfoInteger(MQL_STARTED_FROM_CONFIG)) TerminalClose(2);
-      return;
-     }
-   FileWrite(resultHandle,StringFormat("failures=%d",failures));
-   FileClose(resultHandle);
-   if(MQLInfoInteger(MQL_STARTED_FROM_CONFIG))
-      TerminalClose(failures==0 ? 0 : 1);
+   MidasTestFinish("FreshSweepAdditiveRouter-tests.txt",failures);
   }

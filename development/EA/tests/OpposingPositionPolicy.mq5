@@ -6,6 +6,7 @@
 #property version "1.00"
 
 #include "../includes/Portfolio/OpposingPositionPolicy.mqh"
+#include "TestHarness.mqh"
 
 int failures=0;
 
@@ -81,11 +82,11 @@ void TestAccountModeAndExplicitEnableMatrix()
               "opposing-policy check alone does not invent an opposing position");
   }
 
-int OnInit()
+void OnStart()
   {
    TestPositionDirectionMatrix();
    TestAccountModeAndExplicitEnableMatrix();
    PrintFormat("OpposingPositionPolicy tests: %d failure(s)",failures);
-   return failures==0 ? INIT_SUCCEEDED : INIT_FAILED;
+   MidasTestFinish("OpposingPositionPolicy-tests.txt",failures);
   }
 //+------------------------------------------------------------------+

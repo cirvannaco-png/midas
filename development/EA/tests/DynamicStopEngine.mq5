@@ -6,6 +6,7 @@
 #define MIDAS_DYNAMIC_STOP_TESTING
 #include "../includes/Execution/DynamicStopEngine.mqh"
 #include "../includes/Execution/PriceGridNormalizer.mqh"
+#include "TestHarness.mqh"
 
 int failures=0;
 string g_traceSummary="";
@@ -160,11 +161,11 @@ void TestDynamicStop()
    AssertTrue(!d.modify,"minimum-improvement threshold suppresses tiny change");
   }
 
-int OnInit()
+void OnStart()
   {
    TestPriceGridNormalization();
    TestDynamicStop();
    PrintFormat("DynamicStopEngine tests: %d failure(s) | explicit test point override used for deterministic geometry | trace=%s",
                failures,g_traceSummary);
-   return failures==0 ? INIT_SUCCEEDED : INIT_FAILED;
+   MidasTestFinish("DynamicStopEngine-tests.txt",failures);
   }

@@ -8,6 +8,7 @@ import pytest
 try:
     from tools.cost_stress_monte_carlo import (
         CostStressError,
+        build_report,
         incremental_cost_for_position,
         monte_carlo_drawdown,
         performance_metrics,
@@ -17,6 +18,7 @@ try:
 except ImportError:
     from cost_stress_monte_carlo import (  # type: ignore[no-redef]
         CostStressError,
+        build_report,
         incremental_cost_for_position,
         monte_carlo_drawdown,
         performance_metrics,
@@ -29,6 +31,18 @@ def test_incremental_spread_and_slippage_are_charged_per_executed_side():
     # One lot entered + one lot exited => two lot-sides. Four points of
     # extra full spread cost 2 points per side; one slippage point per side.
     assert incremental_cost_for_position(2.0, 1.0, 4.0, 1.0) == 6.0
+
+
+def test_additional_commission_is_charged_per_lot_per_executed_fill():
+    # Two lot-sides, each charged an extra 0.75 account-currency commission.
+    assert incremental_cost_for_position(2.0, 1.0, 4.0, 1.0, 0.75) == 7.5
+
+
+def test_additional_commission_rejects_negative_and_non_finite_values():
+    with pytest.raises(CostStressError, match="cannot be negative"):
+        incremental_cost_for_position(2.0, 1.0, 0.0, 0.0, -0.01)
+    with pytest.raises(CostStressError, match="must be finite"):
+        incremental_cost_for_position(2.0, 1.0, 0.0, 0.0, float("inf"))
 
 
 def test_invalid_point_value_fails_closed():
@@ -82,3 +96,59 @@ def test_development_cost_stress_ending_at_oos_start_is_allowed():
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
     end = datetime(2026, 9, 1, tzinfo=timezone.utc)
     reject_reserved_oos_overlap(start, end)
+
+
+def test_cost_analysis_rejects_newer_locked_oos_reservation():
+    start = datetime(2026, 11, 14, tzinfo=timezone.utc)
+    end = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    with pytest.raises(CostStressError, match="midas-gold-m15-frozen-main"):
+        reject_reserved_oos_overlap(start, end)
+
+
+def test_build_report_crosses_additional_commission_into_spread_slippage_grid(tmp_path: Path):
+    deals = tmp_path / "deals.csv"
+    deals.write_text(
+        "\n".join([
+            "position_id,time,entry,volume,profit,commission,swap,fee,risk_cash,lane,strategy,regime",
+            "P1,2025-01-05T10:00:00Z,IN,0.5,0,-0.5,0,0,20,EA,SMC,TRENDING",
+            "P1,2025-01-05T11:00:00Z,OUT,0.5,10,-0.5,0,0,20,EA,SMC,TRENDING",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    open_ids = tmp_path / "open.csv"
+    open_ids.write_text("position_id\n", encoding="utf-8")
+    report = build_report(
+        deals, open_ids,
+        point_value_per_lot=1.0,
+        initial_balance=10000.0,
+        spread_stresses=[0.0, 2.0],
+        slippage_stresses=[0.0],
+        commission_stresses=[0.0, 1.0],
+        start=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        end=datetime(2025, 4, 1, tzinfo=timezone.utc),
+        train_months=1,
+        test_months=1,
+        folds=2,
+        simulations=100,
+        seed=7,
+    )
+    assert len(report["scenarios"]) == 4
+    no_stress = next(
+        item for item in report["scenarios"]
+        if item["incremental_spread_widening_points"] == 0
+        and item["additional_commission_per_lot_per_fill"] == 0
+    )
+    commission_only = next(
+        item for item in report["scenarios"]
+        if item["incremental_spread_widening_points"] == 0
+        and item["additional_commission_per_lot_per_fill"] == 1
+    )
+    combined = next(
+        item for item in report["scenarios"]
+        if item["incremental_spread_widening_points"] == 2
+        and item["additional_commission_per_lot_per_fill"] == 1
+    )
+    assert no_stress["metrics"]["net_pnl"] == 9.0
+    assert commission_only["incremental_stress_cost"] == 1.0
+    assert combined["incremental_stress_cost"] == 2.0
+    assert combined["metrics"]["net_pnl"] == 7.0
