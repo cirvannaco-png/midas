@@ -485,21 +485,11 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "build/rankb-port-20261120",
-    "commit": "b50245f687b783787cdefe4ed26c7d005d38fc96",
-    "git_tree_sha": "597f2e7ea2ca7f8480657f595279cad1b502f1c6",
+    "commit": "4683825f489f50bda624c69ae918771c4e0f1b62",
+    "git_tree_sha": "ace812e3fed18fd56c7460e5a0edd19b16c8a34b",
     "root": "development/EA",
-    "file_count": 98,
+    "file_count": 99,
     "files": [
-      {
-        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
-        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
-        "size_bytes": 15553
-      },
-      {
-        "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "0f83177b11de90176f208e7dba49e6c8da2aa344",
-        "size_bytes": 115341
-      },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
         "git_blob_sha": "0334cc0535829b03a1b3733f2e546354600727b1",
@@ -761,14 +751,14 @@
         "size_bytes": 8538
       },
       {
-        "path": "development/EA/includes/SmartMoney/FVG.mqh",
-        "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
-        "size_bytes": 5668
-      },
-      {
         "path": "development/EA/includes/SmartMoney/FibonacciEngine.mqh",
         "git_blob_sha": "74df9e8c41352e1c43ad99d83e1aa0992b367380",
         "size_bytes": 8793
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/FVG.mqh",
+        "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
+        "size_bytes": 5668
       },
       {
         "path": "development/EA/includes/SmartMoney/Inducement.mqh",
@@ -936,9 +926,24 @@
         "size_bytes": 1047
       },
       {
+        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
+        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
+        "size_bytes": 15553
+      },
+      {
+        "path": "development/EA/MedisTouch_v2.8.source.mq5",
+        "git_blob_sha": "0f83177b11de90176f208e7dba49e6c8da2aa344",
+        "size_bytes": 115341
+      },
+      {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
         "git_blob_sha": "54f0cdb1daee940d45076dc05e910ea49de94fcb",
         "size_bytes": 10291
+      },
+      {
+        "path": "development/EA/tests/BrokerSpecSnapshot.mq5",
+        "git_blob_sha": "ee32ae3f8ad2ebbc959a5be7f58185b05fb37b0f",
+        "size_bytes": 8995
       },
       {
         "path": "development/EA/tests/ConfigSyncContract.mq5",
