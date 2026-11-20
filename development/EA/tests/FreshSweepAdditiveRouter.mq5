@@ -95,10 +95,10 @@ void OnStart()
               contRank,noOpposing,opposingSingle,noOpposing,5.0,chosen,forBuy,lane) &&
               lane==FRESH_SWEEP_CONTINUATION && forBuy,
               "directional prior can reorder families without rejecting either");
-   MidasFreshSweepCandidate contSell=CandidateWithTrend(80.0,0.0);
-   MidasFreshSweepCandidate contBuy=CandidateWithTrend(82.0,0.0);
+   MidasFreshSweepCandidate rankConflictSell=CandidateWithTrend(80.0,0.0);
+   MidasFreshSweepCandidate rankConflictBuy=CandidateWithTrend(82.0,0.0);
    AssertTrue(!CFreshSweepAdditiveRouter::SelectDualLaneRankB(
-              contBuy,contSell,noOpposing,noOpposing,5.0,chosen,forBuy,lane),
+              rankConflictBuy,rankConflictSell,noOpposing,noOpposing,5.0,chosen,forBuy,lane),
               "Rank B abstains when opposite-side scores are inside the advantage threshold");
    AssertTrue(!CFreshSweepAdditiveRouter::SelectDualLaneRankB(
               noOpposing,noOpposing,noOpposing,noOpposing,5.0,chosen,forBuy,lane),
