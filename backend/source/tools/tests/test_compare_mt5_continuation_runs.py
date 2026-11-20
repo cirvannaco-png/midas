@@ -118,6 +118,14 @@ def _make_manifest(folder: Path):
             "fill_mode": 2,
             "server_utc_offset_minutes": 180,
             "timestamp_basis": "broker_wall_clock_with_explicit_offset",
+            "export_status": "complete",
+            "history_expected_deals": 2,
+            "history_recorded_deals": 2,
+            "history_missing_deals": 0,
+            "deals_exported": 2,
+            "open_positions_exported": 0,
+            "deals_file_written": True,
+            "open_positions_file_written": True,
         }, indent=2), encoding="utf-8")
 
         tester_config_path = folder / f"{role}-tester.ini"
@@ -154,12 +162,22 @@ def _make_manifest(folder: Path):
             "tester_metadata_path": metadata_path.name,
             "tester_config_path": tester_config_path.name,
         })
+    timezone_evidence = folder / "server-timezone-evidence.json"
+    timezone_evidence.write_text(json.dumps({
+        "schema_version": 1,
+        "broker_server": "Broker-Demo-KES",
+        "iana_timezone": "Etc/GMT-3",
+        "source_reference": "https://docs.example.invalid/timezone-evidence-fixture",
+        "verified_at_utc": "2026-11-20T00:00:00Z",
+    }, indent=2), encoding="utf-8")
+
     manifest = folder / "manifest.json"
     manifest.write_text(json.dumps({
         "schema_version": 1,
         "experiment_id": "midas-matched-continuation-test",
         "test_context": context,
         "dataset_path": dataset.name,
+        "server_timezone_evidence_path": timezone_evidence.name,
         "variants": variants,
     }, indent=2), encoding="utf-8")
     return manifest
@@ -179,6 +197,14 @@ def test_matched_continuation_comparison_validates_risk_controls_and_detects_rou
     assert summary["mt5_every_tick_real_ticks_model_verified"] is True
     assert summary["nonzero_matched_execution_delay_verified"] is True
     assert summary["tester_optimization_disabled"] is True
+    assert summary["broker_timezone_mapping_artifact_present"] is True
+    assert summary["server_utc_offset_constant_under_supplied_iana_rules"] is True
+    assert summary["native_tester_export_completeness_verified"] is True
+    assert summary["small_account_target_risk_exactly_20_percent"] is True
+    assert report["server_timezone_evidence"]["iana_timezone"] == "Etc/GMT-3"
+    assert report["variants"]["baseline"]["tester_config"]["offset_constant_throughout_interval"] is True
+    assert report["variants"]["baseline"]["tester_metadata"]["export_status"] == "complete"
+    assert report["variants"]["baseline"]["tester_metadata"]["history_recorded_deals"] == 2
     assert report["variants"]["baseline"]["tester_config"]["model"] == 4
     assert report["variants"]["baseline"]["tester_config"]["execution_mode"] == 100
     assert report["variants"]["baseline"]["tester_metadata"]["cash_per_point_per_lot"] == 10.0
@@ -197,7 +223,7 @@ def test_matched_continuation_comparison_rejects_any_risk_or_exit_preset_change(
     candidate.write_text(candidate.read_text(encoding="utf-8").replace(
         "InpSmallRiskPercentPerTrade=20.0", "InpSmallRiskPercentPerTrade=20.1"
     ), encoding="utf-8")
-    with pytest.raises(ComparisonError, match="small-account target risk must be within"):
+    with pytest.raises(ComparisonError, match="must be exactly 20%"):
         compare_manifest(manifest_path)
 
 
@@ -291,7 +317,7 @@ def test_matched_pair_rejects_broker_server_or_contract_metadata_mismatch(tmp_pa
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata["server"] = "Different-Broker-Server"
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
-    with pytest.raises(ComparisonError, match="tester metadata differ.*server"):
+    with pytest.raises(ComparisonError, match="timezone evidence broker_server does not match"):
         compare_manifest(manifest_path)
 
 
@@ -374,4 +400,92 @@ def test_matched_pair_rejects_context_that_claims_a_non_real_tick_spread_model(t
     manifest["test_context"]["spread_points"] = 2.0
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(ComparisonError, match="spread_model=real_ticks"):
+        compare_manifest(manifest_path)
+
+
+
+def test_matched_pair_rejects_noncanonical_tester_expert_filename(tmp_path):
+    manifest_path = _make_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    config = tmp_path / manifest["variants"][0]["tester_config_path"]
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            "Expert=MedisTouch_v2.8.ex5", "Expert=Stale_MedisTouch_v2.8.ex5"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ComparisonError, match="exact consolidated MedisTouch_v2.8.ex5"):
+        compare_manifest(manifest_path)
+
+
+def test_matched_pair_rejects_dst_transition_inside_tester_interval(tmp_path):
+    manifest_path = _make_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    evidence_path = tmp_path / manifest["server_timezone_evidence_path"]
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    evidence["iana_timezone"] = "Europe/Helsinki"
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    with pytest.raises(ComparisonError, match="crosses a broker UTC-offset transition"):
+        compare_manifest(manifest_path)
+
+
+def test_matched_pair_rejects_timezone_evidence_for_another_broker_server(tmp_path):
+    manifest_path = _make_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    evidence_path = tmp_path / manifest["server_timezone_evidence_path"]
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    evidence["broker_server"] = "Different-Server"
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    with pytest.raises(ComparisonError, match="timezone evidence broker_server does not match"):
+        compare_manifest(manifest_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("export_status", "incomplete", "did not mark this run complete"),
+        ("history_missing_deals", 1, "reports missing deals"),
+        ("history_recorded_deals", 1, "history counts do not reconcile"),
+        ("deals_exported", 1, "CSV deal count does not reconcile"),
+        ("deals_file_written", False, "deals_file_written=false"),
+    ],
+)
+def test_matched_pair_rejects_incomplete_native_exporter_evidence(
+    tmp_path, field, value, message
+):
+    manifest_path = _make_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    metadata_path = tmp_path / manifest["variants"][0]["tester_metadata_path"]
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata[field] = value
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ComparisonError, match=message):
+        compare_manifest(manifest_path)
+
+
+def test_matched_pair_requires_exact_twenty_percent_protocol_risk(tmp_path):
+    manifest_path = _make_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["test_context"]["risk_percent"] = 15.0
+    for variant in manifest["variants"]:
+        variant["observed_context"]["risk_percent"] = 15.0
+        preset_path = tmp_path / variant["input_preset"]
+        preset_path.write_text(
+            preset_path.read_text(encoding="utf-8").replace(
+                "InpSmallRiskPercentPerTrade=20.0", "InpSmallRiskPercentPerTrade=15.0"
+            ),
+            encoding="utf-8",
+        )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ComparisonError, match="risk_percent must be exactly 20%"):
+        compare_manifest(manifest_path)
+
+
+def test_matched_pair_rejects_csv_row_count_that_disagrees_with_exporter_metadata(tmp_path):
+    manifest_path = _make_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    deals_path = tmp_path / manifest["variants"][0]["deals_csv"]
+    rows = deals_path.read_text(encoding="utf-8").splitlines()
+    deals_path.write_text("\n".join(rows[:-1]) + "\n", encoding="utf-8")
+    with pytest.raises(ComparisonError, match="CSV row count does not match native exporter metadata"):
         compare_manifest(manifest_path)

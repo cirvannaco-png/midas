@@ -12,7 +12,8 @@ import json
 import math
 import re
 import sys
-from datetime import time, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +42,7 @@ except ImportError:
 
 
 ROLES = ("baseline", "continuation")
-ALLOWED_ROOT = {"schema_version", "experiment_id", "test_context", "dataset_path", "variants"}
+ALLOWED_ROOT = {"schema_version", "experiment_id", "test_context", "dataset_path", "server_timezone_evidence_path", "variants"}
 ALLOWED_VARIANT = {
     "role", "run_id", "observed_context", "parameters",
     "input_preset", "report_path", "deals_csv", "open_positions_csv",
@@ -136,12 +137,102 @@ def _parse_tester_ini(path: Path, name: str) -> dict[str, str]:
     return values
 
 
+def _parse_utc_timestamp(value: Any, *, name: str, field: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ComparisonError(f"{name} timezone evidence {field} must be a non-empty ISO-8601 UTC timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ComparisonError(f"{name} timezone evidence {field} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        raise ComparisonError(f"{name} timezone evidence {field} must explicitly use UTC")
+    return parsed.astimezone(timezone.utc)
+
+
+def _load_server_timezone_evidence(
+    evidence_path: Path, *, broker_server: str, name: str
+) -> tuple[ZoneInfo, dict[str, Any]]:
+    try:
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ComparisonError(f"{name} cannot read valid broker timezone evidence JSON: {evidence_path}") from exc
+    required = {"schema_version", "broker_server", "iana_timezone", "source_reference", "verified_at_utc"}
+    if not isinstance(evidence, dict) or set(evidence) != required:
+        raise ComparisonError(
+            f"{name} broker timezone evidence keys invalid; required exactly: {sorted(required)}"
+        )
+    if evidence["schema_version"] != 1:
+        raise ComparisonError(f"{name} broker timezone evidence schema_version must be 1")
+    for field in ("broker_server", "iana_timezone", "source_reference"):
+        if not isinstance(evidence[field], str) or not evidence[field].strip():
+            raise ComparisonError(f"{name} broker timezone evidence {field} must be non-empty")
+    if not evidence["source_reference"].strip().lower().startswith("https://"):
+        raise ComparisonError(f"{name} broker timezone source_reference must be an HTTPS broker-document URL")
+    if evidence["broker_server"].casefold() != broker_server.casefold():
+        raise ComparisonError(f"{name} broker timezone evidence broker_server does not match tester metadata server")
+    _parse_utc_timestamp(evidence["verified_at_utc"], name=name, field="verified_at_utc")
+    try:
+        broker_timezone = ZoneInfo(evidence["iana_timezone"])
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ComparisonError(
+            f"{name} broker timezone evidence iana_timezone is not available in the IANA timezone database"
+        ) from exc
+    return broker_timezone, {
+        "broker_server": evidence["broker_server"],
+        "iana_timezone": evidence["iana_timezone"],
+        "source_reference": evidence["source_reference"],
+        "verified_at_utc": evidence["verified_at_utc"],
+        "sha256": _sha256(evidence_path),
+    }
+
+
+def _local_midnight_utc(day, broker_timezone: ZoneInfo, *, name: str, field: str) -> datetime:
+    local = datetime.combine(day, time.min).replace(tzinfo=broker_timezone)
+    utc_value = local.astimezone(timezone.utc)
+    round_trip = utc_value.astimezone(broker_timezone)
+    if round_trip.replace(tzinfo=None) != local.replace(tzinfo=None):
+        raise ComparisonError(f"{name} {field} is a nonexistent broker-local midnight in the IANA timezone")
+    alternate = local.replace(fold=1)
+    if alternate.utcoffset() != local.utcoffset():
+        raise ComparisonError(f"{name} {field} is an ambiguous broker-local midnight; split the tester interval")
+    return utc_value
+
+
+def _require_constant_server_offset(
+    start_utc: datetime,
+    end_utc: datetime,
+    broker_timezone: ZoneInfo,
+    expected_offset_minutes: int,
+    *,
+    name: str,
+) -> None:
+    if end_utc <= start_utc:
+        raise ComparisonError(f"{name} tester launch interval is empty or reversed")
+    expected_offset = timedelta(minutes=expected_offset_minutes)
+    # Check every minute; MT5 INI date bounds include the entire ToDate.
+    cursor = start_utc
+    while cursor < end_utc:
+        observed = cursor.astimezone(broker_timezone).utcoffset()
+        if observed != expected_offset:
+            raise ComparisonError(
+                f"{name} tester interval crosses a broker UTC-offset transition; split the run at the transition"
+            )
+        cursor += timedelta(minutes=1)
+    final_offset = (end_utc - timedelta(microseconds=1)).astimezone(broker_timezone).utcoffset()
+    if final_offset != expected_offset:
+        raise ComparisonError(
+            f"{name} tester interval crosses a broker UTC-offset transition; split the run at the transition"
+        )
+
+
 def _validate_tester_config(
     config_path: Path,
     *,
     context: dict[str, Any],
     preset_path: Path,
     server_utc_offset_minutes: int,
+    timezone_evidence_path: Path,
+    broker_server: str,
     name: str,
 ) -> dict[str, Any]:
     values = _parse_tester_ini(config_path, name)
@@ -154,9 +245,11 @@ def _validate_tester_config(
     if missing:
         raise ComparisonError(f"{name} tester INI is missing required [Tester] keys: {missing}")
 
-    expert_name = values["expert"].replace("/", chr(92)).rsplit(chr(92), 1)[-1].rsplit(".", 1)[0].casefold()
-    if "medistouch_v2.8" not in expert_name:
-        raise ComparisonError(f"{name} tester INI must run the consolidated MedisTouch_v2.8 EA")
+    expert_file = values["expert"].replace("/", chr(92)).rsplit(chr(92), 1)[-1].casefold()
+    if expert_file != "medistouch_v2.8.ex5":
+        raise ComparisonError(
+            f"{name} tester INI must run the exact consolidated MedisTouch_v2.8.ex5 expert"
+        )
 
     preset_name = values["expertparameters"].replace("/", chr(92)).rsplit(chr(92), 1)[-1].casefold()
     if preset_name != preset_path.name.casefold():
@@ -197,7 +290,9 @@ def _validate_tester_config(
         except ValueError as exc:
             raise ComparisonError(f"{name} tester INI {key} must use YYYY.MM.DD") from exc
 
-    broker_tz = timezone(timedelta(minutes=server_utc_offset_minutes))
+    broker_tz, timezone_evidence = _load_server_timezone_evidence(
+        timezone_evidence_path, broker_server=broker_server, name=name
+    )
     start_local = context["period_start"].astimezone(broker_tz)
     locked_start_local = context["locked_oos_start"].astimezone(broker_tz)
     # MT5's tester INI accepts calendar dates, not timestamps. Require the
@@ -219,6 +314,14 @@ def _validate_tester_config(
         raise ComparisonError(
             f"{name} tester INI ToDate must be the day before the exclusive locked-OOS start"
         )
+
+    from_date = datetime.strptime(values["fromdate"], "%Y.%m.%d").date()
+    to_date = datetime.strptime(values["todate"], "%Y.%m.%d").date()
+    run_start_utc = _local_midnight_utc(from_date, broker_tz, name=name, field="FromDate")
+    run_end_utc = _local_midnight_utc(to_date + timedelta(days=1), broker_tz, name=name, field="ToDate end")
+    _require_constant_server_offset(
+        run_start_utc, run_end_utc, broker_tz, server_utc_offset_minutes, name=name
+    )
 
     try:
         deposit = float(values["deposit"])
@@ -253,6 +356,13 @@ def _validate_tester_config(
         "leverage": values["leverage"],
         "forward_mode": forward_mode,
         "report": report_name,
+        "iana_timezone": timezone_evidence["iana_timezone"],
+        "timezone_evidence_sha256": timezone_evidence["sha256"],
+        "timezone_evidence_source_reference": timezone_evidence["source_reference"],
+        "server_utc_offset_minutes": server_utc_offset_minutes,
+        "offset_constant_throughout_interval": True,
+        "run_start_utc": run_start_utc.isoformat(),
+        "run_end_utc_exclusive": run_end_utc.isoformat(),
     }
 
 
@@ -274,6 +384,9 @@ def _validate_tester_metadata(
         "initial_balance", "terminal_build", "point", "tick_size", "tick_value",
         "cash_per_point_per_lot", "spread_points_mean", "spread_points_max",
         "spread_samples", "fill_mode", "server_utc_offset_minutes", "timestamp_basis",
+        "export_status", "history_expected_deals", "history_recorded_deals",
+        "history_missing_deals", "deals_exported", "open_positions_exported",
+        "deals_file_written", "open_positions_file_written",
     }
     if not isinstance(metadata, dict) or set(metadata) != required:
         raise ComparisonError(
@@ -293,6 +406,25 @@ def _validate_tester_metadata(
         raise ComparisonError(f"{name} metadata terminal build does not match the matched test context")
     if metadata["timestamp_basis"] != "broker_wall_clock_with_explicit_offset":
         raise ComparisonError(f"{name} metadata timestamp basis is unsupported")
+
+    if metadata["export_status"] != "complete":
+        raise ComparisonError(f"{name} native tester exporter did not mark this run complete")
+    for key in (
+        "history_expected_deals", "history_recorded_deals", "history_missing_deals",
+        "deals_exported", "open_positions_exported",
+    ):
+        value = metadata[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ComparisonError(f"{name} tester metadata {key} must be a non-negative integer")
+    if metadata["history_missing_deals"] != 0:
+        raise ComparisonError(f"{name} tester export history reconciliation reports missing deals")
+    if metadata["history_expected_deals"] != metadata["history_recorded_deals"]:
+        raise ComparisonError(f"{name} tester export history counts do not reconcile")
+    if metadata["deals_exported"] != metadata["history_recorded_deals"]:
+        raise ComparisonError(f"{name} tester CSV deal count does not reconcile to native history")
+    for key in ("deals_file_written", "open_positions_file_written"):
+        if metadata[key] is not True:
+            raise ComparisonError(f"{name} native tester exporter reports {key}=false")
 
     numeric = (
         "initial_balance", "point", "tick_size", "tick_value",
@@ -365,6 +497,14 @@ def _validate_tester_metadata(
         "fill_mode": fill_mode,
         "server_utc_offset_minutes": offset,
         "timestamp_basis": metadata["timestamp_basis"],
+        "export_status": metadata["export_status"],
+        "history_expected_deals": metadata["history_expected_deals"],
+        "history_recorded_deals": metadata["history_recorded_deals"],
+        "history_missing_deals": metadata["history_missing_deals"],
+        "deals_exported": metadata["deals_exported"],
+        "open_positions_exported": metadata["open_positions_exported"],
+        "deals_file_written": metadata["deals_file_written"],
+        "open_positions_file_written": metadata["open_positions_file_written"],
     }
 
 
@@ -424,16 +564,18 @@ def _validate_presets(
     if _integer_value(candidate, "InpAccountRiskProfile", "continuation") != 1:
         raise ComparisonError("continuation must use ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT")
 
-    # The paired comparison must not relax the current small-account hard
-    # limits. The minimum planned risk stays at 15%; target risk cannot exceed
-    # 20%; drawdown, daily-loss, portfolio and Gold KES ceilings cannot rise.
+    # This preregistered matched experiment fixes the planned target at 20%.
+    # Both variants must use exactly that value; accepting 15% would validate a
+    # different sizing policy from the frozen test protocol.
+    if not math.isclose(context["risk_percent"], 20.0, abs_tol=1e-8):
+        raise ComparisonError("matched continuation test_context.risk_percent must be exactly 20%")
     for role, values in (("baseline", baseline), ("continuation", candidate)):
         minimum_risk = _numeric_value(values, "InpSmallMinimumRiskPercentPerTrade", role)
         target_risk = _numeric_value(values, "InpSmallRiskPercentPerTrade", role)
         if not math.isclose(minimum_risk, 15.0, abs_tol=1e-8):
             raise ComparisonError(f"{role} must preserve the 15% small-account minimum-risk floor")
-        if target_risk < minimum_risk or target_risk > 20.0:
-            raise ComparisonError(f"{role} small-account target risk must be within [15%, 20%]")
+        if not math.isclose(target_risk, 20.0, abs_tol=1e-8):
+            raise ComparisonError(f"{role} InpSmallRiskPercentPerTrade must be exactly 20% for this protocol")
         if not math.isclose(target_risk, context["risk_percent"], abs_tol=1e-8):
             raise ComparisonError(f"{role} InpSmallRiskPercentPerTrade does not match test_context.risk_percent")
         ceilings = {
@@ -503,6 +645,12 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
     reject_reserved_oos_overlap(period_start, locked_oos_start)
 
     dataset = _resolve_file(source_path, manifest["dataset_path"], "dataset_path")
+    timezone_evidence_path = _resolve_file(
+        source_path, manifest["server_timezone_evidence_path"], "server_timezone_evidence_path", allow_empty=False
+    )
+    if timezone_evidence_path == dataset:
+        raise ComparisonError("server timezone evidence must be a separate artifact from tick data")
+    timezone_evidence_hash = _sha256(timezone_evidence_path)
     dataset_hash = _sha256(dataset)
     if dataset_hash != context["dataset_sha256"]:
         raise ComparisonError("dataset_sha256 does not match the actual dataset_path digest")
@@ -514,7 +662,7 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
     preset_paths: dict[str, Path] = {}
     run_ids: set[str] = set()
     preset_hashes: set[str] = set()
-    artifact_paths: set[Path] = set()
+    artifact_paths: set[Path] = {timezone_evidence_path}
 
     for index, raw in enumerate(variants):
         name = f"variants[{index}]"
@@ -576,6 +724,8 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
             context=context,
             preset_path=preset,
             server_utc_offset_minutes=metadata["server_utc_offset_minutes"],
+            timezone_evidence_path=timezone_evidence_path,
+            broker_server=metadata["server"],
             name=name,
         )
         preset_hash = _sha256(preset)
@@ -592,6 +742,10 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
         try:
             deals = read_deals(deals_path)
             open_ids = read_open_ids(open_path)
+            if len(deals) != metadata["deals_exported"]:
+                raise ComparisonError(f"{name} deals CSV row count does not match native exporter metadata")
+            if len(open_ids) != metadata["open_positions_exported"]:
+                raise ComparisonError(f"{name} open-position CSV row count does not match native exporter metadata")
             positions, ignored = reconstruct_positions(deals, open_ids)
         except (OSError, LedgerError) as exc:
             raise ComparisonError(f"{name} deal-ledger validation failed: {exc}") from exc
@@ -701,6 +855,14 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
             for key, value in context.items()
         },
         "dataset_artifact": {"path": str(dataset), "sha256": dataset_hash},
+        "server_timezone_evidence": {
+            "path": str(timezone_evidence_path),
+            "sha256": timezone_evidence_hash,
+            "source_reference": baseline_config["timezone_evidence_source_reference"],
+            "iana_timezone": baseline_config["iana_timezone"],
+            "broker_server": baseline_metadata["server"],
+            "offset_constant_under_supplied_iana_rules": True,
+        },
         "variants": by_role,
         "continuation_router_exercised": router_observed,
         "continuation_candidate_delta_vs_baseline": {
@@ -734,6 +896,10 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
         "mt5_every_tick_real_ticks_model_verified": True,
         "nonzero_matched_execution_delay_verified": True,
         "tester_optimization_disabled": True,
+        "broker_timezone_mapping_artifact_present": True,
+        "server_utc_offset_constant_under_supplied_iana_rules": True,
+        "native_tester_export_completeness_verified": True,
+        "small_account_target_risk_exactly_20_percent": True,
         "continuation_router_exercised": router_observed,
         "locked_oos_scored": False,
         "mt5_run_performed_by_this_tool": False,
