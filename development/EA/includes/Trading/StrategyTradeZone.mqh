@@ -53,7 +53,8 @@ public:
    TradeSetup GenerateSellSetup();
    void ConfigureSMCStructuralGate(bool requireStructuralValidity);
    void ConfigureFreshSweepAdditiveRouter(bool enabled,bool enableSingleSwingFallback,
-                                          int maxSignalAgeBars=4,double directionalAdvantage=5.0);
+                                          int maxSignalAgeBars=4,double directionalAdvantage=5.0,
+                                          bool useDualLaneRankB=false);
    void GenerateFreshSweepAdditiveSetups(TradeSetup &buySetup,TradeSetup &sellSetup);
    TradeSetup GetLastSetup()const{return m_lastSetup;}
   };
@@ -102,10 +103,11 @@ void CTradeDecision::ConfigureSMCStructuralGate(bool requireStructuralValidity)
 
 void CTradeDecision::ConfigureFreshSweepAdditiveRouter(bool enabled,
                                                        bool enableSingleSwingFallback,
-                                                       int maxSignalAgeBars,double directionalAdvantage)
+                                                       int maxSignalAgeBars,double directionalAdvantage,
+                                                       bool useDualLaneRankB)
   {
    m_freshSweepRouter.Configure(m_priceRef,enabled,enableSingleSwingFallback,
-                                maxSignalAgeBars,50,directionalAdvantage);
+                                maxSignalAgeBars,50,directionalAdvantage,useDualLaneRankB);
   }
 
 TradeSetup CTradeDecision::BuildSMC(bool forBuy,double confidence,const SetupReasons &reasons)
