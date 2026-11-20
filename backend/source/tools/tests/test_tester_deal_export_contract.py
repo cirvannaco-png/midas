@@ -109,3 +109,20 @@ def test_netting_reversal_invalidates_position_lineage():
     assert 'm_attributions[attribution].regime="CONFLICT";' in exporter
     assert 'resolvedStrategy="CONFLICT";' in exporter
     assert 'resolvedRegime="CONFLICT";' in exporter
+
+
+
+def test_export_completion_requires_full_history_reconciliation_and_all_artifacts():
+    exporter = read_modular("includes/Execution/TesterDealExport.mqh")
+    assert "bool ValidateHistoryCoverage(int &expectedDeals,int &missingDeals)" in exporter
+    assert "if(!DealWasSeen(dealId))" in exporter
+    assert "missingDeals++;" in exporter
+    assert "bool exportComplete=(historyComplete && dealsWritten && openPositionsWritten && !m_writeFailed);" in exporter
+    assert 'string status=(complete?"complete":"incomplete");' in exporter
+    assert "history_expected_deals" in exporter
+    assert "history_recorded_deals" in exporter
+    assert "history_missing_deals" in exporter
+    assert "deals_file_written" in exporter
+    assert "open_positions_file_written" in exporter
+    assert "if(exportComplete && metadataWritten)" in exporter
+    assert "MIDAS_TEST_EXPORT_INCOMPLETE" in exporter
