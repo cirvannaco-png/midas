@@ -484,9 +484,9 @@
   "note": "files[] is the immutable upstream baseline snapshot. current_source_snapshot pins the complete staged EA development tree used to generate the distributable root EA. The validator checks every staged file's exact Git blob SHA and ensures no unmanifested source file is present.",
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
-    "branch": "fix/native-tester-evidence-completeness",
-    "commit": "16cb618586e7137020cd16e7b753c31cd61f616f",
-    "git_tree_sha": "85d79c688d6952fd3f24db27fc1c8df52be0f969",
+    "branch": "build/rankb-port-20261120",
+    "commit": "b50245f687b783787cdefe4ed26c7d005d38fc96",
+    "git_tree_sha": "597f2e7ea2ca7f8480657f595279cad1b502f1c6",
     "root": "development/EA",
     "file_count": 98,
     "files": [
@@ -497,8 +497,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "4007fee0e8a5610f7aa1c87ca41222807139d96d",
-        "size_bytes": 115182
+        "git_blob_sha": "0f83177b11de90176f208e7dba49e6c8da2aa344",
+        "size_bytes": 115341
       },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
@@ -877,8 +877,8 @@
       },
       {
         "path": "development/EA/includes/Trading/FreshSweepAdditiveRouter.mqh",
-        "git_blob_sha": "66118584cd68b2fb78625b7e099a4560fabc1c19",
-        "size_bytes": 18942
+        "git_blob_sha": "cb113a2e1f19430a22aece647cbebd71c5515aa8",
+        "size_bytes": 23582
       },
       {
         "path": "development/EA/includes/Trading/OutcomeTracker.mqh",
@@ -902,8 +902,8 @@
       },
       {
         "path": "development/EA/includes/Trading/StrategyTradeZone.mqh",
-        "git_blob_sha": "a9317495d7c9e0fb9028d14308df7cc0cbe87e5a",
-        "size_bytes": 17907
+        "git_blob_sha": "cc735fc847521db99657530d013eea29a7a2d213",
+        "size_bytes": 18073
       },
       {
         "path": "development/EA/includes/Trading/Targets.mqh",
@@ -957,8 +957,8 @@
       },
       {
         "path": "development/EA/tests/FreshSweepAdditiveRouter.mq5",
-        "git_blob_sha": "fcca5f9bd703ebecc2b632d5d08931419dc88b47",
-        "size_bytes": 3763
+        "git_blob_sha": "469e715682e55c9f72efc61cf25ddf436ad5a0f2",
+        "size_bytes": 5962
       },
       {
         "path": "development/EA/tests/OpposingPositionPolicy.mq5",

@@ -21,6 +21,7 @@ struct MidasFreshSweepCandidate
    bool   valid;
    double quality;
    double rank_score;
+   double direction_trend_atr;
    double invalidation;
    double atr;
    double rejection_ratio;
@@ -42,6 +43,7 @@ private:
    CCandleData *m_candles;
    bool         m_enabled;
    bool         m_enable_single_swing;
+   bool         m_use_dual_lane_rank_b;
    int          m_max_signal_age_bars;
    int          m_lookback_bars;
    double       m_directional_advantage;
@@ -107,6 +109,21 @@ private:
          slow += m_candles.GetCandle(i).close;
 
       return MathAbs(fast / 8.0 - slow / 21.0) / atr;
+     }
+
+   double DirectionalTrendSlopeATR(bool forBuy) const
+     {
+      const double atr = ATR(1);
+      if(!(atr > 0.0) || m_candles == NULL || m_candles.Total() < 22)
+         return 0.0;
+      double fast = 0.0;
+      double slow = 0.0;
+      for(int i = 1; i <= 8; i++)
+         fast += m_candles.GetCandle(i).close;
+      for(int i = 1; i <= 21; i++)
+         slow += m_candles.GetCandle(i).close;
+      const double signedTrendATR = (fast / 8.0 - slow / 21.0) / atr;
+      return forBuy ? signedTrendATR : -signedTrendATR;
      }
 
    MidasFreshSweepCandidate EmptyCandidate() const
@@ -195,6 +212,7 @@ private:
       out.valid = true;
       out.quality = quality;
       out.rank_score = NormalizeCandidateScore(quality, 48.0);
+      out.direction_trend_atr = DirectionalTrendSlopeATR(forBuy);
       out.invalidation = invalidation;
       out.atr = atr;
       out.rejection_ratio = body;
@@ -317,6 +335,7 @@ private:
             candidate.valid = true;
             candidate.quality = quality;
             candidate.rank_score = NormalizeCandidateScore(quality, 55.0);
+            candidate.direction_trend_atr = DirectionalTrendSlopeATR(forBuy);
             candidate.invalidation = forBuy ? sweep.low : sweep.high;
             candidate.atr = atr;
             candidate.rejection_ratio = rejection;
@@ -376,18 +395,20 @@ private:
 public:
                      CFreshSweepAdditiveRouter()
       : m_candles(NULL), m_enabled(false), m_enable_single_swing(false),
-        m_max_signal_age_bars(4), m_lookback_bars(50),
+        m_use_dual_lane_rank_b(false), m_max_signal_age_bars(4), m_lookback_bars(50),
         m_directional_advantage(5.0)
      {
      }
 
    void Configure(CCandleData *candles, bool enabled,
                   bool enableSingleSwingFallback, int maxSignalAgeBars = 4,
-                  int lookbackBars = 50, double directionalAdvantage = 5.0)
+                  int lookbackBars = 50, double directionalAdvantage = 5.0,
+                  bool useDualLaneRankB = false)
      {
       m_candles = candles;
       m_enabled = enabled;
       m_enable_single_swing = enableSingleSwingFallback;
+      m_use_dual_lane_rank_b = useDualLaneRankB;
       m_max_signal_age_bars = MathMax(1, MathMin(20, maxSignalAgeBars));
       m_lookback_bars = MathMax(10, MathMin(100, lookbackBars));
       m_directional_advantage = (directionalAdvantage >= 0.0 &&
@@ -400,6 +421,15 @@ public:
       const double span = MathMax(1.0, 100.0 - floor);
       return MathMax(0.0,
          MathMin(100.0, 100.0 * (quality - floor) / span));
+     }
+
+   static double DualLaneRankScore(double quality, double floor,
+                                   double directionTrendATR)
+     {
+      const double baseRank = NormalizeCandidateScore(quality, floor);
+      const double trendAdjustment =
+         MathMax(-12.0, MathMin(4.0, directionTrendATR * 10.0));
+      return MathMax(0.0, MathMin(100.0, baseRank + trendAdjustment));
      }
 
    static bool IsSignalAgeAllowed(int shift, int maxAgeBars)
@@ -486,6 +516,90 @@ public:
       return false;
      }
 
+   static bool SelectDualLaneRankB(
+      const MidasFreshSweepCandidate &continuationBuy,
+      const MidasFreshSweepCandidate &continuationSell,
+      const MidasFreshSweepCandidate &singleSwingBuy,
+      const MidasFreshSweepCandidate &singleSwingSell,
+      double directionalAdvantage,
+      MidasFreshSweepCandidate &chosen,
+      bool &forBuy,
+      ENUM_FRESH_SWEEP_LANE &lane)
+     {
+      lane = FRESH_SWEEP_NONE;
+      ZeroMemory(chosen);
+      forBuy = false;
+      MidasFreshSweepCandidate bestBuy;
+      MidasFreshSweepCandidate bestSell;
+      ZeroMemory(bestBuy);
+      ZeroMemory(bestSell);
+      double bestBuyScore = -1.0;
+      double bestSellScore = -1.0;
+      ENUM_FRESH_SWEEP_LANE bestBuyLane = FRESH_SWEEP_NONE;
+      ENUM_FRESH_SWEEP_LANE bestSellLane = FRESH_SWEEP_NONE;
+
+      if(singleSwingBuy.valid)
+        {
+         bestBuy = singleSwingBuy;
+         bestBuyScore = DualLaneRankScore(singleSwingBuy.quality, 55.0,
+                                          singleSwingBuy.direction_trend_atr);
+         bestBuy.rank_score = bestBuyScore;
+         bestBuyLane = FRESH_SWEEP_SINGLE_SWING;
+        }
+      if(continuationBuy.valid)
+        {
+         const double score = DualLaneRankScore(continuationBuy.quality, 48.0,
+                                                continuationBuy.direction_trend_atr);
+         if(!bestBuy.valid || score > bestBuyScore)
+           {
+            bestBuy = continuationBuy;
+            bestBuyScore = score;
+            bestBuy.rank_score = score;
+            bestBuyLane = FRESH_SWEEP_CONTINUATION;
+           }
+        }
+      if(singleSwingSell.valid)
+        {
+         bestSell = singleSwingSell;
+         bestSellScore = DualLaneRankScore(singleSwingSell.quality, 55.0,
+                                           singleSwingSell.direction_trend_atr);
+         bestSell.rank_score = bestSellScore;
+         bestSellLane = FRESH_SWEEP_SINGLE_SWING;
+        }
+      if(continuationSell.valid)
+        {
+         const double score = DualLaneRankScore(continuationSell.quality, 48.0,
+                                                continuationSell.direction_trend_atr);
+         if(!bestSell.valid || score > bestSellScore)
+           {
+            bestSell = continuationSell;
+            bestSellScore = score;
+            bestSell.rank_score = score;
+            bestSellLane = FRESH_SWEEP_CONTINUATION;
+           }
+        }
+
+      if(!bestBuy.valid && !bestSell.valid) return false;
+      if(bestBuy.valid && !bestSell.valid)
+        {
+         chosen = bestBuy; forBuy = true; lane = bestBuyLane; return true;
+        }
+      if(bestSell.valid && !bestBuy.valid)
+        {
+         chosen = bestSell; forBuy = false; lane = bestSellLane; return true;
+        }
+      const double delta = bestBuyScore - bestSellScore;
+      if(delta >= directionalAdvantage)
+        {
+         chosen = bestBuy; forBuy = true; lane = bestBuyLane; return true;
+        }
+      if(-delta >= directionalAdvantage)
+        {
+         chosen = bestSell; forBuy = false; lane = bestSellLane; return true;
+        }
+      return false;
+     }
+
    bool Select(MidasFreshSweepCandidate &chosen,
                bool &forBuy,
                ENUM_FRESH_SWEEP_LANE &lane) const
@@ -506,6 +620,11 @@ public:
          singleSwingBuy = BuildSingleSwing(true);
          singleSwingSell = BuildSingleSwing(false);
         }
+
+      if(m_use_dual_lane_rank_b && m_enable_single_swing)
+         return SelectDualLaneRankB(continuationBuy, continuationSell,
+                                    singleSwingBuy, singleSwingSell,
+                                    m_directional_advantage, chosen, forBuy, lane);
 
       return SelectLanes(continuationBuy, continuationSell,
                          singleSwingBuy, singleSwingSell,

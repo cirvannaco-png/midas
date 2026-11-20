@@ -20,12 +20,25 @@ MidasFreshSweepCandidate Candidate(double rank)
    return c;
   }
 
+MidasFreshSweepCandidate CandidateWithTrend(double quality,double directionTrendATR)
+  {
+   MidasFreshSweepCandidate c=Candidate(quality);
+   c.direction_trend_atr=directionTrendATR;
+   return c;
+  }
+
 void OnStart()
   {
    AssertTrue(MathAbs(CFreshSweepAdditiveRouter::NormalizeCandidateScore(74.0,48.0)-50.0)<0.000001,
               "continuation ranking normalizes against its own 48-point floor");
    AssertTrue(MathAbs(CFreshSweepAdditiveRouter::NormalizeCandidateScore(77.5,55.0)-50.0)<0.000001,
               "single-swing ranking normalizes against its own 55-point floor");
+   AssertTrue(MathAbs(CFreshSweepAdditiveRouter::DualLaneRankScore(74.0,48.0,0.0)-50.0)<0.000001,
+              "Rank B normalizes continuation quality before a neutral trend prior");
+   AssertTrue(MathAbs(CFreshSweepAdditiveRouter::DualLaneRankScore(74.0,48.0,0.5)-54.0)<0.000001,
+              "Rank B caps aligned prior at plus four score points");
+   AssertTrue(MathAbs(CFreshSweepAdditiveRouter::DualLaneRankScore(80.0,48.0,-2.0)-49.5384615385)<0.00001,
+              "Rank B caps opposing prior at minus twelve score points");
    AssertTrue(CFreshSweepAdditiveRouter::IsSignalAgeAllowed(4,4),
               "four completed bars is inside the candidate freshness limit");
    AssertTrue(!CFreshSweepAdditiveRouter::IsSignalAgeAllowed(5,4),
@@ -68,6 +81,28 @@ void OnStart()
    AssertTrue(!CFreshSweepAdditiveRouter::SelectLanes(weakContBuy,weakContSell,singleBuy,singleSell,
               false,5.0,chosen,forBuy,lane),
               "disabled single-swing fallback is never selected");
+
+   MidasFreshSweepCandidate contRank=CandidateWithTrend(80.0,0.0);
+   MidasFreshSweepCandidate singleRank=CandidateWithTrend(85.0,0.0);
+   MidasFreshSweepCandidate noOpposing;
+   ZeroMemory(noOpposing);
+   AssertTrue(CFreshSweepAdditiveRouter::SelectDualLaneRankB(
+              contRank,noOpposing,singleRank,noOpposing,5.0,chosen,forBuy,lane) &&
+              lane==FRESH_SWEEP_SINGLE_SWING && forBuy,
+              "Rank B selects a higher normalized single-swing candidate");
+   MidasFreshSweepCandidate opposingSingle=CandidateWithTrend(85.0,-2.0);
+   AssertTrue(CFreshSweepAdditiveRouter::SelectDualLaneRankB(
+              contRank,noOpposing,opposingSingle,noOpposing,5.0,chosen,forBuy,lane) &&
+              lane==FRESH_SWEEP_CONTINUATION && forBuy,
+              "directional prior can reorder families without rejecting either");
+   MidasFreshSweepCandidate rankConflictSell=CandidateWithTrend(80.0,0.0);
+   MidasFreshSweepCandidate rankConflictBuy=CandidateWithTrend(82.0,0.0);
+   AssertTrue(!CFreshSweepAdditiveRouter::SelectDualLaneRankB(
+              rankConflictBuy,rankConflictSell,noOpposing,noOpposing,5.0,chosen,forBuy,lane),
+              "Rank B abstains when opposite-side scores are inside the advantage threshold");
+   AssertTrue(!CFreshSweepAdditiveRouter::SelectDualLaneRankB(
+              noOpposing,noOpposing,noOpposing,noOpposing,5.0,chosen,forBuy,lane),
+              "Rank B abstains when neither family has a valid candidate");
 
    MidasFreshSweepCandidate noCandidate;
    ZeroMemory(noCandidate);
