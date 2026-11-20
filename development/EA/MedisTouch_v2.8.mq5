@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@c1a5fb8da5b8a77a60524e26ff807a81fe9f76bd
+// Staged EA source snapshot: cirvannaco-png/midas@2c0bdc675a2fe89251305ac734d54267d027f458
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -13337,6 +13337,7 @@ class CTesterDealExport
   {
 private:
    bool   m_enabled;
+   bool   m_writeFailed;
    string m_symbol;
    string m_runId;
    string m_dealsName;
@@ -13376,7 +13377,11 @@ private:
       if(index<0)
         {
          index=ArraySize(m_attributions);
-         if(ArrayResize(m_attributions,index+1)!=index+1) return;
+         if(ArrayResize(m_attributions,index+1)!=index+1)
+           {
+            m_writeFailed=true;
+            return;
+           }
          m_attributions[index].position_id=positionId;
          m_attributions[index].decision_id=decisionId;
          m_attributions[index].strategy=(StringLen(strategy)>0?strategy:"UNTAGGED");
@@ -13425,6 +13430,16 @@ private:
       return value;
      }
 
+   string JsonEscape(string value) const
+     {
+      StringReplace(value,"\\","\\\\");
+      StringReplace(value,"\"","\\\"");
+      StringReplace(value,"\r","\\r");
+      StringReplace(value,"\n","\\n");
+      StringReplace(value,"\t","\\t");
+      return value;
+     }
+
    string TimeIsoWithOffset(datetime value) const
      {
       // Tester deal timestamps use the historical broker server's wall clock.
@@ -13443,7 +13458,154 @@ private:
       return stamp+zone;
      }
 
-   void WriteMetadata()
+   bool ValidateHistoryCoverage(int &expectedDeals,int &missingDeals)
+     {
+      expectedDeals=0;
+      missingDeals=0;
+      if(!HistorySelect(0,TimeCurrent()))
+        {
+         m_writeFailed=true;
+         missingDeals=1;
+         PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=history_select error=%d",GetLastError());
+         return false;
+        }
+
+      int total=HistoryDealsTotal();
+      for(int i=0;i<total;i++)
+        {
+         ulong dealId=HistoryDealGetTicket(i);
+         if(dealId==0)
+           {
+            m_writeFailed=true;
+            missingDeals++;
+            continue;
+           }
+         if(HistoryDealGetString(dealId,DEAL_SYMBOL)!=m_symbol) continue;
+         if((ulong)HistoryDealGetInteger(dealId,DEAL_MAGIC)!=m_magic) continue;
+
+         expectedDeals++;
+         if(!DealWasSeen(dealId))
+            missingDeals++;
+        }
+
+      int recordedDeals=ArraySize(m_rows);
+      if(recordedDeals!=expectedDeals)
+        {
+         if(recordedDeals>expectedDeals)
+            missingDeals+=recordedDeals-expectedDeals;
+         m_writeFailed=true;
+        }
+      if(missingDeals>0)
+         m_writeFailed=true;
+
+      return (!m_writeFailed && missingDeals==0 && recordedDeals==expectedDeals);
+     }
+
+   bool WriteDealsFile()
+     {
+      int handle=FileOpen(m_dealsName,FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
+      if(handle==INVALID_HANDLE)
+        {
+         PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=deals file=%s error=%d",
+                     m_dealsName,GetLastError());
+         m_writeFailed=true;
+         return false;
+        }
+
+      bool ok=true;
+      ResetLastError();
+      if(FileWrite(handle,"position_id","time","entry","volume","profit","commission",
+                   "swap","fee","risk_cash","lane","deal_id","order_id","symbol",
+                   "decision_id","strategy","regime","requested_price","slippage_points",
+                   "slippage_cost_cash","slippage_known")==0)
+         ok=false;
+
+      for(int i=0;i<ArraySize(m_rows);i++)
+        {
+         TesterDealExportRow row=m_rows[i];
+         if(FileWrite(handle,
+                      IntegerToString((long)row.position_id),
+                      TimeIsoWithOffset(row.deal_time),
+                      row.entry,
+                      DoubleToString(row.volume,8),
+                      DoubleToString(row.profit,8),
+                      DoubleToString(row.commission,8),
+                      DoubleToString(row.swap,8),
+                      DoubleToString(row.fee,8),
+                      DoubleToString(RiskCash(row.position_id),8),
+                      "EA",
+                      IntegerToString((long)row.deal_id),
+                      IntegerToString((long)row.order_id),
+                      row.symbol,
+                      IntegerToString(row.decision_id),
+                      row.strategy,
+                      row.regime,
+                      (row.slippage_known?DoubleToString(row.requested_price,10):""),
+                      (row.slippage_known?DoubleToString(row.slippage_points,8):""),
+                      (row.slippage_known?DoubleToString(row.slippage_cost_cash,8):""),
+                      (row.slippage_known?"true":"false"))==0)
+            ok=false;
+        }
+
+      FileFlush(handle);
+      int writeError=GetLastError();
+      FileClose(handle);
+      if(!ok || writeError!=0)
+        {
+         PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=deals_write file=%s error=%d",
+                     m_dealsName,writeError);
+         m_writeFailed=true;
+         return false;
+        }
+      return true;
+     }
+
+   bool WriteOpenPositions(int &exportedCount)
+     {
+      exportedCount=0;
+      int handle=FileOpen(m_openName,FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
+      if(handle==INVALID_HANDLE)
+        {
+         PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=open_positions file=%s error=%d",
+                     m_openName,GetLastError());
+         m_writeFailed=true;
+         return false;
+        }
+
+      bool ok=true;
+      ResetLastError();
+      if(FileWrite(handle,"position_id")==0)
+         ok=false;
+      for(int p=PositionsTotal()-1;p>=0;p--)
+        {
+         ulong ticket=PositionGetTicket(p);
+         if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
+         if(PositionGetString(POSITION_SYMBOL)!=m_symbol) continue;
+         if((ulong)PositionGetInteger(POSITION_MAGIC)!=m_magic) continue;
+         ulong positionId=(ulong)PositionGetInteger(POSITION_IDENTIFIER);
+         if(positionId==0) continue;
+         if(FileWrite(handle,IntegerToString((long)positionId))==0)
+            ok=false;
+         else
+            exportedCount++;
+        }
+
+      FileFlush(handle);
+      int writeError=GetLastError();
+      FileClose(handle);
+      if(!ok || writeError!=0)
+        {
+         PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=open_positions_write file=%s error=%d",
+                     m_openName,writeError);
+         m_writeFailed=true;
+         return false;
+        }
+      return true;
+     }
+
+   bool WriteMetadata(const bool complete,const int historyExpectedDeals,
+                      const int historyMissingDeals,const int openPositionsExported,
+                      const bool dealsWritten,const bool openPositionsWritten)
      {
       string filename="MidasTesterMeta_"+m_runId+".json";
       int handle=FileOpen(filename,FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
@@ -13451,12 +13613,15 @@ private:
         {
          PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=metadata file=%s error=%d",
                      filename,GetLastError());
-         return;
+         return false;
         }
       double cashPerPoint=0.0;
       if(m_point>0.0 && m_tickSize>0.0 && m_tickValue>0.0)
          cashPerPoint=m_tickValue*m_point/m_tickSize;
       double averageSpread=(m_spreadSamples>0 ? m_spreadSum/(double)m_spreadSamples : 0.0);
+      int recordedDeals=ArraySize(m_rows);
+      int exportedDeals=(dealsWritten?recordedDeals:0);
+      string status=(complete?"complete":"incomplete");
       string json=StringFormat(
          "{\"run_id\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\","
          "\"account_currency\":\"%s\",\"leverage\":%I64d,"
@@ -13465,13 +13630,30 @@ private:
          "\"cash_per_point_per_lot\":%.8f,\"spread_points_mean\":%.8f,"
          "\"spread_points_max\":%.8f,\"spread_samples\":%I64u,"
          "\"fill_mode\":%I64d,\"server_utc_offset_minutes\":%d,"
-         "\"timestamp_basis\":\"broker_wall_clock_with_explicit_offset\"}",
-         m_runId,m_symbol,m_server,m_currency,m_leverage,m_initialBalance,
-         m_terminalBuild,m_point,m_tickSize,m_tickValue,cashPerPoint,
-         averageSpread,m_spreadMax,m_spreadSamples,m_fillMode,m_serverUtcOffsetMinutes);
-      FileWriteString(handle,json);
+         "\"timestamp_basis\":\"broker_wall_clock_with_explicit_offset\","
+         "\"export_status\":\"%s\",\"history_expected_deals\":%d,"
+         "\"history_recorded_deals\":%d,\"history_missing_deals\":%d,"
+         "\"deals_exported\":%d,\"open_positions_exported\":%d,"
+         "\"deals_file_written\":%s,\"open_positions_file_written\":%s}",
+         JsonEscape(m_runId),JsonEscape(m_symbol),JsonEscape(m_server),JsonEscape(m_currency),
+         m_leverage,m_initialBalance,m_terminalBuild,m_point,m_tickSize,m_tickValue,cashPerPoint,
+         averageSpread,m_spreadMax,m_spreadSamples,m_fillMode,m_serverUtcOffsetMinutes,
+         status,historyExpectedDeals,recordedDeals,historyMissingDeals,exportedDeals,
+         (openPositionsWritten?openPositionsExported:0),
+         (dealsWritten?"true":"false"),(openPositionsWritten?"true":"false"));
+
+      ResetLastError();
+      uint written=FileWriteString(handle,json);
       FileFlush(handle);
+      int writeError=GetLastError();
       FileClose(handle);
+      if(written==0 || writeError!=0)
+        {
+         PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=metadata_write file=%s bytes=%u error=%d",
+                     filename,written,writeError);
+         return false;
+        }
+      return true;
      }
 
    string EntryName(const ENUM_DEAL_ENTRY entry) const
@@ -13492,13 +13674,26 @@ private:
 
    void AddEntryRisk(const ulong positionId,const double riskCash)
      {
-      if(positionId==0 || !MathIsValidNumber(riskCash) || riskCash<=0.0) return;
+      if(positionId==0 || !MathIsValidNumber(riskCash) || riskCash<=0.0)
+        {
+         m_writeFailed=true;
+         return;
+        }
       int index=RiskIndex(positionId);
       if(index<0)
         {
          index=ArraySize(m_riskPositions);
-         ArrayResize(m_riskPositions,index+1);
-         ArrayResize(m_positionRiskCash,index+1);
+         if(ArrayResize(m_riskPositions,index+1)!=index+1)
+           {
+            m_writeFailed=true;
+            return;
+           }
+         if(ArrayResize(m_positionRiskCash,index+1)!=index+1)
+           {
+            ArrayResize(m_riskPositions,index);
+            m_writeFailed=true;
+            return;
+           }
          m_riskPositions[index]=positionId;
          m_positionRiskCash[index]=0.0;
         }
@@ -13525,6 +13720,7 @@ public:
       bool validOffset=(serverUtcOffsetMinutes>=-840 && serverUtcOffsetMinutes<=840);
       m_serverUtcOffsetMinutes=serverUtcOffsetMinutes;
       m_enabled=(enabled && (bool)MQLInfoInteger(MQL_TESTER) && validOffset);
+      m_writeFailed=false;
       if(enabled && (bool)MQLInfoInteger(MQL_TESTER) && !validOffset)
          PrintFormat("MIDAS_TEST_EXPORT_DISABLED reason=INVALID_SERVER_UTC_OFFSET value=%d; set the verified broker server offset for this test window.",serverUtcOffsetMinutes);
       m_symbol=symbol;
@@ -13544,11 +13740,13 @@ public:
       m_leverage=AccountInfoInteger(ACCOUNT_LEVERAGE);
       m_terminalBuild=TerminalInfoInteger(TERMINAL_BUILD);
       m_fillMode=SymbolInfoInteger(symbol,SYMBOL_FILLING_MODE);
-      ArrayResize(m_rows,0);
-      ArrayResize(m_seenDeals,0);
-      ArrayResize(m_riskPositions,0);
-      ArrayResize(m_positionRiskCash,0);
-      ArrayResize(m_attributions,0);
+      bool arraysReady=true;
+      if(ArrayResize(m_rows,0)!=0) arraysReady=false;
+      if(ArrayResize(m_seenDeals,0)!=0) arraysReady=false;
+      if(ArrayResize(m_riskPositions,0)!=0) arraysReady=false;
+      if(ArrayResize(m_positionRiskCash,0)!=0) arraysReady=false;
+      if(ArrayResize(m_attributions,0)!=0) arraysReady=false;
+      if(!arraysReady) m_writeFailed=true;
       if(m_enabled)
          PrintFormat("MIDAS_TEST_EXPORT_READY run=%s symbol=%s magic=%I64u",
                      m_runId,m_symbol,m_magic);
@@ -13580,16 +13778,32 @@ public:
                const double slippageCostCash,const bool slippageKnown)
      {
       if(!m_enabled) return true;
-      if(dealId==0 || orderId==0 || positionId==0 || symbol=="") return false;
+      if(dealId==0 || orderId==0 || positionId==0 || symbol=="")
+        {
+         m_writeFailed=true;
+         return false;
+        }
       if(DealWasSeen(dealId)) return true;
       double values[]={volume,price,profit,commission,swap,fee,entryRiskCash};
       for(int i=0;i<ArraySize(values);i++)
-         if(!MathIsValidNumber(values[i])) return false;
-      if(volume<=0.0 || price<=0.0) return false;
+         if(!MathIsValidNumber(values[i]))
+           {
+            m_writeFailed=true;
+            return false;
+           }
+      if(volume<=0.0 || price<=0.0)
+        {
+         m_writeFailed=true;
+         return false;
+        }
       if(slippageKnown &&
          (!MathIsValidNumber(requestedPrice) || requestedPrice<=0.0 ||
           !MathIsValidNumber(slippagePoints) || !MathIsValidNumber(slippageCostCash) ||
-          slippageCostCash<0.0)) return false;
+          slippageCostCash<0.0))
+        {
+         m_writeFailed=true;
+         return false;
+        }
 
       int attribution=AttributionIndex(positionId);
       if(entry==DEAL_ENTRY_IN)
@@ -13637,12 +13851,21 @@ public:
       if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
 
       int seen=ArraySize(m_seenDeals);
-      ArrayResize(m_seenDeals,seen+1);
+      if(ArrayResize(m_seenDeals,seen+1)!=seen+1)
+        {
+         m_writeFailed=true;
+         return false;
+        }
       m_seenDeals[seen]=dealId;
       if(entry==DEAL_ENTRY_IN) AddEntryRisk(positionId,entryRiskCash);
 
       int count=ArraySize(m_rows);
-      ArrayResize(m_rows,count+1);
+      if(ArrayResize(m_rows,count+1)!=count+1)
+        {
+         m_writeFailed=true;
+         ArrayResize(m_seenDeals,seen);
+         return false;
+        }
       m_rows[count].deal_id=dealId;
       m_rows[count].order_id=orderId;
       m_rows[count].position_id=positionId;
@@ -13668,67 +13891,25 @@ public:
    void Finalize()
      {
       if(!m_enabled) return;
-      int handle=FileOpen(m_dealsName,FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
-      if(handle==INVALID_HANDLE)
-        {
-         PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=deals file=%s error=%d",
-                     m_dealsName,GetLastError());
-         return;
-        }
-      FileWrite(handle,"position_id","time","entry","volume","profit","commission",
-                "swap","fee","risk_cash","lane","deal_id","order_id","symbol",
-                "decision_id","strategy","regime","requested_price","slippage_points",
-                "slippage_cost_cash","slippage_known");
-      for(int i=0;i<ArraySize(m_rows);i++)
-        {
-         TesterDealExportRow row=m_rows[i];
-         FileWrite(handle,
-                   IntegerToString((long)row.position_id),
-                   TimeIsoWithOffset(row.deal_time),
-                   row.entry,
-                   DoubleToString(row.volume,8),
-                   DoubleToString(row.profit,8),
-                   DoubleToString(row.commission,8),
-                   DoubleToString(row.swap,8),
-                   DoubleToString(row.fee,8),
-                   DoubleToString(RiskCash(row.position_id),8),
-                    "EA",
-                   IntegerToString((long)row.deal_id),
-                   IntegerToString((long)row.order_id),
-                   row.symbol,
-                   IntegerToString(row.decision_id),
-                   row.strategy,
-                   row.regime,
-                   (row.slippage_known?DoubleToString(row.requested_price,10):""),
-                   (row.slippage_known?DoubleToString(row.slippage_points,8):""),
-                   (row.slippage_known?DoubleToString(row.slippage_cost_cash,8):""),
-                   (row.slippage_known?"true":"false"));
-        }
-      FileFlush(handle);
-      FileClose(handle);
 
-      int openHandle=FileOpen(m_openName,FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
-      if(openHandle==INVALID_HANDLE)
-        {
-         PrintFormat("MIDAS_TEST_EXPORT_ERROR kind=open_positions file=%s error=%d",
-                     m_openName,GetLastError());
-         return;
-        }
-      FileWrite(openHandle,"position_id");
-      for(int p=PositionsTotal()-1;p>=0;p--)
-        {
-         ulong ticket=PositionGetTicket(p);
-         if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
-         if(PositionGetString(POSITION_SYMBOL)!=m_symbol) continue;
-         if((ulong)PositionGetInteger(POSITION_MAGIC)!=m_magic) continue;
-         ulong positionId=(ulong)PositionGetInteger(POSITION_IDENTIFIER);
-         if(positionId>0) FileWrite(openHandle,IntegerToString((long)positionId));
-        }
-      FileFlush(openHandle);
-      FileClose(openHandle);
-      WriteMetadata();
-      PrintFormat("MIDAS_TEST_EXPORT_COMPLETE run=%s deals=%d risk_positions=%d deals_file=%s open_file=%s",
-                  m_runId,ArraySize(m_rows),ArraySize(m_riskPositions),m_dealsName,m_openName);
+      int expectedDeals=0;
+      int missingDeals=0;
+      bool historyComplete=ValidateHistoryCoverage(expectedDeals,missingDeals);
+      bool dealsWritten=WriteDealsFile();
+      int openPositionsExported=0;
+      bool openPositionsWritten=WriteOpenPositions(openPositionsExported);
+      bool exportComplete=(historyComplete && dealsWritten && openPositionsWritten && !m_writeFailed);
+      bool metadataWritten=WriteMetadata(exportComplete,expectedDeals,missingDeals,
+                                         openPositionsExported,dealsWritten,openPositionsWritten);
+
+      if(exportComplete && metadataWritten)
+         PrintFormat("MIDAS_TEST_EXPORT_COMPLETE run=%s deals=%d open_positions=%d deals_file=%s open_file=%s",
+                     m_runId,ArraySize(m_rows),openPositionsExported,m_dealsName,m_openName);
+      else
+         PrintFormat("MIDAS_TEST_EXPORT_INCOMPLETE run=%s history_expected=%d history_recorded=%d history_missing=%d deals_written=%s open_positions_written=%s metadata_written=%s",
+                     m_runId,expectedDeals,ArraySize(m_rows),missingDeals,
+                     (dealsWritten?"true":"false"),(openPositionsWritten?"true":"false"),
+                     (metadataWritten?"true":"false"));
      }
   };
 
