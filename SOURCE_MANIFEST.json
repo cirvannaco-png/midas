@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "fix/mt5-continuation-tester-readiness",
-    "commit": "d341d2fb85887afba22a137a76f2855aace1563a",
+    "commit": "c1a5fb8da5b8a77a60524e26ff807a81fe9f76bd",
     "git_tree_sha": "4ff5b3435745b69193ef5d3a038bc74126b3f173",
     "root": "development/EA",
     "file_count": 98,
