@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "build/rankb-port-20261120",
-    "commit": "4683825f489f50bda624c69ae918771c4e0f1b62",
+    "commit": "b50245f687b783787cdefe4ed26c7d005d38fc96",
     "git_tree_sha": "ace812e3fed18fd56c7460e5a0edd19b16c8a34b",
     "root": "development/EA",
     "file_count": 99,
