@@ -94,7 +94,11 @@ def main():
         "tester export rejects unknown timezone offsets": r'm_enabled=\(enabled && \(bool\)MQLInfoInteger\(MQL_TESTER\) && validOffset\)',
         "tester export emits an explicit ISO offset": r'return stamp\+zone;',
         "tester export records timestamp provenance": r'timestamp_basis.*broker_wall_clock_with_explicit_offset',
-        "tester export does not falsely label tester time as UTC": r'TimeIsoWithOffset\(row\.deal_time\)'
+        "tester export does not falsely label tester time as UTC": r'TimeIsoWithOffset\(row\.deal_time\)',
+        "tester export reconciles terminal history before completion": r"ValidateHistoryCoverage",
+        "tester export marks output incomplete on missing deals": r"exportComplete\s*=\s*\(historyComplete",
+        "tester metadata carries reconciliation counts": r"history_expected_deals",
+        "tester export completion requires metadata write": r"exportComplete\s*&&\s*metadataWritten",
     }
     for name,pattern in tester_export_checks.items():
         if not re.search(pattern,raw): fail.append("tester export regression: "+name)
