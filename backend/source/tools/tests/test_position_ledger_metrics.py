@@ -337,9 +337,9 @@ def test_win_rate_reports_wilson_95_percent_interval_and_excludes_flats():
 def test_csv_with_missing_deal_cost_component_excludes_position(tmp_path):
     csv_path = tmp_path / "missing_fee.csv"
     csv_path.write_text(
-        "position_id,time,entry,volume,profit,commission,swap\\n"
-        "900,2026-05-01T09:00:00Z,in,1,0,-1,0\\n"
-        "900,2026-05-01T10:00:00Z,out,1,10,-0.2,0\\n",
+        "position_id,time,entry,volume,profit,commission,swap\n"
+        "900,2026-05-01T09:00:00Z,in,1,0,-1,0\n"
+        "900,2026-05-01T10:00:00Z,out,1,10,-0.2,0\n",
         encoding="utf-8",
     )
     deals = read_deals(csv_path)
@@ -355,9 +355,9 @@ def test_csv_with_missing_deal_cost_component_excludes_position(tmp_path):
 def test_csv_blank_cost_is_unknown_not_zero(tmp_path):
     csv_path = tmp_path / "blank_fee.csv"
     csv_path.write_text(
-        "position_id,time,entry,volume,profit,commission,swap,fee\\n"
-        "901,2026-05-01T09:00:00Z,in,1,0,-1,0,\\n"
-        "901,2026-05-01T10:00:00Z,out,1,10,-0.2,0,0\\n",
+        "position_id,time,entry,volume,profit,commission,swap,fee\n"
+        "901,2026-05-01T09:00:00Z,in,1,0,-1,0,\n"
+        "901,2026-05-01T10:00:00Z,out,1,10,-0.2,0,0\n",
         encoding="utf-8",
     )
     deals = read_deals(csv_path)
@@ -370,9 +370,9 @@ def test_csv_blank_cost_is_unknown_not_zero(tmp_path):
 def test_csv_complete_zero_costs_are_valid_and_not_treated_as_missing(tmp_path):
     csv_path = tmp_path / "zero_costs.csv"
     csv_path.write_text(
-        "position_id,time,entry,volume,profit,commission,swap,fee\\n"
-        "902,2026-05-01T09:00:00Z,in,1,0,0,0,0\\n"
-        "902,2026-05-01T10:00:00Z,out,1,10,0,0,0\\n",
+        "position_id,time,entry,volume,profit,commission,swap,fee\n"
+        "902,2026-05-01T09:00:00Z,in,1,0,0,0,0\n"
+        "902,2026-05-01T10:00:00Z,out,1,10,0,0,0\n",
         encoding="utf-8",
     )
     deals = read_deals(csv_path)
