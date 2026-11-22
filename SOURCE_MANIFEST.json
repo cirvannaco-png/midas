@@ -485,8 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-agnostic-tick-adaptation",
-    "commit": "b5cd8cddab9fce25e0b267c40794cbe5a4f8f9c0",
-    "git_tree_sha": "4c9ac94ebe53dc88faff0adda4aa0be927468014",
+    "commit": "6671afd1879095c2f12a44a20ab696ccc2896f05",
     "root": "development/EA",
     "file_count": 100,
     "files": [
@@ -552,8 +551,8 @@
       },
       {
         "path": "development/EA/includes/Core/PipCalculator.mqh",
-        "git_blob_sha": "aaf28f7c23f79b0fab670cbffdeda55fab3288b3",
-        "size_bytes": 3754
+        "git_blob_sha": "ebfcb574c099c9aa80e51909533f9e571642c4c2",
+        "size_bytes": 4574
       },
       {
         "path": "development/EA/includes/Core/SessionFilter.mqh",
@@ -887,8 +886,8 @@
       },
       {
         "path": "development/EA/includes/Trading/OutcomeTrackerLive.mqh",
-        "git_blob_sha": "8287df03d2d8c15f5f7cbb0886bdacbfb63828dd",
-        "size_bytes": 35643
+        "git_blob_sha": "8a9be00ad2dc217e395ed6431603770ab2189d08",
+        "size_bytes": 36007
       },
       {
         "path": "development/EA/includes/Trading/RiskEngine.mqh",
@@ -972,8 +971,8 @@
       },
       {
         "path": "development/EA/tests/PipCalculatorGeometry.mq5",
-        "git_blob_sha": "39347265360071351fcd4f5059abcf65a9a8f87c",
-        "size_bytes": 3650
+        "git_blob_sha": "451a8905492b597d5d8f1ab99e60ccbcac59e321",
+        "size_bytes": 4371
       },
       {
         "path": "development/EA/tests/PositionManagementPolicy.mq5",
@@ -993,3 +992,4 @@
     ]
   }
 }
+
