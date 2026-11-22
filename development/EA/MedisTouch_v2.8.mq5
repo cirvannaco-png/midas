@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@e74ea64ee467425e5f322b32c42071078ade1740
+// Staged EA source snapshot: cirvannaco-png/midas@e1e09a652fbcb66137fdce25d741a67749e50360
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
