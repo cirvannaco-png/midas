@@ -75,6 +75,18 @@ public:
       return MathIsValidNumber(value) ? value : 0.0;
      }
 
+   // Convert one price unit into account currency using an explicitly
+   // directional broker tick value. Never fall back to the generic value.
+   static double     ValuePerPriceUnitFromSpec(const double tickSize,
+                                               const double directionalTickValue)
+     {
+      if(!MathIsValidNumber(tickSize) || tickSize<=0.0 ||
+         !MathIsValidNumber(directionalTickValue) || directionalTickValue<=0.0)
+         return 0.0;
+      double value=directionalTickValue/tickSize;
+      return MathIsValidNumber(value) && value>0.0 ? value : 0.0;
+     }
+
    // Convert aggregate price-distance x lots into account-currency stop risk.
    // Stop risk must use the broker's loss-side tick value, never the generic or
    // profit-side value: some instruments expose asymmetric directional values.
