@@ -151,6 +151,16 @@ def main():
     )
     if not all(token in raw for token in tick_history_diagnostics):
         fail.append("trade-tick history coverage/gap/duplicate diagnostics regression")
+    tick_quality_test_path=ROOT/"development"/"EA"/"tests"/"TickHistoryQualityPolicy.mq5"
+    tick_quality_test=tick_quality_test_path.read_text(encoding="utf-8-sig") if tick_quality_test_path.is_file() else ""
+    for token in (
+        "same-millisecond record counted without deduplication",
+        "large inter-trade gap is diagnostic, not rejected",
+        "timestamp before requested history range rejected",
+        "out-of-order timestamp rejected",
+    ):
+        if token not in tick_quality_test:
+            fail.append("trade-tick history deterministic fixture missing: "+token)
 
     compact_ea="".join(raw.split())
     mtf_final=compact_ea.find("g_topDownMTF.AdjustSetup(sellSetup);")
