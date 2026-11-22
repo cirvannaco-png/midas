@@ -6,6 +6,7 @@
 
 #include <Trade\Trade.mqh>
 #include "PriceGridNormalizer.mqh"
+#include "BrokerQuoteValidator.mqh"
 
 class CBrokerAdapter
   {
@@ -20,6 +21,8 @@ private:
    ulong             m_lastBrokerPositionId;
    bool              m_lastRequestAttempted;
    uint              m_lastRetcode;
+   int               m_maxQuoteAgeSeconds;
+   int               m_maxSpreadPoints;
 
    void              CaptureBrokerIdentifiers(string symbol);
    bool              LastRequestOk(string action);
@@ -30,10 +33,12 @@ private:
    bool              IsConnected();
    bool              ConfigureFillingForSymbol(string symbol);
    bool              IsMarketOpenForTrading(string symbol, bool requireFullOpen, bool isBuy=true);
+   bool              ValidateMarketQuote(string symbol,bool isBuy,double &referencePrice);
    bool              ValidateStopDistance(string symbol, double refPrice, double sl, double tp, bool isBuy, string action);
 
 public:
-   void              Init(ulong magic, int maxRetries = 3, int retryDelayMs = 300);
+   void              Init(ulong magic, int maxRetries = 3, int retryDelayMs = 300,
+                           int maxQuoteAgeSeconds = 30,int maxSpreadPoints = 0);
    double            LastLatencyMs() { return (double)m_lastLatencyUs / 1000.0; }
    ulong             LastBrokerOrderId() const { return m_lastBrokerOrderId; }
    ulong             LastBrokerDealId() const { return m_lastBrokerDealId; }
@@ -66,13 +71,16 @@ public:
    ulong             PositionTicketForIdentifier(string symbol, ulong positionIdentifier);
   };
 //+------------------------------------------------------------------+
-void CBrokerAdapter::Init(ulong magic, int maxRetries, int retryDelayMs)
+void CBrokerAdapter::Init(ulong magic,int maxRetries,int retryDelayMs,
+                           int maxQuoteAgeSeconds,int maxSpreadPoints)
   {
    m_magic = magic;
    m_trade.SetExpertMagicNumber(magic);
    m_trade.SetDeviationInPoints(20);
    m_maxRetries = MathMax(1,maxRetries);
    m_retryDelayMs = MathMax(0,retryDelayMs);
+   m_maxQuoteAgeSeconds=MathMax(1,maxQuoteAgeSeconds);
+   m_maxSpreadPoints=MathMax(0,maxSpreadPoints);
    m_lastLatencyUs = 0;
    m_lastBrokerOrderId = 0;
    m_lastBrokerDealId = 0;
@@ -130,6 +138,32 @@ bool CBrokerAdapter::IsConnected()
    if(TerminalInfoInteger(TERMINAL_CONNECTED)) return true;
    Print("MedisTouch BrokerAdapter: terminal not connected to the trade server — refusing to submit.");
    return false;
+  }
+//+------------------------------------------------------------------+
+bool CBrokerAdapter::ValidateMarketQuote(string symbol,bool isBuy,double &referencePrice)
+  {
+   referencePrice=0.0;
+   double spreadPoints=0.0;
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol,tick))
+     {
+      PrintFormat("Midas BrokerAdapter: %s has no current quote; refusing entry.",symbol);
+      return false;
+     }
+   double point=SymbolInfoDouble(symbol,SYMBOL_POINT);
+   datetime serverNow=TimeTradeServer();
+   double observedSpread=(point>0.0 ? (tick.ask-tick.bid)/point : 0.0);
+   if(!CBrokerQuoteValidator::Validate(tick.bid,tick.ask,point,serverNow,tick.time,
+                                      m_maxQuoteAgeSeconds,m_maxSpreadPoints,
+                                      isBuy,referencePrice,spreadPoints))
+     {
+      PrintFormat("Midas BrokerAdapter: %s quote failed integrity gate (bid=%.10f ask=%.10f tick_time=%s server_time=%s max_age=%d spread_points=%.2f max_spread=%d).",
+                  symbol,tick.bid,tick.ask,TimeToString(tick.time,TIME_DATE|TIME_SECONDS),
+                  TimeToString(serverNow,TIME_DATE|TIME_SECONDS),m_maxQuoteAgeSeconds,
+                  observedSpread,m_maxSpreadPoints);
+      return false;
+     }
+   return true;
   }
 //+------------------------------------------------------------------+
 bool CBrokerAdapter::ConfigureFillingForSymbol(string symbol)
@@ -303,11 +337,12 @@ bool CBrokerAdapter::MarketBuy(string symbol,double volume,double sl,double tp,u
    ResetLastRequestStatus();
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,true)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double refPrice=SymbolInfoDouble(symbol,SYMBOL_ASK);
-   if(!ValidateStopDistance(symbol,refPrice,sl,tp,true,"MarketBuy")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double refPrice=0.0;
+      if(!ValidateMarketQuote(symbol,true,refPrice) ||
+         !ValidateStopDistance(symbol,refPrice,sl,tp,true,"MarketBuy")) break;
       bool requestOk=m_trade.Buy(volume,symbol,0.0,sl,tp,comment);
       m_lastRequestAttempted=true;
       m_lastRetcode=m_trade.ResultRetcode();
@@ -333,11 +368,12 @@ bool CBrokerAdapter::MarketSell(string symbol,double volume,double sl,double tp,
    ResetLastRequestStatus();
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,false)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double refPrice=SymbolInfoDouble(symbol,SYMBOL_BID);
-   if(!ValidateStopDistance(symbol,refPrice,sl,tp,false,"MarketSell")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double refPrice=0.0;
+      if(!ValidateMarketQuote(symbol,false,refPrice) ||
+         !ValidateStopDistance(symbol,refPrice,sl,tp,false,"MarketSell")) break;
       bool requestOk=m_trade.Sell(volume,symbol,0.0,sl,tp,comment);
       m_lastRequestAttempted=true;
       m_lastRetcode=m_trade.ResultRetcode();
@@ -365,10 +401,12 @@ bool CBrokerAdapter::PlaceLimit(string symbol,ENUM_ORDER_TYPE type,double volume
    bool isBuy=(type==ORDER_TYPE_BUY_LIMIT);
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,isBuy)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   if(!ValidateStopDistance(symbol,price,sl,tp,isBuy,"PlaceLimit")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double quoteReference=0.0;
+      if(!ValidateMarketQuote(symbol,isBuy,quoteReference) || quoteReference<=0.0 ||
+         !ValidateStopDistance(symbol,price,sl,tp,isBuy,"PlaceLimit")) break;
       bool ok=isBuy
                ? m_trade.BuyLimit(volume,price,symbol,sl,tp,ORDER_TIME_GTC,0,comment)
                : m_trade.SellLimit(volume,price,symbol,sl,tp,ORDER_TIME_GTC,0,comment);
@@ -422,8 +460,8 @@ bool CBrokerAdapter::ModifySLTP(ulong ticket,double sl,double tp)
    double tickSize=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE);
    double point=SymbolInfoDouble(symbol,SYMBOL_POINT);
    int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
-   if(tickSize<=0.0) tickSize=point;
-   if(tickSize<=0.0 || digits<0 || digits>8)
+   if(!MathIsValidNumber(tickSize) || tickSize<=0.0 ||
+      !MathIsValidNumber(point) || point<=0.0 || digits<0 || digits>8)
      {
       PrintFormat("MedisTouch BrokerAdapter: ModifySLTP refused — missing/invalid tick geometry for %s.",symbol);
       return false;

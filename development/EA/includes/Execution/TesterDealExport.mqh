@@ -52,7 +52,8 @@ private:
    ulong  m_spreadSamples;
    double m_point;
    double m_tickSize;
-   double m_tickValue;
+   double m_tickValueProfit;
+   double m_tickValueLoss;
    double m_initialBalance;
    string m_currency;
    string m_server;
@@ -320,8 +321,8 @@ private:
          return false;
         }
       double cashPerPoint=0.0;
-      if(m_point>0.0 && m_tickSize>0.0 && m_tickValue>0.0)
-         cashPerPoint=m_tickValue*m_point/m_tickSize;
+      if(m_point>0.0 && m_tickSize>0.0 && m_tickValueLoss>0.0)
+         cashPerPoint=m_tickValueLoss*m_point/m_tickSize;
       double averageSpread=(m_spreadSamples>0 ? m_spreadSum/(double)m_spreadSamples : 0.0);
       int recordedDeals=ArraySize(m_rows);
       int exportedDeals=(dealsWritten?recordedDeals:0);
@@ -344,6 +345,7 @@ private:
          "\"account_currency\":\"%s\",\"leverage\":%I64d,"
          "\"initial_balance\":%.8f,\"terminal_build\":%I64d,"
          "\"point\":%.10f,\"tick_size\":%.10f,\"tick_value\":%.8f,"
+         "\"tick_value_profit\":%.8f,\"tick_value_loss\":%.8f,"
          "\"cash_per_point_per_lot\":%.8f,\"spread_points_mean\":%.8f,"
          "\"spread_points_max\":%.8f,\"spread_samples\":%I64u,"
          "\"fill_mode\":%I64d,\"server_utc_offset_minutes\":%d,"
@@ -356,8 +358,8 @@ private:
          "\"deal_net_cashflow_total\":%.8f,"
          "\"deals_file_written\":%s,\"open_positions_file_written\":%s}",
          JsonEscape(m_runId),JsonEscape(m_symbol),JsonEscape(m_server),JsonEscape(m_currency),
-         m_leverage,m_initialBalance,m_terminalBuild,m_point,m_tickSize,m_tickValue,cashPerPoint,
-         averageSpread,m_spreadMax,m_spreadSamples,m_fillMode,m_serverUtcOffsetMinutes,
+         m_leverage,m_initialBalance,m_terminalBuild,m_point,m_tickSize,m_tickValueLoss,
+         m_tickValueProfit,m_tickValueLoss,cashPerPoint,averageSpread,m_spreadMax,m_spreadSamples,m_fillMode,m_serverUtcOffsetMinutes,
          status,historyExpectedDeals,recordedDeals,historyMissingDeals,exportedDeals,
          (openPositionsWritten?openPositionsExported:0),
          dealProfitTotal,dealCommissionTotal,dealSwapTotal,dealFeeTotal,dealNetCashflowTotal,
@@ -454,7 +456,8 @@ public:
       m_spreadSamples=0;
       m_point=SymbolInfoDouble(symbol,SYMBOL_POINT);
       m_tickSize=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE);
-      m_tickValue=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_VALUE);
+      m_tickValueProfit=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_VALUE_PROFIT);
+      m_tickValueLoss=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_VALUE_LOSS);
       m_initialBalance=AccountInfoDouble(ACCOUNT_BALANCE);
       m_currency=AccountInfoString(ACCOUNT_CURRENCY);
       m_server=AccountInfoString(ACCOUNT_SERVER);

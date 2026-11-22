@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@d88acca0f3b77d1db56d3cc520c860560b2d328a
+// Staged EA source snapshot: cirvannaco-png/midas@05d653ed547f88a7f8bd7fb800a246c1edd2702a
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -627,6 +627,166 @@ bool CSessionFilter::IsAllowed()
 #define SIGNALLOGGER_MQH
 
 // already inlined once under include guard: includes/Core/Config.mqh
+// BEGIN INLINED MODULE: includes/Core/PipCalculator.mqh
+//+------------------------------------------------------------------+
+//|                                          Core/PipCalculator.mqh   |
+//+------------------------------------------------------------------+
+#ifndef PIPCALCULATOR_MQH
+#define PIPCALCULATOR_MQH
+
+// A pip is a display convention for FX, not a universal price unit.
+// For non-FX instruments the returned point-scaled unit is informational;
+// execution and risk logic must use tick size / OrderCalcProfit instead.
+class CPipCalculator
+  {
+public:
+   static bool       ValidPriceGeometry(const int digits,const double point)
+     {
+      return (digits>=0 && digits<=8 &&
+              MathIsValidNumber(point) && point>0.0);
+     }
+
+   static double     PipSizeFromSpec(const int digits,const double point)
+     {
+      if(!ValidPriceGeometry(digits,point))
+         return 0.0;
+      double pip=(digits==3 || digits==5) ? point*10.0 : point;
+      return MathIsValidNumber(pip) && pip>0.0 ? pip : 0.0;
+     }
+
+   static double     PipSize(string symbol)
+     {
+      long digits=0;
+      double point=0.0;
+      if(!SymbolInfoInteger(symbol,SYMBOL_DIGITS,digits) ||
+         !SymbolInfoDouble(symbol,SYMBOL_POINT,point))
+         return 0.0;
+      return PipSizeFromSpec((int)digits,point);
+     }
+
+   static double     PointSize(string symbol)
+     {
+      double point=0.0;
+      if(!SymbolInfoDouble(symbol,SYMBOL_POINT,point) ||
+         !MathIsValidNumber(point) || point<=0.0)
+         return 0.0;
+      return point;
+     }
+
+   static double     Pips(string symbol,double priceDistance)
+     {
+      double pip=PipSize(symbol);
+      if(pip<=0.0 || !MathIsValidNumber(priceDistance))
+         return 0.0;
+      return MathAbs(priceDistance)/pip;
+     }
+
+   static double     Points(string symbol,double priceDistance)
+     {
+      double point=PointSize(symbol);
+      if(point<=0.0 || !MathIsValidNumber(priceDistance))
+         return 0.0;
+      return MathAbs(priceDistance)/point;
+     }
+
+   // The caller must choose the direction: some instruments expose
+   // asymmetric profit and loss tick values. No synthetic fallback is used.
+   static double     PipValueFromSpec(const double pipSize,
+                                      const double tickSize,
+                                      const double directionalTickValue,
+                                      const double lots)
+     {
+      if(!MathIsValidNumber(pipSize) || pipSize<=0.0 ||
+         !MathIsValidNumber(tickSize) || tickSize<=0.0 ||
+         !MathIsValidNumber(directionalTickValue) || directionalTickValue<=0.0 ||
+         !MathIsValidNumber(lots) || lots<=0.0)
+         return 0.0;
+      double value=(pipSize/tickSize)*directionalTickValue*lots;
+      return MathIsValidNumber(value) ? value : 0.0;
+     }
+
+   // Convert one price unit into account currency using an explicitly
+   // directional broker tick value. Never fall back to the generic value.
+   static double     ValuePerPriceUnitFromSpec(const double tickSize,
+                                               const double directionalTickValue)
+     {
+      if(!MathIsValidNumber(tickSize) || tickSize<=0.0 ||
+         !MathIsValidNumber(directionalTickValue) || directionalTickValue<=0.0)
+         return 0.0;
+      double value=directionalTickValue/tickSize;
+      return MathIsValidNumber(value) && value>0.0 ? value : 0.0;
+     }
+
+   // Calculate simulated net PnL without letting adverse execution costs
+   // inherit the profitable-side tick value. signedPriceMove excludes costs;
+   // costPriceDistance is the aggregate entry+exit adverse price distance.
+   static bool       TryCalculateTradePnlFromSpec(const double signedPriceMove,
+                                                  const double lots,
+                                                  const double tickSize,
+                                                  const double profitTickValue,
+                                                  const double lossTickValue,
+                                                  const double costPriceDistance,
+                                                  double &pnlOut)
+     {
+      pnlOut=0.0;
+      if(!MathIsValidNumber(signedPriceMove) ||
+         !MathIsValidNumber(lots) || lots<=0.0 ||
+         !MathIsValidNumber(costPriceDistance) || costPriceDistance<0.0)
+         return false;
+      double directionalValue=ValuePerPriceUnitFromSpec(
+         tickSize,(signedPriceMove>0.0 ? profitTickValue : lossTickValue));
+      double conservativeCostValue=ValuePerPriceUnitFromSpec(tickSize,lossTickValue);
+      if(directionalValue<=0.0 || conservativeCostValue<=0.0) return false;
+      double gross=signedPriceMove*lots*directionalValue;
+      double costs=costPriceDistance*lots*conservativeCostValue;
+      double net=gross-costs;
+      if(!MathIsValidNumber(gross) || !MathIsValidNumber(costs) ||
+         !MathIsValidNumber(net)) return false;
+      pnlOut=net;
+      return true;
+     }
+
+   // Convert aggregate price-distance x lots into account-currency stop risk.
+   // Stop risk must use the broker's loss-side tick value, never the generic or
+   // profit-side value: some instruments expose asymmetric directional values.
+   static double     MonetaryLossRiskFromSpec(const double riskLotsDistance,
+                                               const double tickSize,
+                                               const double lossTickValue)
+     {
+      if(!MathIsValidNumber(riskLotsDistance) || riskLotsDistance<=0.0 ||
+         !MathIsValidNumber(tickSize) || tickSize<=0.0 ||
+         !MathIsValidNumber(lossTickValue) || lossTickValue<=0.0)
+         return 0.0;
+      double risk=(riskLotsDistance/tickSize)*lossTickValue;
+      return MathIsValidNumber(risk) && risk>0.0 ? risk : 0.0;
+     }
+
+   static double     PipValue(string symbol,double lots,bool forProfit=true)
+     {
+      double pip=PipSize(symbol);
+      double tickSize=0.0;
+      double tickValue=0.0;
+      if(!SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE,tickSize))
+         return 0.0;
+      ENUM_SYMBOL_INFO_DOUBLE property=forProfit
+                                       ? SYMBOL_TRADE_TICK_VALUE_PROFIT
+                                       : SYMBOL_TRADE_TICK_VALUE_LOSS;
+      if(!SymbolInfoDouble(symbol,property,tickValue) ||
+         !MathIsValidNumber(tickValue) || tickValue<=0.0)
+         return 0.0;
+      return PipValueFromSpec(pip,tickSize,tickValue,lots);
+     }
+
+   static string     FormatDistance(string symbol,double priceDistance)
+     {
+      return StringFormat("%.1f pips / %.0f pts",
+                          Pips(symbol,priceDistance),
+                          Points(symbol,priceDistance));
+     }
+  };
+#endif
+//+------------------------------------------------------------------+
+// END INLINED MODULE: includes/Core/PipCalculator.mqh
 
 // Session labeling: v4 bucketed by raw server-clock hour, which drifts
 // wrong by however many hours the broker's server sits from GMT (and
@@ -1044,12 +1204,15 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
    double realizedR = 0.0;
    if(p.lots > 0 && p.mgmtRiskDist > 0)
      {
-      double tickSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
-      double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
-      if(tickSize > 0 && tickValue > 0)
+      double tickSize=0.0,lossTickValue=0.0;
+      if(SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE,tickSize) &&
+         SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_VALUE_LOSS,lossTickValue))
         {
-         double oneRDollar = p.mgmtRiskDist * (tickValue / tickSize) * p.lots;
-         if(oneRDollar > 0) realizedR = p.realizedPnL / oneRDollar;
+         double riskLotsDistance=p.mgmtRiskDist*p.lots;
+         double oneRDollar=CPipCalculator::MonetaryLossRiskFromSpec(
+                              riskLotsDistance,tickSize,lossTickValue);
+         if(oneRDollar>0.0 && MathIsValidNumber(p.realizedPnL))
+            realizedR=p.realizedPnL/oneRDollar;
         }
      }
 
@@ -2857,26 +3020,52 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
    if(copied <= 0)
       return false;
 
-   bool sawRealTradeVolume = false;
-   bool sawBrokerTradeVolume = false;
+   int realVolumeTickCount = 0;
+   int brokerVolumeTickCount = 0;
    double totalObservedVolume = 0.0;
+   long previousTickTimeMsc = 0;
 
    for(int i = 0; i < copied; i++)
      {
       MqlTick tick = ticks[i];
-      if((tick.flags & TICK_FLAG_LAST) == 0 || tick.last <= 0.0)
+
+      // CopyTicksRange should return chronological records. Reject malformed
+      // timestamps/order rather than constructing a profile from ambiguous data.
+      if(tick.time_msc <= 0 ||
+         (ulong)tick.time_msc < fromMsc ||
+         (ulong)tick.time_msc > toMsc ||
+         (previousTickTimeMsc > 0 && tick.time_msc < previousTickTimeMsc))
+         return false;
+      previousTickTimeMsc = tick.time_msc;
+
+      // COPY_TICKS_TRADE is deliberately the only tick source here. Bid/ask
+      // quote updates from COPY_TICKS_ALL are never converted into volume.
+      if((tick.flags & TICK_FLAG_LAST) == 0 ||
+         !MathIsValidNumber(tick.last) || tick.last <= 0.0)
          continue;
 
-      double volume = tick.volume_real;
-      if(volume > 0.0)
-         sawRealTradeVolume = true;
-      else
+      double volume = 0.0;
+      bool hasRealVolume = false;
+      if(MathIsValidNumber(tick.volume_real) && tick.volume_real > 0.0)
+        {
+         volume = tick.volume_real;
+         hasRealVolume = true;
+        }
+      else if(tick.volume > 0)
          volume = (double)tick.volume;
-
-      if(volume > 0.0)
-         sawBrokerTradeVolume = true;
       else
          continue;
+
+      // Do not clamp out-of-range trades into the first/last profile bin.
+      // The profile range is defined by the selected candle window.
+      double rangeHigh = rangeLow + binSize * m_numBins;
+      if(tick.last < rangeLow || tick.last > rangeHigh)
+         continue;
+
+      if(hasRealVolume)
+         realVolumeTickCount++;
+      else
+         brokerVolumeTickCount++;
 
       int bin = BinForPrice(tick.last, rangeLow, binSize);
       volumes[bin] += volume;
@@ -2886,9 +3075,11 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
    if(totalObservedVolume <= 0.0)
       return false;
 
-   if(sawRealTradeVolume)
+   // Only label the profile REAL when every contributing trade tick supplied
+   // real volume. Mixed feeds are conservatively classified as broker ticks.
+   if(realVolumeTickCount > 0 && brokerVolumeTickCount == 0)
       m_source = VA_SOURCE_REAL_TRADE_TICKS;
-   else if(sawBrokerTradeVolume)
+   else if(brokerVolumeTickCount > 0)
       m_source = VA_SOURCE_BROKER_TRADE_TICKS;
    else
       return false;
@@ -4628,80 +4819,7 @@ ENUM_VOL_REGIME CVolatilityRegime::Classify(int shift)
 //+------------------------------------------------------------------+
 // END INLINED MODULE: includes/Analysis/VolatilityRegime.mqh
 // already inlined once under include guard: includes/Core/SessionFilter.mqh
-// BEGIN INLINED MODULE: includes/Core/PipCalculator.mqh
-//+------------------------------------------------------------------+
-//|                                          Core/PipCalculator.mqh   |
-//+------------------------------------------------------------------+
-#ifndef PIPCALCULATOR_MQH
-#define PIPCALCULATOR_MQH
-
-// v2.9 addition. Scoring.mqh already computed this correctly (from
-// SYMBOL_DIGITS/SYMBOL_POINT, not a hardcoded 0.0001) — this doesn't fix
-// a live bug, it centralizes the ONE place that logic lives so every new
-// consumer (Telegram payload pip display, dashboard, future risk
-// tooling) uses the same definition instead of each re-deriving it and
-// risking divergence on JPY pairs / gold / indices / 3-5 digit brokers.
-//
-// Convention: a "pip" is the traditional 4th decimal for most FX pairs
-// (2nd for JPY pairs) — i.e. point*10 on a 5-digit broker, point*10 on a
-// 3-digit JPY broker, and point*1 on a classic 4-digit broker. This
-// matches MetaTrader's own informal pip convention, NOT SYMBOL_POINT
-// directly (which is one price increment, not one pip, on 5/3-digit
-// brokers). For gold/indices there's no universal "pip" — PipSize()
-// still returns something scaled off SYMBOL_POINT/DIGITS, but treat the
-// *_Points() variants as the reliable ones for those symbols; Pips() on
-// XAUUSD is informational, not a market-standard unit.
-class CPipCalculator
-  {
-public:
-   static double     PipSize(string symbol)
-     {
-      int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
-      double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
-      if(point <= 0) return 0.0001; // defensive fallback only — should never trigger on a valid symbol
-      return (digits == 3 || digits == 5) ? point * 10.0 : point;
-     }
-   static double     PointSize(string symbol)
-     {
-      return SymbolInfoDouble(symbol, SYMBOL_POINT);
-     }
-   // Price distance -> pips (rounded to 1 decimal for display; callers
-   // needing raw precision should divide by PipSize() themselves).
-   static double     Pips(string symbol, double priceDistance)
-     {
-      double pip = PipSize(symbol);
-      if(pip <= 0) return 0.0;
-      return MathAbs(priceDistance) / pip;
-     }
-   static double     Points(string symbol, double priceDistance)
-     {
-      double pt = PointSize(symbol);
-      if(pt <= 0) return 0.0;
-      return MathAbs(priceDistance) / pt;
-     }
-   // Monetary value of one pip for `lots` lots on `symbol`. Uses
-   // SYMBOL_TRADE_TICK_VALUE/TICK_SIZE so it's correct for FX, metals,
-   // and indices alike, not just a "$10/pip/lot" FX assumption.
-   static double     PipValue(string symbol, double lots)
-     {
-      double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
-      double tickSize  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
-      if(tickSize <= 0) return 0.0;
-      double pip = PipSize(symbol);
-      return (pip / tickSize) * tickValue * lots;
-     }
-   // Convenience formatter for signal cards / logs: "87 pips / 870 pts"
-   // per the review's debugging recommendation (item #2 of the pips
-   // batch) — showing both makes broker-digit mismatches visible instead
-   // of silently wrong.
-   static string     FormatDistance(string symbol, double priceDistance)
-     {
-      return StringFormat("%.1f pips / %.0f pts", Pips(symbol, priceDistance), Points(symbol, priceDistance));
-     }
-  };
-#endif
-//+------------------------------------------------------------------+
-// END INLINED MODULE: includes/Core/PipCalculator.mqh
+// already inlined once under include guard: includes/Core/PipCalculator.mqh
 // BEGIN INLINED MODULE: includes/Regime/RegimeDetector.mqh
 //+------------------------------------------------------------------+
 //|                                       Regime/RegimeDetector.mqh   |
@@ -7029,7 +7147,7 @@ double CScoringEngine::CalculateConfidence(bool forBuy)
 //+------------------------------------------------------------------+
 double CScoringEngine::PipSize()
   {
-   if(m_priceRef == NULL) return 0.0001;
+   if(m_priceRef == NULL) return 0.0;
    // v2.9: delegates to CPipCalculator so this is the same definition
    // everywhere (Telegram payload, dashboard) instead of a locally
    // re-derived one. Behavior is unchanged — same formula as before.
@@ -7129,7 +7247,11 @@ void CScoringEngine::EvaluateReasons(bool forBuy, SetupReasons &out)
    if(m_srCtx == NULL || m_priceRef == NULL || m_priceRef.Total() == 0) return;
 
    double pip = PipSize();
-   if(pip <= 0) pip = 0.0001;
+   if(pip <= 0.0)
+     {
+      out.risk_warning = "INVALID_SYMBOL_PRICE_GEOMETRY";
+      return;
+     }
    double bestDist = -1.0;
    ENUM_SR_TYPE bestType = SR_MINOR_RESISTANCE;
    int bestTouches = 0;
@@ -8812,6 +8934,7 @@ bool CRiskEngine::ValidateSetupAtEntry(const TradeSetup &setup,double entry,doub
 #define OUTCOMETRACKERLIVE_MQH
 // already inlined once under include guard: includes/Core/Config.mqh
 // already inlined once under include guard: includes/Core/SignalLogger.mqh
+// already inlined once under include guard: includes/Core/PipCalculator.mqh
 // BEGIN INLINED MODULE: includes/Trading/CalibrationEngine.mqh
 //+------------------------------------------------------------------+
 //|                                    Trading/CalibrationEngine.mqh  |
@@ -9482,7 +9605,21 @@ private:
       double factor=MathPow(0.5,(double)p.decayBars/m_decayHalfLifeBars);
       p.confidenceDecayed=MathIsValidNumber(factor) ? p.confidenceAtSignal*factor : p.confidenceAtSignal;
      }
-   double RValue(const PendingSetup &p) const{double ts=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_SIZE),tv=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE);if(ts<=0.0||tv<=0.0)return 0.0;double riskLotsDistance=p.weightedRiskDistLots>0.0?p.weightedRiskDistLots:(p.mgmtRiskDist*p.lots);if(riskLotsDistance<=0.0)return 0.0;double oneR=riskLotsDistance*(tv/ts);return oneR>0.0?p.realizedPnL/oneR:0.0;}
+   double RValue(const PendingSetup &p) const
+     {
+      double riskLotsDistance=p.weightedRiskDistLots>0.0
+                              ? p.weightedRiskDistLots
+                              : p.mgmtRiskDist*p.lots;
+      double tickSize=0.0,lossTickValue=0.0;
+      if(!SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_SIZE,tickSize) ||
+         !SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE_LOSS,lossTickValue))
+         return 0.0;
+      double oneR=CPipCalculator::MonetaryLossRiskFromSpec(
+         riskLotsDistance,tickSize,lossTickValue);
+      if(oneR<=0.0 || !MathIsValidNumber(p.realizedPnL)) return 0.0;
+      double rMultiple=p.realizedPnL/oneR;
+      return MathIsValidNumber(rMultiple) ? rMultiple : 0.0;
+     }
    string EnvironmentJson(const PendingSetup &p) const{SetupReasons r=p.setup.reasons;string structure=EnumToString(r.sweep_grade)+"/"+IntegerToString((int)r.breakout_class)+"/"+IntegerToString((int)r.reversion_class)+"/"+IntegerToString((int)r.keylevel_reaction);return StringFormat("{\"regime\":\"%s\",\"volatility_state\":\"%s\",\"trend_strength\":%.3f,\"liquidity_score\":%.3f,\"liquidity_bucket\":%d,\"news_state\":\"%s\",\"session\":\"%s\",\"spread_points\":%.2f,\"point_size\":%.10f,\"atr_value\":%.10f,\"atr_regime\":\"%s\",\"htf_ob_aligned\":%s,\"htf_ob_state\":\"%s\",\"value_area_zone\":\"%s\",\"market_phase\":\"%s\",\"market_structure\":\"%s\",\"bos_strength\":%.3f,\"sweep_grade\":\"%s\",\"confidence_diagnostics\":{\"contradiction_penalty\":%.4f,\"env_score\":%.4f,\"exec_score\":%.4f,\"env_exec_confidence\":%.2f}}",EnumToString(r.regime),EnumToString(r.vol_regime),r.trend_strength,r.liquidity_score,r.liquidity_bucket,EnumToString(r.news_risk),EnumToString(r.session),r.spread_points,r.point_size,r.atr_value,EnumToString(r.vol_regime),r.htf_ob_confluence?"true":"false",EnumToString(r.htf_ob_state),EnumToString(r.va_zone),EnumToString(r.phase),structure,r.bos_strength,EnumToString(r.sweep_grade),r.contradiction_penalty,r.env_score,r.exec_score,r.env_exec_confidence);}
    void Finalize(int idx,string exitReason,double exitPrice,datetime outcomeTime){m_lastFinalizedR=0.0;m_lastFinalizedQualified=false;if(idx<0||idx>=m_count)return;PendingSetup p=m_pending[idx];datetime resolvedAt=outcomeTime;if(resolvedAt<=0)resolvedAt=TimeCurrent();double rr=RValue(p);bool sized=p.filled&&p.lots>0.0;string coarseOutcome="scratch";if(!p.filled)coarseOutcome="no_fill";else if(p.realizedPnL>0.0000001)coarseOutcome="win";else if(p.realizedPnL<-0.0000001)coarseOutcome="loss";if((!p.outcomeHistoryComplete||!p.cashflowsKnown)&&p.filled)coarseOutcome="ambiguous";if(exitReason=="Ambiguous_SLandBE"||exitReason=="Ambiguous_SLandPartial"||exitReason=="Ambiguous_SLandTP"||exitReason=="Ambiguous_NettingReversal")coarseOutcome="ambiguous";m_lastFinalizedR=rr;m_lastFinalizedQualified=(sized&&p.outcomeHistoryComplete&&p.cashflowsKnown&&coarseOutcome=="win"&&p.realizedPnL>0.0000001);if(sized&&coarseOutcome!="ambiguous"&&coarseOutcome!="no_fill"){if(coarseOutcome=="win")m_stats.wins++;else if(coarseOutcome=="loss")m_stats.losses++;else m_stats.scratches++;m_stats.resolvedCount++;m_stats.netPnL+=p.realizedPnL;if(p.realizedPnL>0)m_stats.grossProfit+=p.realizedPnL;if(p.realizedPnL<0)m_stats.grossLoss+=-p.realizedPnL;m_stats.totalCommission+=p.totalCommission;m_stats.totalSpreadCost+=p.totalSpreadCost;m_stats.totalSlippageCost+=p.totalSlippageCost;m_stats.sumRMultiple+=rr;if(m_calibrationEnabled)m_calibration.Record(p.confidenceAtSignal,p.realizedPnL);if(m_environmentMemory!=NULL&&p.excursionHistoryComplete){bool buy=p.setup.type==ORDER_TYPE_BUY;double mfeR=0.0,maeR=0.0;if(p.mgmtRiskDist>0.0){mfeR=buy?(p.mfePrice-p.entryRef)/p.mgmtRiskDist:(p.entryRef-p.maePrice)/p.mgmtRiskDist;maeR=buy?(p.entryRef-p.maePrice)/p.mgmtRiskDist:(p.maePrice-p.entryRef)/p.mgmtRiskDist;}m_environmentMemory.RecordOutcome(p.setup.reasons,p.setup.reasons.selected_strategy,rr,maeR,mfeR,p.barsElapsed,resolvedAt);}}else if(coarseOutcome=="ambiguous")m_stats.ambiguous++;if(m_logger!=NULL)m_logger.LogOutcome(p,m_symbol,m_entryTF,exitReason,exitPrice,m_fillPolicy,resolvedAt);if(m_publisher!=NULL&&p.decisionId>0){bool buy=p.setup.type==ORDER_TYPE_BUY;double mfeR=0.0,maeR=0.0;if(p.filled&&p.mgmtRiskDist>0){double mfe=buy?(p.mfePrice-p.entryRef):(p.entryRef-p.mfePrice);double mae=buy?(p.entryRef-p.maePrice):(p.maePrice-p.entryRef);mfeR=mfe/p.mgmtRiskDist;maeR=mae/p.mgmtRiskDist;}if(!p.excursionHistoryComplete){mfeR=0.0;maeR=0.0;}string signalId=m_publisher.SignalIdForDecision(p.decisionId);string strategy=EnumToString(p.setup.reasons.selected_strategy);string envKey="";if(m_environmentMemory!=NULL)envKey=m_environmentMemory.Key(p.setup.reasons);m_publisher.PublishOutcome(signalId,m_symbol,buy?"BUY":"SELL",coarseOutcome,exitReason,strategy,rr,mfeR,maeR,p.totalCommission,p.totalSpreadCost,p.totalSlippageCost,p.barsElapsed,p.barsToFill,p.filled,EnumToString(p.setup.reasons.regime),EnumToString(p.setup.reasons.session),EnumToString(p.setup.reasons.sweep_grade),p.setup.reasons.htf_ob_confluence,p.confidenceAtSignal,p.confidenceDecayed,p.decayBars,p.decision_fingerprint,p.setup.creation_time,p.fillTime,resolvedAt,p.excursionHistoryComplete,p.totalCommissionCashflow,p.totalSwapCashflow,p.totalBrokerFeeCashflow,p.cashflowsKnown,p.spreadCostKnown,p.slippageCostKnown,envKey,EnvironmentJson(p),p.outcomeHistoryComplete);}for(int j=idx;j<m_count-1;j++)m_pending[j]=m_pending[j+1];m_count--;ArrayResize(m_pending,m_count);}
    void SimFill(PendingSetup &p,double price,datetime t){if(p.filled)return;p.filled=true;p.fillTime=t;p.barsToFill=p.decayBars;ApplyConfidenceDecay(p);p.entryRef=price;p.entryFillPrice=price;p.mfePrice=price;p.maePrice=price;p.riskDist=MathAbs(price-p.setup.stop_loss);p.mgmtRiskDist=p.riskDist;}
@@ -10990,6 +11127,47 @@ bool NormalizePriceToTickGrid(const double rawPrice,
 #endif
 //+------------------------------------------------------------------+
 // END INLINED MODULE: includes/Execution/PriceGridNormalizer.mqh
+// BEGIN INLINED MODULE: includes/Execution/BrokerQuoteValidator.mqh
+//+------------------------------------------------------------------+
+//| Execution/BrokerQuoteValidator.mqh                               |
+//| Deterministic quote integrity gates shared by all entry routes.   |
+//+------------------------------------------------------------------+
+#ifndef MIDAS_BROKERQUOTEVALIDATOR_MQH
+#define MIDAS_BROKERQUOTEVALIDATOR_MQH
+
+class CBrokerQuoteValidator
+  {
+public:
+   static bool IsTimestampFresh(const datetime serverNow,const datetime tickTime,
+                                const int maxAgeSeconds)
+     {
+      if(serverNow<=0 || tickTime<=0 || maxAgeSeconds<=0) return false;
+      long age=(long)serverNow-(long)tickTime;
+      return age>=0 && age<=(long)maxAgeSeconds;
+     }
+
+   static bool Validate(const double bid,const double ask,const double point,
+                        const datetime serverNow,const datetime tickTime,
+                        const int maxAgeSeconds,const int maxSpreadPoints,
+                        const bool isBuy,double &referencePrice,double &spreadPoints)
+     {
+      referencePrice=0.0;
+      spreadPoints=0.0;
+      if(!MathIsValidNumber(bid) || !MathIsValidNumber(ask) ||
+         !MathIsValidNumber(point) || bid<=0.0 || ask<=0.0 ||
+         point<=0.0 || ask<bid || maxSpreadPoints<0 ||
+         !IsTimestampFresh(serverNow,tickTime,maxAgeSeconds)) return false;
+      double spread=(ask-bid)/point;
+      if(!MathIsValidNumber(spread) || spread<0.0 ||
+         (maxSpreadPoints>0 && spread>(double)maxSpreadPoints)) return false;
+      referencePrice=isBuy ? ask : bid;
+      spreadPoints=spread;
+      return true;
+     }
+  };
+#endif
+//+------------------------------------------------------------------+
+// END INLINED MODULE: includes/Execution/BrokerQuoteValidator.mqh
 
 class CBrokerAdapter
   {
@@ -11004,6 +11182,8 @@ private:
    ulong             m_lastBrokerPositionId;
    bool              m_lastRequestAttempted;
    uint              m_lastRetcode;
+   int               m_maxQuoteAgeSeconds;
+   int               m_maxSpreadPoints;
 
    void              CaptureBrokerIdentifiers(string symbol);
    bool              LastRequestOk(string action);
@@ -11014,10 +11194,12 @@ private:
    bool              IsConnected();
    bool              ConfigureFillingForSymbol(string symbol);
    bool              IsMarketOpenForTrading(string symbol, bool requireFullOpen, bool isBuy=true);
+   bool              ValidateMarketQuote(string symbol,bool isBuy,double &referencePrice);
    bool              ValidateStopDistance(string symbol, double refPrice, double sl, double tp, bool isBuy, string action);
 
 public:
-   void              Init(ulong magic, int maxRetries = 3, int retryDelayMs = 300);
+   void              Init(ulong magic, int maxRetries = 3, int retryDelayMs = 300,
+                           int maxQuoteAgeSeconds = 30,int maxSpreadPoints = 0);
    double            LastLatencyMs() { return (double)m_lastLatencyUs / 1000.0; }
    ulong             LastBrokerOrderId() const { return m_lastBrokerOrderId; }
    ulong             LastBrokerDealId() const { return m_lastBrokerDealId; }
@@ -11050,13 +11232,16 @@ public:
    ulong             PositionTicketForIdentifier(string symbol, ulong positionIdentifier);
   };
 //+------------------------------------------------------------------+
-void CBrokerAdapter::Init(ulong magic, int maxRetries, int retryDelayMs)
+void CBrokerAdapter::Init(ulong magic,int maxRetries,int retryDelayMs,
+                           int maxQuoteAgeSeconds,int maxSpreadPoints)
   {
    m_magic = magic;
    m_trade.SetExpertMagicNumber(magic);
    m_trade.SetDeviationInPoints(20);
    m_maxRetries = MathMax(1,maxRetries);
    m_retryDelayMs = MathMax(0,retryDelayMs);
+   m_maxQuoteAgeSeconds=MathMax(1,maxQuoteAgeSeconds);
+   m_maxSpreadPoints=MathMax(0,maxSpreadPoints);
    m_lastLatencyUs = 0;
    m_lastBrokerOrderId = 0;
    m_lastBrokerDealId = 0;
@@ -11114,6 +11299,32 @@ bool CBrokerAdapter::IsConnected()
    if(TerminalInfoInteger(TERMINAL_CONNECTED)) return true;
    Print("MedisTouch BrokerAdapter: terminal not connected to the trade server — refusing to submit.");
    return false;
+  }
+//+------------------------------------------------------------------+
+bool CBrokerAdapter::ValidateMarketQuote(string symbol,bool isBuy,double &referencePrice)
+  {
+   referencePrice=0.0;
+   double spreadPoints=0.0;
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol,tick))
+     {
+      PrintFormat("Midas BrokerAdapter: %s has no current quote; refusing entry.",symbol);
+      return false;
+     }
+   double point=SymbolInfoDouble(symbol,SYMBOL_POINT);
+   datetime serverNow=TimeTradeServer();
+   double observedSpread=(point>0.0 ? (tick.ask-tick.bid)/point : 0.0);
+   if(!CBrokerQuoteValidator::Validate(tick.bid,tick.ask,point,serverNow,tick.time,
+                                      m_maxQuoteAgeSeconds,m_maxSpreadPoints,
+                                      isBuy,referencePrice,spreadPoints))
+     {
+      PrintFormat("Midas BrokerAdapter: %s quote failed integrity gate (bid=%.10f ask=%.10f tick_time=%s server_time=%s max_age=%d spread_points=%.2f max_spread=%d).",
+                  symbol,tick.bid,tick.ask,TimeToString(tick.time,TIME_DATE|TIME_SECONDS),
+                  TimeToString(serverNow,TIME_DATE|TIME_SECONDS),m_maxQuoteAgeSeconds,
+                  observedSpread,m_maxSpreadPoints);
+      return false;
+     }
+   return true;
   }
 //+------------------------------------------------------------------+
 bool CBrokerAdapter::ConfigureFillingForSymbol(string symbol)
@@ -11287,11 +11498,12 @@ bool CBrokerAdapter::MarketBuy(string symbol,double volume,double sl,double tp,u
    ResetLastRequestStatus();
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,true)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double refPrice=SymbolInfoDouble(symbol,SYMBOL_ASK);
-   if(!ValidateStopDistance(symbol,refPrice,sl,tp,true,"MarketBuy")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double refPrice=0.0;
+      if(!ValidateMarketQuote(symbol,true,refPrice) ||
+         !ValidateStopDistance(symbol,refPrice,sl,tp,true,"MarketBuy")) break;
       bool requestOk=m_trade.Buy(volume,symbol,0.0,sl,tp,comment);
       m_lastRequestAttempted=true;
       m_lastRetcode=m_trade.ResultRetcode();
@@ -11317,11 +11529,12 @@ bool CBrokerAdapter::MarketSell(string symbol,double volume,double sl,double tp,
    ResetLastRequestStatus();
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,false)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double refPrice=SymbolInfoDouble(symbol,SYMBOL_BID);
-   if(!ValidateStopDistance(symbol,refPrice,sl,tp,false,"MarketSell")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double refPrice=0.0;
+      if(!ValidateMarketQuote(symbol,false,refPrice) ||
+         !ValidateStopDistance(symbol,refPrice,sl,tp,false,"MarketSell")) break;
       bool requestOk=m_trade.Sell(volume,symbol,0.0,sl,tp,comment);
       m_lastRequestAttempted=true;
       m_lastRetcode=m_trade.ResultRetcode();
@@ -11349,10 +11562,12 @@ bool CBrokerAdapter::PlaceLimit(string symbol,ENUM_ORDER_TYPE type,double volume
    bool isBuy=(type==ORDER_TYPE_BUY_LIMIT);
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,isBuy)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   if(!ValidateStopDistance(symbol,price,sl,tp,isBuy,"PlaceLimit")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double quoteReference=0.0;
+      if(!ValidateMarketQuote(symbol,isBuy,quoteReference) || quoteReference<=0.0 ||
+         !ValidateStopDistance(symbol,price,sl,tp,isBuy,"PlaceLimit")) break;
       bool ok=isBuy
                ? m_trade.BuyLimit(volume,price,symbol,sl,tp,ORDER_TIME_GTC,0,comment)
                : m_trade.SellLimit(volume,price,symbol,sl,tp,ORDER_TIME_GTC,0,comment);
@@ -11406,8 +11621,8 @@ bool CBrokerAdapter::ModifySLTP(ulong ticket,double sl,double tp)
    double tickSize=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE);
    double point=SymbolInfoDouble(symbol,SYMBOL_POINT);
    int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
-   if(tickSize<=0.0) tickSize=point;
-   if(tickSize<=0.0 || digits<0 || digits>8)
+   if(!MathIsValidNumber(tickSize) || tickSize<=0.0 ||
+      !MathIsValidNumber(point) || point<=0.0 || digits<0 || digits>8)
      {
       PrintFormat("MedisTouch BrokerAdapter: ModifySLTP refused — missing/invalid tick geometry for %s.",symbol);
       return false;
@@ -13469,7 +13684,8 @@ private:
    ulong  m_spreadSamples;
    double m_point;
    double m_tickSize;
-   double m_tickValue;
+   double m_tickValueProfit;
+   double m_tickValueLoss;
    double m_initialBalance;
    string m_currency;
    string m_server;
@@ -13737,8 +13953,8 @@ private:
          return false;
         }
       double cashPerPoint=0.0;
-      if(m_point>0.0 && m_tickSize>0.0 && m_tickValue>0.0)
-         cashPerPoint=m_tickValue*m_point/m_tickSize;
+      if(m_point>0.0 && m_tickSize>0.0 && m_tickValueLoss>0.0)
+         cashPerPoint=m_tickValueLoss*m_point/m_tickSize;
       double averageSpread=(m_spreadSamples>0 ? m_spreadSum/(double)m_spreadSamples : 0.0);
       int recordedDeals=ArraySize(m_rows);
       int exportedDeals=(dealsWritten?recordedDeals:0);
@@ -13761,6 +13977,7 @@ private:
          "\"account_currency\":\"%s\",\"leverage\":%I64d,"
          "\"initial_balance\":%.8f,\"terminal_build\":%I64d,"
          "\"point\":%.10f,\"tick_size\":%.10f,\"tick_value\":%.8f,"
+         "\"tick_value_profit\":%.8f,\"tick_value_loss\":%.8f,"
          "\"cash_per_point_per_lot\":%.8f,\"spread_points_mean\":%.8f,"
          "\"spread_points_max\":%.8f,\"spread_samples\":%I64u,"
          "\"fill_mode\":%I64d,\"server_utc_offset_minutes\":%d,"
@@ -13773,8 +13990,8 @@ private:
          "\"deal_net_cashflow_total\":%.8f,"
          "\"deals_file_written\":%s,\"open_positions_file_written\":%s}",
          JsonEscape(m_runId),JsonEscape(m_symbol),JsonEscape(m_server),JsonEscape(m_currency),
-         m_leverage,m_initialBalance,m_terminalBuild,m_point,m_tickSize,m_tickValue,cashPerPoint,
-         averageSpread,m_spreadMax,m_spreadSamples,m_fillMode,m_serverUtcOffsetMinutes,
+         m_leverage,m_initialBalance,m_terminalBuild,m_point,m_tickSize,m_tickValueLoss,
+         m_tickValueProfit,m_tickValueLoss,cashPerPoint,averageSpread,m_spreadMax,m_spreadSamples,m_fillMode,m_serverUtcOffsetMinutes,
          status,historyExpectedDeals,recordedDeals,historyMissingDeals,exportedDeals,
          (openPositionsWritten?openPositionsExported:0),
          dealProfitTotal,dealCommissionTotal,dealSwapTotal,dealFeeTotal,dealNetCashflowTotal,
@@ -13871,7 +14088,8 @@ public:
       m_spreadSamples=0;
       m_point=SymbolInfoDouble(symbol,SYMBOL_POINT);
       m_tickSize=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE);
-      m_tickValue=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_VALUE);
+      m_tickValueProfit=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_VALUE_PROFIT);
+      m_tickValueLoss=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_VALUE_LOSS);
       m_initialBalance=AccountInfoDouble(ACCOUNT_BALANCE);
       m_currency=AccountInfoString(ACCOUNT_CURRENCY);
       m_server=AccountInfoString(ACCOUNT_SERVER);
@@ -15357,6 +15575,7 @@ input double InpMinConfidenceExecute=68.0;
 input double InpMinConfidenceSignal=58.0;
 input double InpFullRiskConfidence=85.0;
 input int InpMaxSpreadPoints=0;
+input int InpMaxQuoteAgeSeconds=30; // fail closed when the broker's last quote is older than this server-time age
 input group "Account Risk Profile"
 input ENUM_ACCOUNT_RISK_PROFILE InpAccountRiskProfile=ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT; // selected small-account profile; Gold uses the separate KES cash-risk cap
 
@@ -16078,7 +16297,7 @@ int OnInit()
       Print("Midas: direction-agnostic D1/H4/H1/M30/M15/M5/M1 scoring enabled; matched validation is required before production activation.");
      }
    g_scoring.Init(g_trendCtx,g_bosCtx,g_liqCtx,g_fvgCtx,g_chartCtx,&g_chartCtx.candles);g_scoring.ConfigureMTFStructureAlignment(InpRequireMtfStructureAlignment,InpMtfMaxBosAgeBars);g_scoring.ConfigureInducement(InpImpulseLookbackBars,InpImpulseATRMult,InpImpulseBodyRatio,InpEqualTolATR,InpMaxLegExtend,InpRequirePremiumDiscount,InpRequireDistributionPhase,InpPhaseRangeLookback,InpPhaseCompressionATRMult);g_scoring.ConfigureVolumeFibonacci(InpRequireVolumeConfirmation,InpRVOLThreshold,InpRequireFibonacciZone,InpFibZoneMinPct,InpFibZoneMaxPct);g_scoring.ConfigureValueArea(InpRequireValueAreaLocation,InpBlockValueAreaContradictions);g_scoring.ConfigureHtfOrderBlock(g_htfObCtx,InpRequireHtfOB,InpOBDistATRMax);g_scoring.ConfigureVolatilityRegime(InpBlockLowVolRegime,InpVolRegimeLookback,InpVolRegimeLowPct,InpVolRegimeHighPct);g_scoring.ConfigureSessionFilter(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_operatorSessionFilter.Configure(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_scoring.ConfigureSweepQuality(InpRequireMinSweepGrade,(ENUM_SWEEP_GRADE)InpMinSweepGrade,InpRequireFreshSetup,InpMaxBarsSinceBOS);g_scoring.ConfigureChaseFilter(InpRequireChaseFilter,InpMaxChaseDistATR);g_scoring.ConfigureFVGProximity(InpFVGMaxDistATR);g_scoring.ConfigureLearnedDiagnostics(InpDiagContradictionWeight,InpDiagEnvWeight,InpDiagExecWeight);g_scoring.ConfigureStrategyDiagnostics(InpMomentumBreakoutRecencyBars,InpBreakoutLiqOverlapBars,InpBreakoutExtensionLookbackBars,InpBreakoutExhaustionATRMult,InpMomentumLookbackBars);g_scoring.ConfigureMeanReversionDiagnostics(InpReversionMinStretchATR,InpReversionSRZoneATRTolerance,InpReversionWickRejectionRatio,InpReversionLiqRecencyBars,InpReversionTrendConflictRecencyBars,InpReversionTrendConflictMinStrength);g_scoring.ConfigureKeyLevelDiagnostics(InpKeyLevelLookbackBars,InpKeyLevelSearchATRMax,InpKeyLevelTouchToleranceATRMult,InpKeyLevelAbsorptionMinTouches,InpKeyLevelWickRejectionRatio,InpKeyLevelRoundStep);g_scoring.ConfigureStrategySelection(InpMinSelectionScore);
-   g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_decision.ConfigureFreshSweepAdditiveRouter(InpEnableFreshSweepAdditiveRouter,InpFreshSweepEnableSingleSwingFallback,InpFreshSweepMaxSignalAgeBars,InpFreshSweepDirectionalAdvantage,InpFreshSweepUseDualLaneRankB);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride);g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
+   g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_decision.ConfigureFreshSweepAdditiveRouter(InpEnableFreshSweepAdditiveRouter,InpFreshSweepEnableSingleSwingFallback,InpFreshSweepMaxSignalAgeBars,InpFreshSweepDirectionalAdvantage,InpFreshSweepUseDualLaneRankB);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride);g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber,3,300,InpMaxQuoteAgeSeconds,InpMaxSpreadPoints);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
    if(StringLen(InpConfigSyncEndpoint)>0){g_configSync.Init(_Symbol,InpConfigSyncEndpoint,InpBridgeApiKey,InpWeightSetVersion,InpWebRequestTimeoutMs);EventSetTimer(MathMax(60,InpConfigSyncPollMinutes*60));}g_tracker.ConfigurePublishing(&g_publisher,InpWeightSetVersion);g_portfolio.Init(g_activeRiskLimits.maxPortfolioRiskPercent,g_activeRiskLimits.maxPositionsPerSymbol,g_activeRiskLimits.maxPositionsPerGroup,InpMagicNumber,&g_risk);g_riskGuard.Init(_Symbol,g_activeRiskLimits.maxDailyLossPercent,g_activeRiskLimits.maxDrawdownPercent,g_activeRiskLimits.deriskStartPercent,g_activeRiskLimits.deriskFloor,InpEnableProgressiveDailyLossDeRisk);if(InpUseNewsFilter)g_newsFilter.Load(InpNewsFilterFile,InpNewsMinutesBefore,InpNewsMinutesAfter);g_scoring.ConfigureNewsAwareness(GetPointer(g_newsFilter),InpNewsWarnMinutesBefore,InpNewsWarnMinutesAfter,InpNewsWarnMultiplier);g_recovery.Init(&g_store,&g_orders,InpMagicNumber,_Symbol);int restored=g_recovery.Recover();if(restored>0)PrintFormat("MedisTouch EA: recovery restored %d live trade(s).",restored);TradeDecisionRecord prior[];int n=g_store.LoadAll(prior);long maxId=0;for(int i=0;i<n;i++)if(prior[i].decision_id>maxId)maxId=prior[i].decision_id;if(maxId>0)g_router.SeedNextId(maxId+1);
    if(InpEnableExecution && g_executionLedger.Ready())
      {
