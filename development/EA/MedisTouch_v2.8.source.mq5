@@ -1158,33 +1158,33 @@ bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,
       for(int i=0;i<total;i++)
         {
          string candidate=SymbolName(i,false);
-         if(StringLen(candidate)<6) continue;
-         string normalized=candidate;
-         StringToUpper(normalized);
-         int nameLength=StringLen(normalized);
-         for(int offset=0;offset<=nameLength-6;offset++)
-           {
-            string baseCurrency=StringSubstr(normalized,offset,3);
-            string quoteCurrency=StringSubstr(normalized,offset+3,3);
-            bool direct=(baseCurrency=="KES" && quoteCurrency==accountCurrency);
-            bool inverse=(baseCurrency==accountCurrency && quoteCurrency=="KES");
-            if((direction==0 && !direct) || (direction==1 && !inverse)) continue;
-            if(!SymbolSelect(candidate,true)) continue;
+         if(!SymbolSelect(candidate,true)) continue;
 
-            MqlTick tick;
-            if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
-            long age=(long)now-(long)tick.time;
-            if(age<0 || age>maxAge) continue;
+         // Broker metadata is authoritative. Symbol-name parsing is unsafe:
+         // arbitrary prefixes/suffixes can contain currency-like text, and
+         // non-FX instruments may have unrelated display names.
+         string baseCurrency="",profitCurrency="";
+         if(!SymbolInfoString(candidate,SYMBOL_CURRENCY_BASE,baseCurrency) ||
+            !SymbolInfoString(candidate,SYMBOL_CURRENCY_PROFIT,profitCurrency))
+            continue;
+         bool direct=(direction==0);
+         if(!IsKESConversionPairMetadata(baseCurrency,profitCurrency,
+                                         accountCurrency,direct))
+            continue;
 
-            double candidateRate=0.0;
-            if(!ResolveKESConversionFactorFromQuote(tick.bid,tick.ask,direct,
-                                                    tick.time,now,maxAge,candidateRate))
-               continue;
+         MqlTick tick;
+         if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
+         long age=(long)now-(long)tick.time;
+         if(age<0 || age>maxAge) continue;
 
-            rate=candidateRate;
-            quoteSymbol=candidate;
-            return true;
-           }
+         double candidateRate=0.0;
+         if(!ResolveKESConversionFactorFromQuote(tick.bid,tick.ask,direct,
+                                                 tick.time,now,maxAge,candidateRate))
+            continue;
+
+         rate=candidateRate;
+         quoteSymbol=candidate;
+         return true;
         }
      }
 
