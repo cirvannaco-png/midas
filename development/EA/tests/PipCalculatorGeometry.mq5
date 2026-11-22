@@ -74,4 +74,3 @@ void OnStart()
    MidasTestFinish("PipCalculatorGeometry-tests.txt",failures);
   }
 //+------------------------------------------------------------------+
-
