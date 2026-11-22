@@ -124,6 +124,11 @@ def _make_manifest(folder: Path):
             "history_missing_deals": 0,
             "deals_exported": 2,
             "open_positions_exported": 0,
+            "deal_profit_total": 4.0,
+            "deal_commission_total": -1.4,
+            "deal_swap_total": 0.0,
+            "deal_fee_total": 0.0,
+            "deal_net_cashflow_total": 2.6,
             "deals_file_written": True,
             "open_positions_file_written": True,
         }, indent=2), encoding="utf-8")
@@ -489,3 +494,14 @@ def test_matched_pair_rejects_csv_row_count_that_disagrees_with_exporter_metadat
     deals_path.write_text("\n".join(rows[:-1]) + "\n", encoding="utf-8")
     with pytest.raises(ComparisonError, match="CSV row count does not match native exporter metadata"):
         compare_manifest(manifest_path)
+
+
+def test_matched_pair_rejects_deal_cashflow_metadata_mismatch(tmp_path):
+    manifest_path = _make_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    metadata_path = tmp_path / manifest["variants"][0]["tester_metadata_path"]
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["deal_net_cashflow_total"] += 1.0
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ComparisonError, match="net cashflow does not reconcile"):
+        compare_manifest(tmp_path / "manifest.json")
