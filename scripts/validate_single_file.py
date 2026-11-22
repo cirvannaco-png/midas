@@ -61,7 +61,7 @@ def main():
         "KES FX quote freshness defaults to five minutes":r'input\s+int\s+InpKESConversionMaxQuoteAgeSeconds\s*=\s*300\s*;',
         "Gold cash cap applies independently of selected profile":r'bool\s+ResolveSmallAccountOrderRisk\(double\s+&effectiveRiskPercent,double\s+&goldCashCapMoney,string\s+&reasonOut\)\s*\{[\s\S]{0,250}!IsGoldRiskLimitedSymbol\(_Symbol\)\)',
         "Strategy Tester FX conversion requires explicit input":r'if\s*\(\(bool\)MQLInfoInteger\(MQL_TESTER\)\)[\s\S]{0,350}InpAccountCurrencyPerKES\s*<=\s*0\.0[\s\S]{0,180}return\s+false',
-        "live FX conversion scans direct and inverse KES pairs":r'for\s*\(int\s+direction\s*=\s*0\s*;\s*direction\s*<\s*2[\s\S]{0,1500}bool\s+direct\s*=\s*\(baseCurrency\s*==\s*"KES"[\s\S]{0,250}bool\s+inverse\s*=\s*\(baseCurrency\s*==\s*accountCurrency[\s\S]{0,500}SymbolInfoTick\(candidate,tick\)',
+        "KES conversion metadata helper normalizes broker currency properties":r"bool\s+IsKESConversionPairMetadata\([\s\S]{0,600}StringToUpper\(baseCurrency\)[\s\S]{0,100}StringToUpper\(profitCurrency\)[\s\S]{0,200}if\s*\(directKESBase\)[\s\S]{0,200}return\s+\(baseCurrency",
         "live conversion quotes must be fresh":r'age\s*=\s*\(long\)now\s*-\s*\(long\)tick\.time\s*;[\s\S]{0,100}age\s*>\s*maxAge',
         "live conversion calls the tested direct/inverse quote policy":r'ResolveKESConversionFactorFromQuote\(tick\.bid,tick\.ask,direct,[\s\S]{0,100}tick\.time,now,maxAge,candidateRate\)',
         "Gold risk percent is capped by KES-derived account money":r'ResolveRiskPercentWithCashCap\(equity,g_activeRiskLimits\.riskPercentPerTrade[\s\S]{0,160}goldCashCapMoney,true,effectiveRiskPercent',
@@ -132,6 +132,12 @@ def main():
     for name,pattern in policy_test_checks.items():
         if not re.search(pattern,policy_test):
             fail.append("Gold risk policy test missing: "+name)
+    if not all(token in raw for token in (
+        "SymbolInfoString(candidate,SYMBOL_CURRENCY_BASE,baseCurrency)",
+        "SymbolInfoString(candidate,SYMBOL_CURRENCY_PROFIT,profitCurrency)",
+        "IsKESConversionPairMetadata(baseCurrency,profitCurrency,",
+        "for(int direction=0;direction<2;direction++)")):
+        fail.append("broker currency metadata conversion discovery regression")
 
     compact_ea="".join(raw.split())
     mtf_final=compact_ea.find("g_topDownMTF.AdjustSetup(sellSetup);")
