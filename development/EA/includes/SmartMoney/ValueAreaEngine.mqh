@@ -157,25 +157,48 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
    if(copied <= 0)
       return false;
 
-   bool sawRealTradeVolume = false;
-   bool sawBrokerTradeVolume = false;
+   int realVolumeTickCount = 0;
+   int brokerVolumeTickCount = 0;
    double totalObservedVolume = 0.0;
+   long previousTickTimeMsc = 0;
 
    for(int i = 0; i < copied; i++)
      {
       MqlTick tick = ticks[i];
-      if((tick.flags & TICK_FLAG_LAST) == 0 || tick.last <= 0.0)
+
+      // CopyTicksRange should return chronological records. Reject malformed
+      // timestamps/order rather than constructing a profile from ambiguous data.
+      if(tick.time_msc <= 0 ||
+         (ulong)tick.time_msc < fromMsc ||
+         (ulong)tick.time_msc > toMsc ||
+         (previousTickTimeMsc > 0 && tick.time_msc < previousTickTimeMsc))
+         return false;
+      previousTickTimeMsc = tick.time_msc;
+
+      // COPY_TICKS_TRADE is deliberately the only tick source here. Bid/ask
+      // quote updates from COPY_TICKS_ALL are never converted into volume.
+      if((tick.flags & TICK_FLAG_LAST) == 0 ||
+         !MathIsValidNumber(tick.last) || tick.last <= 0.0)
          continue;
 
-      double volume = tick.volume_real;
-      if(volume > 0.0)
-         sawRealTradeVolume = true;
-      else
+      double volume = 0.0;
+      if(MathIsValidNumber(tick.volume_real) && tick.volume_real > 0.0)
+        {
+         volume = tick.volume_real;
+         realVolumeTickCount++;
+        }
+      else if(tick.volume > 0)
+        {
          volume = (double)tick.volume;
-
-      if(volume > 0.0)
-         sawBrokerTradeVolume = true;
+         brokerVolumeTickCount++;
+        }
       else
+         continue;
+
+      // Do not clamp out-of-range trades into the first/last profile bin.
+      // The profile range is defined by the selected candle window.
+      double rangeHigh = rangeLow + binSize * m_numBins;
+      if(tick.last < rangeLow || tick.last > rangeHigh)
          continue;
 
       int bin = BinForPrice(tick.last, rangeLow, binSize);
@@ -186,9 +209,11 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
    if(totalObservedVolume <= 0.0)
       return false;
 
-   if(sawRealTradeVolume)
+   // Only label the profile REAL when every contributing trade tick supplied
+   // real volume. Mixed feeds are conservatively classified as broker ticks.
+   if(realVolumeTickCount > 0 && brokerVolumeTickCount == 0)
       m_source = VA_SOURCE_REAL_TRADE_TICKS;
-   else if(sawBrokerTradeVolume)
+   else if(brokerVolumeTickCount > 0)
       m_source = VA_SOURCE_BROKER_TRADE_TICKS;
    else
       return false;
