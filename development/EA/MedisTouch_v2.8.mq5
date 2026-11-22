@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@0dcb5cef75fffdbb9706505b7af497e3748a8bdb
+// Staged EA source snapshot: cirvannaco-png/midas@55ba8cefd791bce41588d539d81f324d7837cf83
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -2869,6 +2869,53 @@ double CFibonacciEngine::Score(bool forBuy, double price, double zoneMinPct, dou
 
 // already inlined once under include guard: includes/Core/Config.mqh
 // already inlined once under include guard: includes/Core/CandleData.mqh
+// BEGIN INLINED MODULE: includes/Execution/TickHistoryQualityPolicy.mqh
+//+------------------------------------------------------------------+
+//| Execution/TickHistoryQualityPolicy.mqh                            |
+//| Deterministic chronology and coverage metrics for trade history.  |
+//+------------------------------------------------------------------+
+#ifndef MIDAS_TICKHISTORYQUALITYPOLICY_MQH
+#define MIDAS_TICKHISTORYQUALITYPOLICY_MQH
+
+class CTickHistoryQualityPolicy
+  {
+public:
+   // Same-millisecond records are counted, not deduplicated. A long gap is
+   // measured but never rejected by itself: illiquid symbols and closed
+   // sessions legitimately have sparse trade prints.
+   static bool Observe(const long timestampMsc,const long fromMsc,const long toMsc,
+                       const long previousTimestampMsc,long &firstTimestampMsc,
+                       long &lastTimestampMsc,long &maxGapMsc,
+                       int &sameMillisecondRecords)
+     {
+      if(timestampMsc<=0 || fromMsc<=0 || toMsc<fromMsc ||
+         timestampMsc<fromMsc || timestampMsc>toMsc ||
+         (previousTimestampMsc>0 && timestampMsc<previousTimestampMsc))
+         return false;
+
+      if(firstTimestampMsc==0)
+         firstTimestampMsc=timestampMsc;
+
+      if(previousTimestampMsc>0)
+        {
+         if(timestampMsc==previousTimestampMsc)
+            sameMillisecondRecords++;
+         else
+           {
+            long gapMsc=timestampMsc-previousTimestampMsc;
+            if(gapMsc>maxGapMsc)
+               maxGapMsc=gapMsc;
+           }
+        }
+
+      lastTimestampMsc=timestampMsc;
+      return true;
+     }
+  };
+
+#endif
+//+------------------------------------------------------------------+
+// END INLINED MODULE: includes/Execution/TickHistoryQualityPolicy.mqh
 
 // Cross-asset Value Area / Volume Profile engine.
 //
@@ -3050,31 +3097,18 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
 
       // CopyTicksRange should return chronological records. Reject malformed
       // timestamps/order rather than constructing a profile from ambiguous data.
-      if(tick.time_msc <= 0 ||
-         (ulong)tick.time_msc < fromMsc ||
-         (ulong)tick.time_msc > toMsc ||
-         (previousTickTimeMsc > 0 && tick.time_msc < previousTickTimeMsc))
+      if(!CTickHistoryQualityPolicy::Observe(tick.time_msc,(long)fromMsc,
+                                               (long)toMsc,previousTickTimeMsc,
+                                               firstTickTimeMsc,lastTickTimeMsc,
+                                               maxInterTickGapMsc,
+                                               sameMillisecondRecords))
         {
          PrintFormat("ValueArea: malformed or out-of-order trade tick history for %s at index=%d time_msc=%I64d previous_msc=%I64d expected_range=%I64d..%I64d; using bar-volume fallback",
                      m_candles.Symbol(),i,tick.time_msc,previousTickTimeMsc,
                      (long)fromMsc,(long)toMsc);
          return false;
         }
-      if(firstTickTimeMsc == 0)
-         firstTickTimeMsc = tick.time_msc;
-      if(previousTickTimeMsc > 0)
-        {
-         if(tick.time_msc == previousTickTimeMsc)
-            sameMillisecondRecords++;
-         else
-           {
-            long gapMsc = tick.time_msc - previousTickTimeMsc;
-            if(gapMsc > maxInterTickGapMsc)
-               maxInterTickGapMsc = gapMsc;
-           }
-        }
       previousTickTimeMsc = tick.time_msc;
-      lastTickTimeMsc = tick.time_msc;
 
       // COPY_TICKS_TRADE is deliberately the only tick source here. Bid/ask
       // quote updates from COPY_TICKS_ALL are never converted into volume.
