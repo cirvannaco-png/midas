@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@a41be83dec5ae44de54a2576d741630d25b2ec09
+// Staged EA source snapshot: cirvannaco-png/midas@0dcb5cef75fffdbb9706505b7af497e3748a8bdb
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -3054,7 +3054,12 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
          (ulong)tick.time_msc < fromMsc ||
          (ulong)tick.time_msc > toMsc ||
          (previousTickTimeMsc > 0 && tick.time_msc < previousTickTimeMsc))
+        {
+         PrintFormat("ValueArea: malformed or out-of-order trade tick history for %s at index=%d time_msc=%I64d previous_msc=%I64d expected_range=%I64d..%I64d; using bar-volume fallback",
+                     m_candles.Symbol(),i,tick.time_msc,previousTickTimeMsc,
+                     (long)fromMsc,(long)toMsc);
          return false;
+        }
       if(firstTickTimeMsc == 0)
          firstTickTimeMsc = tick.time_msc;
       if(previousTickTimeMsc > 0)
