@@ -19,6 +19,7 @@ from pathlib import Path
 
 ALIASES = {
     "position_id": ("position_id", "position", "position_identifier", "identifier", "deal_position_id", "positionid"),
+    "deal_id": ("deal_id", "deal", "ticket", "deal_ticket"),
     "time": ("time", "deal_time", "close_time", "timestamp", "date", "dealtime"),
     "entry": ("entry", "deal_entry", "entry_type", "dealentry"),
     "volume": ("volume", "lots", "deal_volume", "size"),
@@ -106,6 +107,7 @@ def resolve_columns(fieldnames, required):
 
 def read_deals(path):
     deals = []
+    seen_deal_ids = set()
     with open(path, newline="", encoding="utf-8-sig") as stream:
         reader = csv.DictReader(stream)
         cols = resolve_columns(reader.fieldnames, ("position_id", "time", "entry", "volume", "profit"))
@@ -119,7 +121,13 @@ def read_deals(path):
             volume = number(row.get(cols["volume"]), "volume", row_num)
             if volume < 0:
                 raise LedgerError(f"row {row_num}: negative volume")
+            deal_id = str(row.get(cols["deal_id"], "")).strip() if "deal_id" in cols else ""
+            if deal_id and deal_id in seen_deal_ids:
+                raise LedgerError(f"row {row_num}: duplicate deal identifier {deal_id!r}")
+            if deal_id:
+                seen_deal_ids.add(deal_id)
             item = {
+                "deal_id": deal_id,
                 "position_id": pid, "time": parse_time(row.get(cols["time"], ""), row_num),
                 "entry": entry, "volume": volume,
                 "profit": number(row.get(cols["profit"]), "profit", row_num),
@@ -191,8 +199,23 @@ def reconstruct_positions(deals, open_ids=None):
         if not entries or not exits or opened <= 0 or closed + tolerance < opened:
             ignored["incomplete_volume"] += 1
             continue
-        if closed > opened + tolerance:
-            ignored["inout_ambiguous"] += 1
+        # Validate the position's volume path, not only its final totals. A CSV
+        # with an exit before any opening fill or an over-close followed by a
+        # later opening could otherwise pass a simple sum(open) == sum(close).
+        live_volume = 0.0
+        invalid_path = False
+        for row in rows:
+            if row["entry"] in IN:
+                live_volume += row["volume"]
+            elif row["entry"] in OUT | OUT_BY:
+                if row["volume"] > live_volume + tolerance:
+                    invalid_path = True
+                    break
+                live_volume -= row["volume"]
+                if live_volume < 0.0 and abs(live_volume) <= tolerance:
+                    live_volume = 0.0
+        if invalid_path or abs(live_volume) > tolerance:
+            ignored["incomplete_volume"] += 1
             continue
         # Do not calculate a supposedly net outcome when any deal-level cost
         # component is absent. A blank commission/swap/fee is not evidence of zero.
