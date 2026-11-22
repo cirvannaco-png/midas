@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-currency-metadata-and-tick-diagnostics",
-    "commit": "a231959c12e5d362aba9a0e1037c043153daca2b",
+    "commit": "a41be83dec5ae44de54a2576d741630d25b2ec09",
     "root": "development/EA",
     "file_count": 102,
     "files": [
@@ -811,7 +811,7 @@
       },
       {
         "path": "development/EA/includes/SmartMoney/ValueAreaEngine.mqh",
-        "git_blob_sha": "7e840453c4b1c52c23c5f11a448eaea0eae324a5",
+        "git_blob_sha": "eb37237e522291b7d9ed2df8ad4ed76a6aabe5b1",
         "size_bytes": 20380
       },
       {
