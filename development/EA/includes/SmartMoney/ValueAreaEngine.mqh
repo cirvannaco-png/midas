@@ -246,15 +246,6 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
       totalObservedVolume += volume;
      }
 
-   if(totalObservedVolume <= 0.0)
-     {
-      PrintFormat("ValueArea: %s returned %d trade ticks but no usable in-range volume for %s..%s; using bar-volume fallback",
-                  m_candles.Symbol(),copied,
-                  TimeToString(oldest,TIME_DATE|TIME_MINUTES),
-                  TimeToString(newest,TIME_DATE|TIME_MINUTES));
-      return false;
-     }
-
    // Coverage lags, same-millisecond records and inter-tick gaps are reported
    // as diagnostics only. Multiple genuine prints can share a millisecond,
    // while illiquid instruments and closed sessions legitimately have gaps.
@@ -267,6 +258,15 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
                TimeToString((datetime)(firstTickTimeMsc/1000),TIME_DATE|TIME_SECONDS),
                TimeToString((datetime)(lastTickTimeMsc/1000),TIME_DATE|TIME_SECONDS),
                coverageStartLagSeconds,coverageEndLagSeconds);
+
+   if(totalObservedVolume <= 0.0)
+     {
+      PrintFormat("ValueArea: %s returned %d trade ticks but no usable in-range volume for %s..%s; using bar-volume fallback",
+                  m_candles.Symbol(),copied,
+                  TimeToString(oldest,TIME_DATE|TIME_MINUTES),
+                  TimeToString(newest,TIME_DATE|TIME_MINUTES));
+      return false;
+     }
 
    // Only label the profile REAL when every contributing trade tick supplied
    // real volume. Mixed feeds are conservatively classified as broker ticks.
