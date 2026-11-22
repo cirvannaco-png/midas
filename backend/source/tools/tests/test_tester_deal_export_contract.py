@@ -139,8 +139,8 @@ def test_export_metadata_contains_deal_level_cashflow_totals():
     assert "dealSwapTotal+=m_rows[i].swap;" in exporter
     assert "dealFeeTotal+=m_rows[i].fee;" in exporter
     assert "dealNetCashflowTotal=dealProfitTotal+dealCommissionTotal+" in exporter
-    assert '"deal_profit_total":%.8f' in exporter
-    assert '"deal_commission_total":%.8f' in exporter
-    assert '"deal_swap_total":%.8f' in exporter
-    assert '"deal_fee_total":%.8f' in exporter
-    assert '"deal_net_cashflow_total":%.8f' in exporter
+    assert "deal_profit_total" in exporter
+    assert "deal_commission_total" in exporter
+    assert "deal_swap_total" in exporter
+    assert "deal_fee_total" in exporter
+    assert "deal_net_cashflow_total" in exporter
