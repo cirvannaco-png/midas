@@ -485,9 +485,9 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-currency-metadata-and-tick-diagnostics",
-    "commit": "0dcb5cef75fffdbb9706505b7af497e3748a8bdb",
+    "commit": "55ba8cefd791bce41588d539d81f324d7837cf83",
     "root": "development/EA",
-    "file_count": 102,
+    "file_count": 104,
     "files": [
       {
         "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
@@ -655,6 +655,11 @@
         "size_bytes": 24394
       },
       {
+        "path": "development/EA/includes/Execution/TickHistoryQualityPolicy.mqh",
+        "git_blob_sha": "c11a3bf5d7561f3dea3d8893f6aab2c158925f1f",
+        "size_bytes": 1641
+      },
+      {
         "path": "development/EA/includes/Execution/TradeStateMachine.mqh",
         "git_blob_sha": "4f89105d1c9dd4e1879bb3010e0792f4b4293354",
         "size_bytes": 10473
@@ -811,8 +816,8 @@
       },
       {
         "path": "development/EA/includes/SmartMoney/ValueAreaEngine.mqh",
-        "git_blob_sha": "9fa6ab5f7e5c4964dbe77905b0fd1a353b30cfe1",
-        "size_bytes": 20714
+        "git_blob_sha": "4267f75e00ae56171240fbfbb8355791e1783e97",
+        "size_bytes": 20504
       },
       {
         "path": "development/EA/includes/SmartMoney/VolumeEngine.mqh",
@@ -998,6 +1003,11 @@
         "path": "development/EA/tests/TestHarness.mqh",
         "git_blob_sha": "b3d1768a9b6da99b9175832ea0425f5ebd564c39",
         "size_bytes": 877
+      },
+      {
+        "path": "development/EA/tests/TickHistoryQualityPolicy.mq5",
+        "git_blob_sha": "a0888c92fe91241cc2edf7370a157b2ee1f8de74",
+        "size_bytes": 2465
       }
     ]
   }
