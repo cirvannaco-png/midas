@@ -827,7 +827,7 @@ double CScoringEngine::CalculateConfidence(bool forBuy)
 //+------------------------------------------------------------------+
 double CScoringEngine::PipSize()
   {
-   if(m_priceRef == NULL) return 0.0001;
+   if(m_priceRef == NULL) return 0.0;
    // v2.9: delegates to CPipCalculator so this is the same definition
    // everywhere (Telegram payload, dashboard) instead of a locally
    // re-derived one. Behavior is unchanged — same formula as before.
@@ -927,7 +927,11 @@ void CScoringEngine::EvaluateReasons(bool forBuy, SetupReasons &out)
    if(m_srCtx == NULL || m_priceRef == NULL || m_priceRef.Total() == 0) return;
 
    double pip = PipSize();
-   if(pip <= 0) pip = 0.0001;
+   if(pip <= 0.0)
+     {
+      out.risk_warning = "INVALID_SYMBOL_PRICE_GEOMETRY";
+      return;
+     }
    double bestDist = -1.0;
    ENUM_SR_TYPE bestType = SR_MINOR_RESISTANCE;
    int bestTouches = 0;
