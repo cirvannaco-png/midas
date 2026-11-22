@@ -422,8 +422,8 @@ bool CBrokerAdapter::ModifySLTP(ulong ticket,double sl,double tp)
    double tickSize=SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE);
    double point=SymbolInfoDouble(symbol,SYMBOL_POINT);
    int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
-   if(tickSize<=0.0) tickSize=point;
-   if(tickSize<=0.0 || digits<0 || digits>8)
+   if(!MathIsValidNumber(tickSize) || tickSize<=0.0 ||
+      !MathIsValidNumber(point) || point<=0.0 || digits<0 || digits>8)
      {
       PrintFormat("MedisTouch BrokerAdapter: ModifySLTP refused — missing/invalid tick geometry for %s.",symbol);
       return false;
