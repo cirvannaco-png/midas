@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-agnostic-tick-adaptation",
-    "commit": "e7ec958971ae633266a8035924a2e5f7219f481a",
+    "commit": "4551e30d4b1fb2c3b489fc20ef66476325483f89",
     "root": "development/EA",
     "file_count": 100,
     "files": [
@@ -646,8 +646,8 @@
       },
       {
         "path": "development/EA/includes/Execution/TesterDealExport.mqh",
-        "git_blob_sha": "d8dfb7080d75f2f258a224a582b6e918cd09a4ed",
-        "size_bytes": 24161
+        "git_blob_sha": "7e6ac588987027e640723aa98fef098625e6b576",
+        "size_bytes": 24394
       },
       {
         "path": "development/EA/includes/Execution/TradeStateMachine.mqh",
@@ -881,8 +881,8 @@
       },
       {
         "path": "development/EA/includes/Trading/OutcomeTracker.mqh",
-        "git_blob_sha": "311663dfa557a88e0850251f3f0217a4a8064ad6",
-        "size_bytes": 26311
+        "git_blob_sha": "eb9ed8f5de227e579978900d75aca38abeb3f8cf",
+        "size_bytes": 25896
       },
       {
         "path": "development/EA/includes/Trading/OutcomeTrackerLive.mqh",
