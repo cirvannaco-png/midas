@@ -387,6 +387,8 @@ def _validate_tester_metadata(
         "export_status", "history_expected_deals", "history_recorded_deals",
         "history_missing_deals", "deals_exported", "open_positions_exported",
         "deals_file_written", "open_positions_file_written",
+        "deal_profit_total", "deal_commission_total", "deal_swap_total", "deal_fee_total",
+        "deal_net_cashflow_total",
     }
     if not isinstance(metadata, dict) or set(metadata) != required:
         raise ComparisonError(
@@ -429,6 +431,8 @@ def _validate_tester_metadata(
     numeric = (
         "initial_balance", "point", "tick_size", "tick_value",
         "cash_per_point_per_lot", "spread_points_mean", "spread_points_max",
+        "deal_profit_total", "deal_commission_total", "deal_swap_total", "deal_fee_total",
+        "deal_net_cashflow_total",
     )
     for key in numeric:
         if isinstance(metadata[key], bool) or not isinstance(metadata[key], (int, float)):
@@ -505,6 +509,11 @@ def _validate_tester_metadata(
         "open_positions_exported": metadata["open_positions_exported"],
         "deals_file_written": metadata["deals_file_written"],
         "open_positions_file_written": metadata["open_positions_file_written"],
+        "deal_profit_total": float(metadata["deal_profit_total"]),
+        "deal_commission_total": float(metadata["deal_commission_total"]),
+        "deal_swap_total": float(metadata["deal_swap_total"]),
+        "deal_fee_total": float(metadata["deal_fee_total"]),
+        "deal_net_cashflow_total": float(metadata["deal_net_cashflow_total"]),
     }
 
 
@@ -744,6 +753,21 @@ def compare_manifest(manifest_path: str | Path) -> tuple[dict[str, Any], dict[st
             open_ids = read_open_ids(open_path)
             if len(deals) != metadata["deals_exported"]:
                 raise ComparisonError(f"{name} deals CSV row count does not match native exporter metadata")
+            cashflow_components = {
+                "profit": sum(row["profit"] for row in deals),
+                "commission": sum(row["commission"] for row in deals),
+                "swap": sum(row["swap"] for row in deals),
+                "fee": sum(row["fee"] for row in deals),
+            }
+            for component, total_key in (
+                ("profit", "deal_profit_total"), ("commission", "deal_commission_total"),
+                ("swap", "deal_swap_total"), ("fee", "deal_fee_total"),
+            ):
+                if not math.isclose(cashflow_components[component], metadata[total_key], rel_tol=0.0, abs_tol=0.01):
+                    raise ComparisonError(f"{name} deal CSV {component} total does not reconcile to native metadata")
+            csv_net_cashflow = sum(cashflow_components.values())
+            if not math.isclose(csv_net_cashflow, metadata["deal_net_cashflow_total"], rel_tol=0.0, abs_tol=0.01):
+                raise ComparisonError(f"{name} deal CSV net cashflow does not reconcile to native metadata")
             if len(open_ids) != metadata["open_positions_exported"]:
                 raise ComparisonError(f"{name} open-position CSV row count does not match native exporter metadata")
             positions, ignored = reconstruct_positions(deals, open_ids)
