@@ -126,3 +126,21 @@ def test_export_completion_requires_full_history_reconciliation_and_all_artifact
     assert "open_positions_file_written" in exporter
     assert "if(exportComplete && metadataWritten)" in exporter
     assert "MIDAS_TEST_EXPORT_INCOMPLETE" in exporter
+
+
+def test_export_metadata_contains_deal_level_cashflow_totals():
+    exporter = read_modular("includes/Execution/TesterDealExport.mqh")
+    assert "double dealProfitTotal=0.0;" in exporter
+    assert "double dealCommissionTotal=0.0;" in exporter
+    assert "double dealSwapTotal=0.0;" in exporter
+    assert "double dealFeeTotal=0.0;" in exporter
+    assert "dealProfitTotal+=m_rows[i].profit;" in exporter
+    assert "dealCommissionTotal+=m_rows[i].commission;" in exporter
+    assert "dealSwapTotal+=m_rows[i].swap;" in exporter
+    assert "dealFeeTotal+=m_rows[i].fee;" in exporter
+    assert "dealNetCashflowTotal=dealProfitTotal+dealCommissionTotal+" in exporter
+    assert '"deal_profit_total":%.8f' in exporter
+    assert '"deal_commission_total":%.8f' in exporter
+    assert '"deal_swap_total":%.8f' in exporter
+    assert '"deal_fee_total":%.8f' in exporter
+    assert '"deal_net_cashflow_total":%.8f' in exporter
