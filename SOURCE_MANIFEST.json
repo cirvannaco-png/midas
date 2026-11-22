@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "build/rankb-port-20261120",
-    "commit": "b50245f687b783787cdefe4ed26c7d005d38fc96",
+    "commit": "d88acca0f3b77d1db56d3cc520c860560b2d328a",
     "git_tree_sha": "ace812e3fed18fd56c7460e5a0edd19b16c8a34b",
     "root": "development/EA",
     "file_count": 99,
@@ -637,8 +637,8 @@
       },
       {
         "path": "development/EA/includes/Execution/TesterDealExport.mqh",
-        "git_blob_sha": "33626cfb1ebe7ce84bc9f1e55317fd5d33bb5928",
-        "size_bytes": 23389
+        "git_blob_sha": "d8dfb7080d75f2f258a224a582b6e918cd09a4ed",
+        "size_bytes": 24161
       },
       {
         "path": "development/EA/includes/Execution/TradeStateMachine.mqh",

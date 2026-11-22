@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@b50245f687b783787cdefe4ed26c7d005d38fc96
+// Staged EA source snapshot: cirvannaco-png/midas@d88acca0f3b77d1db56d3cc520c860560b2d328a
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -13742,6 +13742,19 @@ private:
       double averageSpread=(m_spreadSamples>0 ? m_spreadSum/(double)m_spreadSamples : 0.0);
       int recordedDeals=ArraySize(m_rows);
       int exportedDeals=(dealsWritten?recordedDeals:0);
+      double dealProfitTotal=0.0;
+      double dealCommissionTotal=0.0;
+      double dealSwapTotal=0.0;
+      double dealFeeTotal=0.0;
+      for(int i=0;i<exportedDeals;i++)
+        {
+         dealProfitTotal+=m_rows[i].profit;
+         dealCommissionTotal+=m_rows[i].commission;
+         dealSwapTotal+=m_rows[i].swap;
+         dealFeeTotal+=m_rows[i].fee;
+        }
+      double dealNetCashflowTotal=dealProfitTotal+dealCommissionTotal+
+                                   dealSwapTotal+dealFeeTotal;
       string status=(complete?"complete":"incomplete");
       string json=StringFormat(
          "{\"run_id\":\"%s\",\"symbol\":\"%s\",\"server\":\"%s\","
@@ -13755,12 +13768,16 @@ private:
          "\"export_status\":\"%s\",\"history_expected_deals\":%d,"
          "\"history_recorded_deals\":%d,\"history_missing_deals\":%d,"
          "\"deals_exported\":%d,\"open_positions_exported\":%d,"
+         "\"deal_profit_total\":%.8f,\"deal_commission_total\":%.8f,"
+         "\"deal_swap_total\":%.8f,\"deal_fee_total\":%.8f,"
+         "\"deal_net_cashflow_total\":%.8f,"
          "\"deals_file_written\":%s,\"open_positions_file_written\":%s}",
          JsonEscape(m_runId),JsonEscape(m_symbol),JsonEscape(m_server),JsonEscape(m_currency),
          m_leverage,m_initialBalance,m_terminalBuild,m_point,m_tickSize,m_tickValue,cashPerPoint,
          averageSpread,m_spreadMax,m_spreadSamples,m_fillMode,m_serverUtcOffsetMinutes,
          status,historyExpectedDeals,recordedDeals,historyMissingDeals,exportedDeals,
          (openPositionsWritten?openPositionsExported:0),
+         dealProfitTotal,dealCommissionTotal,dealSwapTotal,dealFeeTotal,dealNetCashflowTotal,
          (dealsWritten?"true":"false"),(openPositionsWritten?"true":"false"));
 
       ResetLastError();
