@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-agnostic-tick-adaptation",
-    "commit": "9ed70d8bde66f0d0c67fc97d9c0461a5065990a5",
-    "git_tree_sha": "6d0a00279e7a1473d5f6e912c2242a83a0601717",
+    "commit": "9e322182f557adceeb10086fdd6ea00d31aa1c9d",
+    "git_tree_sha": "46b744141e89dba5f6d7280aa8b8010d5d73f541",
     "root": "development/EA",
     "file_count": 100,
     "files": [
@@ -807,8 +807,8 @@
       },
       {
         "path": "development/EA/includes/SmartMoney/ValueAreaEngine.mqh",
-        "git_blob_sha": "c6d538ec470f6170043d122e6432df4bef389e01",
-        "size_bytes": 16342
+        "git_blob_sha": "3f2a99a2e36ab3ee7cede57ff57b62c657436d55",
+        "size_bytes": 17634
       },
       {
         "path": "development/EA/includes/SmartMoney/VolumeEngine.mqh",
