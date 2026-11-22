@@ -49,6 +49,13 @@ void OnStart()
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.00001,0.0,1.0)==0.0,"missing directional tick value rejected");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.00001,1.0,0.0)==0.0,"zero lot size rejected");
 
+   // Live R-value denominator must use loss-side tick value, not generic/profit value.
+   ExpectNear(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,0.80),160.0,1e-10,"asymmetric loss-side monetary risk");
+   ExpectNear(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,1.20),240.0,1e-10,"profit-side value would produce a different denominator");
+   Expect(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,0.0)==0.0,"missing loss tick value fails closed");
+   Expect(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.0,0.80)==0.0,"missing tick size fails closed for R-value");
+   Expect(CPipCalculator::MonetaryLossRiskFromSpec(DBL_MAX,0.00001,DBL_MAX)==0.0,"overflowing monetary risk fails closed");
+
    // Non-decimal tick grids: indices/CFDs and instruments with coarse ticks.
    double normalized=0.0;
    Expect(NormalizePriceToTickGrid(100.13,0.25,2,true,normalized),"index tick-grid round-up succeeds");
@@ -67,3 +74,4 @@ void OnStart()
    MidasTestFinish("PipCalculatorGeometry-tests.txt",failures);
   }
 //+------------------------------------------------------------------+
+
