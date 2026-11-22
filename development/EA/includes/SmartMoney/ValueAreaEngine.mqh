@@ -191,7 +191,12 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
          (ulong)tick.time_msc < fromMsc ||
          (ulong)tick.time_msc > toMsc ||
          (previousTickTimeMsc > 0 && tick.time_msc < previousTickTimeMsc))
+        {
+         PrintFormat("ValueArea: malformed or out-of-order trade tick history for %s at index=%d time_msc=%I64d previous_msc=%I64d expected_range=%I64d..%I64d; using bar-volume fallback",
+                     m_candles.Symbol(),i,tick.time_msc,previousTickTimeMsc,
+                     (long)fromMsc,(long)toMsc);
          return false;
+        }
       if(firstTickTimeMsc == 0)
          firstTickTimeMsc = tick.time_msc;
       if(previousTickTimeMsc > 0)
