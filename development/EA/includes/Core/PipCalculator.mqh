@@ -75,6 +75,21 @@ public:
       return MathIsValidNumber(value) ? value : 0.0;
      }
 
+   // Convert aggregate price-distance x lots into account-currency stop risk.
+   // Stop risk must use the broker's loss-side tick value, never the generic or
+   // profit-side value: some instruments expose asymmetric directional values.
+   static double     MonetaryLossRiskFromSpec(const double riskLotsDistance,
+                                               const double tickSize,
+                                               const double lossTickValue)
+     {
+      if(!MathIsValidNumber(riskLotsDistance) || riskLotsDistance<=0.0 ||
+         !MathIsValidNumber(tickSize) || tickSize<=0.0 ||
+         !MathIsValidNumber(lossTickValue) || lossTickValue<=0.0)
+         return 0.0;
+      double risk=(riskLotsDistance/tickSize)*lossTickValue;
+      return MathIsValidNumber(risk) && risk>0.0 ? risk : 0.0;
+     }
+
    static double     PipValue(string symbol,double lots,bool forProfit=true)
      {
       double pip=PipSize(symbol);
@@ -100,3 +115,4 @@ public:
   };
 #endif
 //+------------------------------------------------------------------+
+
