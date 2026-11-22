@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@4551e30d4b1fb2c3b489fc20ef66476325483f89
+// Staged EA source snapshot: cirvannaco-png/midas@84d263dcf2b70a5b8a2ccf9ace7247e6d5c3d1f3
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -11127,6 +11127,47 @@ bool NormalizePriceToTickGrid(const double rawPrice,
 #endif
 //+------------------------------------------------------------------+
 // END INLINED MODULE: includes/Execution/PriceGridNormalizer.mqh
+// BEGIN INLINED MODULE: includes/Execution/BrokerQuoteValidator.mqh
+//+------------------------------------------------------------------+
+//| Execution/BrokerQuoteValidator.mqh                               |
+//| Deterministic quote integrity gates shared by all entry routes.   |
+//+------------------------------------------------------------------+
+#ifndef MIDAS_BROKERQUOTEVALIDATOR_MQH
+#define MIDAS_BROKERQUOTEVALIDATOR_MQH
+
+class CBrokerQuoteValidator
+  {
+public:
+   static bool IsTimestampFresh(const datetime serverNow,const datetime tickTime,
+                                const int maxAgeSeconds)
+     {
+      if(serverNow<=0 || tickTime<=0 || maxAgeSeconds<=0) return false;
+      long age=(long)serverNow-(long)tickTime;
+      return age>=0 && age<=(long)maxAgeSeconds;
+     }
+
+   static bool Validate(const double bid,const double ask,const double point,
+                        const datetime serverNow,const datetime tickTime,
+                        const int maxAgeSeconds,const int maxSpreadPoints,
+                        const bool isBuy,double &referencePrice,double &spreadPoints)
+     {
+      referencePrice=0.0;
+      spreadPoints=0.0;
+      if(!MathIsValidNumber(bid) || !MathIsValidNumber(ask) ||
+         !MathIsValidNumber(point) || bid<=0.0 || ask<=0.0 ||
+         point<=0.0 || ask<bid || maxSpreadPoints<0 ||
+         !IsTimestampFresh(serverNow,tickTime,maxAgeSeconds)) return false;
+      double spread=(ask-bid)/point;
+      if(!MathIsValidNumber(spread) || spread<0.0 ||
+         (maxSpreadPoints>0 && spread>(double)maxSpreadPoints)) return false;
+      referencePrice=isBuy ? ask : bid;
+      spreadPoints=spread;
+      return true;
+     }
+  };
+#endif
+//+------------------------------------------------------------------+
+// END INLINED MODULE: includes/Execution/BrokerQuoteValidator.mqh
 
 class CBrokerAdapter
   {
@@ -11141,6 +11182,8 @@ private:
    ulong             m_lastBrokerPositionId;
    bool              m_lastRequestAttempted;
    uint              m_lastRetcode;
+   int               m_maxQuoteAgeSeconds;
+   int               m_maxSpreadPoints;
 
    void              CaptureBrokerIdentifiers(string symbol);
    bool              LastRequestOk(string action);
@@ -11151,10 +11194,12 @@ private:
    bool              IsConnected();
    bool              ConfigureFillingForSymbol(string symbol);
    bool              IsMarketOpenForTrading(string symbol, bool requireFullOpen, bool isBuy=true);
+   bool              ValidateMarketQuote(string symbol,bool isBuy,double &referencePrice);
    bool              ValidateStopDistance(string symbol, double refPrice, double sl, double tp, bool isBuy, string action);
 
 public:
-   void              Init(ulong magic, int maxRetries = 3, int retryDelayMs = 300);
+   void              Init(ulong magic, int maxRetries = 3, int retryDelayMs = 300,
+                           int maxQuoteAgeSeconds = 30,int maxSpreadPoints = 0);
    double            LastLatencyMs() { return (double)m_lastLatencyUs / 1000.0; }
    ulong             LastBrokerOrderId() const { return m_lastBrokerOrderId; }
    ulong             LastBrokerDealId() const { return m_lastBrokerDealId; }
@@ -11187,13 +11232,16 @@ public:
    ulong             PositionTicketForIdentifier(string symbol, ulong positionIdentifier);
   };
 //+------------------------------------------------------------------+
-void CBrokerAdapter::Init(ulong magic, int maxRetries, int retryDelayMs)
+void CBrokerAdapter::Init(ulong magic,int maxRetries,int retryDelayMs,
+                           int maxQuoteAgeSeconds,int maxSpreadPoints)
   {
    m_magic = magic;
    m_trade.SetExpertMagicNumber(magic);
    m_trade.SetDeviationInPoints(20);
    m_maxRetries = MathMax(1,maxRetries);
    m_retryDelayMs = MathMax(0,retryDelayMs);
+   m_maxQuoteAgeSeconds=MathMax(1,maxQuoteAgeSeconds);
+   m_maxSpreadPoints=MathMax(0,maxSpreadPoints);
    m_lastLatencyUs = 0;
    m_lastBrokerOrderId = 0;
    m_lastBrokerDealId = 0;
@@ -11251,6 +11299,31 @@ bool CBrokerAdapter::IsConnected()
    if(TerminalInfoInteger(TERMINAL_CONNECTED)) return true;
    Print("MedisTouch BrokerAdapter: terminal not connected to the trade server — refusing to submit.");
    return false;
+  }
+//+------------------------------------------------------------------+
+bool CBrokerAdapter::ValidateMarketQuote(string symbol,bool isBuy,double &referencePrice)
+  {
+   referencePrice=0.0;
+   double spreadPoints=0.0;
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol,tick))
+     {
+      PrintFormat("Midas BrokerAdapter: %s has no current quote; refusing entry.",symbol);
+      return false;
+     }
+   double point=SymbolInfoDouble(symbol,SYMBOL_POINT);
+   datetime serverNow=TimeTradeServer();
+   if(!CBrokerQuoteValidator::Validate(tick.bid,tick.ask,point,serverNow,tick.time,
+                                      m_maxQuoteAgeSeconds,m_maxSpreadPoints,
+                                      isBuy,referencePrice,spreadPoints))
+     {
+      PrintFormat("Midas BrokerAdapter: %s quote failed integrity gate (bid=%.10f ask=%.10f tick_time=%s server_time=%s max_age=%d spread_points=%.2f max_spread=%d).",
+                  symbol,tick.bid,tick.ask,TimeToString(tick.time,TIME_DATE|TIME_SECONDS),
+                  TimeToString(serverNow,TIME_DATE|TIME_SECONDS),m_maxQuoteAgeSeconds,
+                  spreadPoints,m_maxSpreadPoints);
+      return false;
+     }
+   return true;
   }
 //+------------------------------------------------------------------+
 bool CBrokerAdapter::ConfigureFillingForSymbol(string symbol)
@@ -11424,7 +11497,8 @@ bool CBrokerAdapter::MarketBuy(string symbol,double volume,double sl,double tp,u
    ResetLastRequestStatus();
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,true)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double refPrice=SymbolInfoDouble(symbol,SYMBOL_ASK);
+   double refPrice=0.0;
+   if(!ValidateMarketQuote(symbol,true,refPrice)) { m_lastLatencyUs=0; return false; }
    if(!ValidateStopDistance(symbol,refPrice,sl,tp,true,"MarketBuy")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
@@ -11454,7 +11528,8 @@ bool CBrokerAdapter::MarketSell(string symbol,double volume,double sl,double tp,
    ResetLastRequestStatus();
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,false)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double refPrice=SymbolInfoDouble(symbol,SYMBOL_BID);
+   double refPrice=0.0;
+   if(!ValidateMarketQuote(symbol,false,refPrice)) { m_lastLatencyUs=0; return false; }
    if(!ValidateStopDistance(symbol,refPrice,sl,tp,false,"MarketSell")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
@@ -11486,6 +11561,8 @@ bool CBrokerAdapter::PlaceLimit(string symbol,ENUM_ORDER_TYPE type,double volume
    bool isBuy=(type==ORDER_TYPE_BUY_LIMIT);
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,isBuy)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
+   double quoteReference=0.0;
+   if(!ValidateMarketQuote(symbol,isBuy,quoteReference) || quoteReference<=0.0) { m_lastLatencyUs=0; return false; }
    if(!ValidateStopDistance(symbol,price,sl,tp,isBuy,"PlaceLimit")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
@@ -15497,6 +15574,7 @@ input double InpMinConfidenceExecute=68.0;
 input double InpMinConfidenceSignal=58.0;
 input double InpFullRiskConfidence=85.0;
 input int InpMaxSpreadPoints=0;
+input int InpMaxQuoteAgeSeconds=30; // fail closed when the broker's last quote is older than this server-time age
 input group "Account Risk Profile"
 input ENUM_ACCOUNT_RISK_PROFILE InpAccountRiskProfile=ACCOUNT_RISK_PROFILE_SMALL_ACCOUNT; // selected small-account profile; Gold uses the separate KES cash-risk cap
 
@@ -16218,7 +16296,7 @@ int OnInit()
       Print("Midas: direction-agnostic D1/H4/H1/M30/M15/M5/M1 scoring enabled; matched validation is required before production activation.");
      }
    g_scoring.Init(g_trendCtx,g_bosCtx,g_liqCtx,g_fvgCtx,g_chartCtx,&g_chartCtx.candles);g_scoring.ConfigureMTFStructureAlignment(InpRequireMtfStructureAlignment,InpMtfMaxBosAgeBars);g_scoring.ConfigureInducement(InpImpulseLookbackBars,InpImpulseATRMult,InpImpulseBodyRatio,InpEqualTolATR,InpMaxLegExtend,InpRequirePremiumDiscount,InpRequireDistributionPhase,InpPhaseRangeLookback,InpPhaseCompressionATRMult);g_scoring.ConfigureVolumeFibonacci(InpRequireVolumeConfirmation,InpRVOLThreshold,InpRequireFibonacciZone,InpFibZoneMinPct,InpFibZoneMaxPct);g_scoring.ConfigureValueArea(InpRequireValueAreaLocation,InpBlockValueAreaContradictions);g_scoring.ConfigureHtfOrderBlock(g_htfObCtx,InpRequireHtfOB,InpOBDistATRMax);g_scoring.ConfigureVolatilityRegime(InpBlockLowVolRegime,InpVolRegimeLookback,InpVolRegimeLowPct,InpVolRegimeHighPct);g_scoring.ConfigureSessionFilter(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_operatorSessionFilter.Configure(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_scoring.ConfigureSweepQuality(InpRequireMinSweepGrade,(ENUM_SWEEP_GRADE)InpMinSweepGrade,InpRequireFreshSetup,InpMaxBarsSinceBOS);g_scoring.ConfigureChaseFilter(InpRequireChaseFilter,InpMaxChaseDistATR);g_scoring.ConfigureFVGProximity(InpFVGMaxDistATR);g_scoring.ConfigureLearnedDiagnostics(InpDiagContradictionWeight,InpDiagEnvWeight,InpDiagExecWeight);g_scoring.ConfigureStrategyDiagnostics(InpMomentumBreakoutRecencyBars,InpBreakoutLiqOverlapBars,InpBreakoutExtensionLookbackBars,InpBreakoutExhaustionATRMult,InpMomentumLookbackBars);g_scoring.ConfigureMeanReversionDiagnostics(InpReversionMinStretchATR,InpReversionSRZoneATRTolerance,InpReversionWickRejectionRatio,InpReversionLiqRecencyBars,InpReversionTrendConflictRecencyBars,InpReversionTrendConflictMinStrength);g_scoring.ConfigureKeyLevelDiagnostics(InpKeyLevelLookbackBars,InpKeyLevelSearchATRMax,InpKeyLevelTouchToleranceATRMult,InpKeyLevelAbsorptionMinTouches,InpKeyLevelWickRejectionRatio,InpKeyLevelRoundStep);g_scoring.ConfigureStrategySelection(InpMinSelectionScore);
-   g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_decision.ConfigureFreshSweepAdditiveRouter(InpEnableFreshSweepAdditiveRouter,InpFreshSweepEnableSingleSwingFallback,InpFreshSweepMaxSignalAgeBars,InpFreshSweepDirectionalAdvantage,InpFreshSweepUseDualLaneRankB);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride);g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
+   g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_decision.ConfigureFreshSweepAdditiveRouter(InpEnableFreshSweepAdditiveRouter,InpFreshSweepEnableSingleSwingFallback,InpFreshSweepMaxSignalAgeBars,InpFreshSweepDirectionalAdvantage,InpFreshSweepUseDualLaneRankB);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride);g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber,3,300,InpMaxQuoteAgeSeconds,InpMaxSpreadPoints);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
    if(StringLen(InpConfigSyncEndpoint)>0){g_configSync.Init(_Symbol,InpConfigSyncEndpoint,InpBridgeApiKey,InpWeightSetVersion,InpWebRequestTimeoutMs);EventSetTimer(MathMax(60,InpConfigSyncPollMinutes*60));}g_tracker.ConfigurePublishing(&g_publisher,InpWeightSetVersion);g_portfolio.Init(g_activeRiskLimits.maxPortfolioRiskPercent,g_activeRiskLimits.maxPositionsPerSymbol,g_activeRiskLimits.maxPositionsPerGroup,InpMagicNumber,&g_risk);g_riskGuard.Init(_Symbol,g_activeRiskLimits.maxDailyLossPercent,g_activeRiskLimits.maxDrawdownPercent,g_activeRiskLimits.deriskStartPercent,g_activeRiskLimits.deriskFloor,InpEnableProgressiveDailyLossDeRisk);if(InpUseNewsFilter)g_newsFilter.Load(InpNewsFilterFile,InpNewsMinutesBefore,InpNewsMinutesAfter);g_scoring.ConfigureNewsAwareness(GetPointer(g_newsFilter),InpNewsWarnMinutesBefore,InpNewsWarnMinutesAfter,InpNewsWarnMultiplier);g_recovery.Init(&g_store,&g_orders,InpMagicNumber,_Symbol);int restored=g_recovery.Recover();if(restored>0)PrintFormat("MedisTouch EA: recovery restored %d live trade(s).",restored);TradeDecisionRecord prior[];int n=g_store.LoadAll(prior);long maxId=0;for(int i=0;i<n;i++)if(prior[i].decision_id>maxId)maxId=prior[i].decision_id;if(maxId>0)g_router.SeedNextId(maxId+1);
    if(InpEnableExecution && g_executionLedger.Ready())
      {
