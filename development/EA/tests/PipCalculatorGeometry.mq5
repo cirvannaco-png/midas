@@ -5,6 +5,7 @@
 #property strict
 
 #include "../includes/Core/PipCalculator.mqh"
+#include "../includes/Execution/PriceGridNormalizer.mqh"
 #include "TestHarness.mqh"
 
 int failures=0;
@@ -47,6 +48,20 @@ void OnStart()
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.0,1.0,1.0)==0.0,"missing tick size rejected");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.00001,0.0,1.0)==0.0,"missing directional tick value rejected");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.00001,1.0,0.0)==0.0,"zero lot size rejected");
+
+   // Non-decimal tick grids: indices/CFDs and instruments with coarse ticks.
+   double normalized=0.0;
+   Expect(NormalizePriceToTickGrid(100.13,0.25,2,true,normalized),"index tick-grid round-up succeeds");
+   ExpectNear(normalized,100.25,1e-10,"index tick-grid round-up");
+   Expect(NormalizePriceToTickGrid(100.13,0.25,2,false,normalized),"index tick-grid round-down succeeds");
+   ExpectNear(normalized,100.00,1e-10,"index tick-grid round-down");
+   Expect(NormalizePriceToTickGrid(1.234,0.05,2,true,normalized),"coarse metal tick-grid round-up succeeds");
+   ExpectNear(normalized,1.25,1e-10,"coarse metal tick-grid round-up");
+   Expect(NormalizePriceToTickGrid(1.234,0.05,2,false,normalized),"coarse metal tick-grid round-down succeeds");
+   ExpectNear(normalized,1.20,1e-10,"coarse metal tick-grid round-down");
+   Expect(NormalizePriceToTickGrid(1.23456,0.00001,5,true,normalized),"FX tick-grid normalization succeeds");
+   ExpectNear(normalized,1.23456,1e-10,"FX tick-grid exact price");
+   Expect(!NormalizePriceToTickGrid(100.13,0.0,2,true,normalized),"missing tick grid rejected");
 
    PrintFormat("PipCalculatorGeometry tests: %d failure(s)",failures);
    MidasTestFinish("PipCalculatorGeometry-tests.txt",failures);
