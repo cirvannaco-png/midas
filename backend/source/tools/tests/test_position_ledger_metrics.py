@@ -381,3 +381,41 @@ def test_csv_complete_zero_costs_are_valid_and_not_treated_as_missing(tmp_path):
     assert len(positions) == 1
     assert ignored["incomplete_cashflows"] == 0
     assert positions[0]["net_pnl"] == 10.0
+
+
+
+def test_volume_path_rejects_exit_before_open_even_when_totals_balance():
+    rows = [
+        deal(700, "2026-01-01T09:00:00", "out", 1.0, profit=10.0, row=2),
+        deal(700, "2026-01-01T10:00:00", "in", 1.0, row=3),
+    ]
+    positions, ignored = reconstruct_positions(rows)
+    assert positions == []
+    assert ignored["incomplete_volume"] == 1
+
+
+def test_volume_path_rejects_overclose_then_reopen_even_when_final_totals_balance():
+    rows = [
+        deal(701, "2026-01-01T09:00:00", "in", 1.0, row=2),
+        deal(701, "2026-01-01T10:00:00", "out", 1.2, profit=5.0, row=3),
+        deal(701, "2026-01-01T11:00:00", "in", 0.2, row=4),
+        deal(701, "2026-01-01T12:00:00", "out", 0.0, row=5),
+    ]
+    positions, ignored = reconstruct_positions(rows)
+    assert positions == []
+    assert ignored["incomplete_volume"] == 1
+
+
+def test_valid_scale_in_and_multiple_partial_exits_reconstruct_one_position():
+    rows = [
+        deal(702, "2026-01-01T09:00:00", "in", 0.5, commission=-0.5, row=2),
+        deal(702, "2026-01-01T09:30:00", "in", 0.5, commission=-0.5, row=3),
+        deal(702, "2026-01-01T10:00:00", "out", 0.25, profit=8.0, commission=-0.1, row=4),
+        deal(702, "2026-01-01T11:00:00", "out_by", 0.75, profit=12.0, commission=-0.1, row=5),
+    ]
+    positions, ignored = reconstruct_positions(rows)
+    assert len(positions) == 1
+    assert positions[0]["opening_volume"] == pytest.approx(1.0)
+    assert positions[0]["closing_volume"] == pytest.approx(1.0)
+    assert positions[0]["net_pnl"] == pytest.approx(18.8)
+    assert ignored["incomplete_volume"] == 0
