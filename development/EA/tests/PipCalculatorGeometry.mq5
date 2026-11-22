@@ -45,12 +45,16 @@ void OnStart()
    // Directional tick values are not interchangeable.
    ExpectNear(CPipCalculator::PipValueFromSpec(0.0001,0.00001,1.20,1.0),12.0,1e-10,"profit-side tick value");
    ExpectNear(CPipCalculator::PipValueFromSpec(0.0001,0.00001,0.80,1.0),8.0,1e-10,"loss-side tick value");
+   ExpectNear(CPipCalculator::ValuePerPriceUnitFromSpec(0.00001,1.20),120000.0,1e-6,"profit-side PnL conversion");
+   ExpectNear(CPipCalculator::ValuePerPriceUnitFromSpec(0.00001,0.80),80000.0,1e-6,"loss-side PnL conversion");
+   Expect(CPipCalculator::ValuePerPriceUnitFromSpec(0.0,0.80)==0.0,"invalid tick size rejects PnL conversion");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.0,1.0,1.0)==0.0,"missing tick size rejected");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.00001,0.0,1.0)==0.0,"missing directional tick value rejected");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.00001,1.0,0.0)==0.0,"zero lot size rejected");
 
    // Live R-value denominator must use loss-side tick value, not generic/profit value.
    ExpectNear(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,0.80),160.0,1e-10,"asymmetric loss-side monetary risk");
+   ExpectNear(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,0.80),160.0,1e-10,"realized-R denominator must remain loss-side under asymmetric tick values");
    ExpectNear(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,1.20),240.0,1e-10,"profit-side value would produce a different denominator");
    Expect(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,0.0)==0.0,"missing loss tick value fails closed");
    Expect(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.0,0.80)==0.0,"missing tick size fails closed for R-value");
