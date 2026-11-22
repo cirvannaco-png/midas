@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@05d653ed547f88a7f8bd7fb800a246c1edd2702a
+// Staged EA source snapshot: cirvannaco-png/midas@55ba8cefd791bce41588d539d81f324d7837cf83
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -2869,6 +2869,53 @@ double CFibonacciEngine::Score(bool forBuy, double price, double zoneMinPct, dou
 
 // already inlined once under include guard: includes/Core/Config.mqh
 // already inlined once under include guard: includes/Core/CandleData.mqh
+// BEGIN INLINED MODULE: includes/Execution/TickHistoryQualityPolicy.mqh
+//+------------------------------------------------------------------+
+//| Execution/TickHistoryQualityPolicy.mqh                            |
+//| Deterministic chronology and coverage metrics for trade history.  |
+//+------------------------------------------------------------------+
+#ifndef MIDAS_TICKHISTORYQUALITYPOLICY_MQH
+#define MIDAS_TICKHISTORYQUALITYPOLICY_MQH
+
+class CTickHistoryQualityPolicy
+  {
+public:
+   // Same-millisecond records are counted, not deduplicated. A long gap is
+   // measured but never rejected by itself: illiquid symbols and closed
+   // sessions legitimately have sparse trade prints.
+   static bool Observe(const long timestampMsc,const long fromMsc,const long toMsc,
+                       const long previousTimestampMsc,long &firstTimestampMsc,
+                       long &lastTimestampMsc,long &maxGapMsc,
+                       int &sameMillisecondRecords)
+     {
+      if(timestampMsc<=0 || fromMsc<=0 || toMsc<fromMsc ||
+         timestampMsc<fromMsc || timestampMsc>toMsc ||
+         (previousTimestampMsc>0 && timestampMsc<previousTimestampMsc))
+         return false;
+
+      if(firstTimestampMsc==0)
+         firstTimestampMsc=timestampMsc;
+
+      if(previousTimestampMsc>0)
+        {
+         if(timestampMsc==previousTimestampMsc)
+            sameMillisecondRecords++;
+         else
+           {
+            long gapMsc=timestampMsc-previousTimestampMsc;
+            if(gapMsc>maxGapMsc)
+               maxGapMsc=gapMsc;
+           }
+        }
+
+      lastTimestampMsc=timestampMsc;
+      return true;
+     }
+  };
+
+#endif
+//+------------------------------------------------------------------+
+// END INLINED MODULE: includes/Execution/TickHistoryQualityPolicy.mqh
 
 // Cross-asset Value Area / Volume Profile engine.
 //
@@ -3016,14 +3063,33 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
    ulong toMsc = ((ulong)TimeCurrent() * 1000) + 999;
 
    MqlTick ticks[];
+   ResetLastError();
    int copied = CopyTicksRange(m_candles.Symbol(), ticks, COPY_TICKS_TRADE, fromMsc, toMsc);
+   int copyError = GetLastError();
    if(copied <= 0)
+     {
+      PrintFormat("ValueArea: trade-tick history unavailable for %s over %s..%s (copied=%d error=%d); using bar-volume fallback",
+                  m_candles.Symbol(),TimeToString(oldest,TIME_DATE|TIME_MINUTES),
+                  TimeToString(newest,TIME_DATE|TIME_MINUTES),copied,copyError);
       return false;
+     }
+   if(ArraySize(ticks)!=copied)
+     {
+      PrintFormat("ValueArea: inconsistent trade-tick result for %s (reported=%d allocated=%d); using bar-volume fallback",
+                  m_candles.Symbol(),copied,ArraySize(ticks));
+      return false;
+     }
 
    int realVolumeTickCount = 0;
    int brokerVolumeTickCount = 0;
    double totalObservedVolume = 0.0;
    long previousTickTimeMsc = 0;
+   long firstTickTimeMsc = 0;
+   long lastTickTimeMsc = 0;
+   long maxInterTickGapMsc = 0;
+   int sameMillisecondRecords = 0;
+   int usableTradePrintCount = 0;
+   int outOfRangeTradePrintCount = 0;
 
    for(int i = 0; i < copied; i++)
      {
@@ -3031,11 +3097,17 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
 
       // CopyTicksRange should return chronological records. Reject malformed
       // timestamps/order rather than constructing a profile from ambiguous data.
-      if(tick.time_msc <= 0 ||
-         (ulong)tick.time_msc < fromMsc ||
-         (ulong)tick.time_msc > toMsc ||
-         (previousTickTimeMsc > 0 && tick.time_msc < previousTickTimeMsc))
+      if(!CTickHistoryQualityPolicy::Observe(tick.time_msc,(long)fromMsc,
+                                               (long)toMsc,previousTickTimeMsc,
+                                               firstTickTimeMsc,lastTickTimeMsc,
+                                               maxInterTickGapMsc,
+                                               sameMillisecondRecords))
+        {
+         PrintFormat("ValueArea: malformed or out-of-order trade tick history for %s at index=%d time_msc=%I64d previous_msc=%I64d expected_range=%I64d..%I64d; using bar-volume fallback",
+                     m_candles.Symbol(),i,tick.time_msc,previousTickTimeMsc,
+                     (long)fromMsc,(long)toMsc);
          return false;
+        }
       previousTickTimeMsc = tick.time_msc;
 
       // COPY_TICKS_TRADE is deliberately the only tick source here. Bid/ask
@@ -3060,8 +3132,12 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
       // The profile range is defined by the selected candle window.
       double rangeHigh = rangeLow + binSize * m_numBins;
       if(tick.last < rangeLow || tick.last > rangeHigh)
+        {
+         outOfRangeTradePrintCount++;
          continue;
+        }
 
+      usableTradePrintCount++;
       if(hasRealVolume)
          realVolumeTickCount++;
       else
@@ -3072,8 +3148,27 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
       totalObservedVolume += volume;
      }
 
+   // Coverage lags, same-millisecond records and inter-tick gaps are reported
+   // as diagnostics only. Multiple genuine prints can share a millisecond,
+   // while illiquid instruments and closed sessions legitimately have gaps.
+   double coverageStartLagSeconds=(double)(firstTickTimeMsc-(long)fromMsc)/1000.0;
+   double coverageEndLagSeconds=(double)((long)toMsc-lastTickTimeMsc)/1000.0;
+   PrintFormat("ValueArea tick history %s: returned=%d usable_prints=%d out_of_range=%d same_millisecond_records=%d max_inter_tick_gap_sec=%.1f first=%s last=%s start_coverage_lag_sec=%.1f end_coverage_lag_sec=%.1f (gap metrics are diagnostic; no prints are deduplicated)",
+               m_candles.Symbol(),copied,usableTradePrintCount,
+               outOfRangeTradePrintCount,sameMillisecondRecords,
+               (double)maxInterTickGapMsc/1000.0,
+               TimeToString((datetime)(firstTickTimeMsc/1000),TIME_DATE|TIME_SECONDS),
+               TimeToString((datetime)(lastTickTimeMsc/1000),TIME_DATE|TIME_SECONDS),
+               coverageStartLagSeconds,coverageEndLagSeconds);
+
    if(totalObservedVolume <= 0.0)
+     {
+      PrintFormat("ValueArea: %s returned %d trade ticks but no usable in-range volume for %s..%s; using bar-volume fallback",
+                  m_candles.Symbol(),copied,
+                  TimeToString(oldest,TIME_DATE|TIME_MINUTES),
+                  TimeToString(newest,TIME_DATE|TIME_MINUTES));
       return false;
+     }
 
    // Only label the profile REAL when every contributing trade tick supplied
    // real volume. Mixed feeds are conservatively classified as broker ticks.
@@ -8571,6 +8666,27 @@ bool IsGoldRiskLimitedSymbol(const string symbol)
    string normalized=symbol;
    StringToUpper(normalized);
    return (StringFind(normalized,"XAU")>=0 || StringFind(normalized,"GOLD")>=0);
+  }
+
+// Match conversion instruments by broker-reported currency metadata, never by
+// parsing a symbol's display name. Prefix/suffix aliases remain supported while
+// misleading names and unrelated symbols containing a currency code are rejected.
+bool IsKESConversionPairMetadata(const string baseCurrencyInput,
+                                 const string profitCurrencyInput,
+                                 const string accountCurrencyInput,
+                                 const bool directKESBase)
+  {
+   string baseCurrency=baseCurrencyInput;
+   string profitCurrency=profitCurrencyInput;
+   string accountCurrency=accountCurrencyInput;
+   StringToUpper(baseCurrency);
+   StringToUpper(profitCurrency);
+   StringToUpper(accountCurrency);
+   if(StringLen(accountCurrency)!=3 || baseCurrency=="" || profitCurrency=="")
+      return false;
+   if(directKESBase)
+      return (baseCurrency=="KES" && profitCurrency==accountCurrency);
+   return (baseCurrency==accountCurrency && profitCurrency=="KES");
   }
 
 bool ResolveKESConversionFactorFromQuote(const double bid,
@@ -16558,33 +16674,33 @@ bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,
       for(int i=0;i<total;i++)
         {
          string candidate=SymbolName(i,false);
-         if(StringLen(candidate)<6) continue;
-         string normalized=candidate;
-         StringToUpper(normalized);
-         int nameLength=StringLen(normalized);
-         for(int offset=0;offset<=nameLength-6;offset++)
-           {
-            string baseCurrency=StringSubstr(normalized,offset,3);
-            string quoteCurrency=StringSubstr(normalized,offset+3,3);
-            bool direct=(baseCurrency=="KES" && quoteCurrency==accountCurrency);
-            bool inverse=(baseCurrency==accountCurrency && quoteCurrency=="KES");
-            if((direction==0 && !direct) || (direction==1 && !inverse)) continue;
-            if(!SymbolSelect(candidate,true)) continue;
 
-            MqlTick tick;
-            if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
-            long age=(long)now-(long)tick.time;
-            if(age<0 || age>maxAge) continue;
+         // Broker metadata is authoritative. Symbol-name parsing is unsafe:
+         // arbitrary prefixes/suffixes can contain currency-like text, and
+         // non-FX instruments may have unrelated display names.
+         string baseCurrency="",profitCurrency="";
+         if(!SymbolInfoString(candidate,SYMBOL_CURRENCY_BASE,baseCurrency) ||
+            !SymbolInfoString(candidate,SYMBOL_CURRENCY_PROFIT,profitCurrency))
+            continue;
+         bool direct=(direction==0);
+         if(!IsKESConversionPairMetadata(baseCurrency,profitCurrency,
+                                         accountCurrency,direct))
+            continue;
+         if(!SymbolSelect(candidate,true)) continue;
 
-            double candidateRate=0.0;
-            if(!ResolveKESConversionFactorFromQuote(tick.bid,tick.ask,direct,
-                                                    tick.time,now,maxAge,candidateRate))
-               continue;
+         MqlTick tick;
+         if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
+         long age=(long)now-(long)tick.time;
+         if(age<0 || age>maxAge) continue;
 
-            rate=candidateRate;
-            quoteSymbol=candidate;
-            return true;
-           }
+         double candidateRate=0.0;
+         if(!ResolveKESConversionFactorFromQuote(tick.bid,tick.ask,direct,
+                                                 tick.time,now,maxAge,candidateRate))
+            continue;
+
+         rate=candidateRate;
+         quoteSymbol=candidate;
+         return true;
         }
      }
 

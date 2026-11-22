@@ -484,10 +484,10 @@
   "note": "files[] is the immutable upstream baseline snapshot. current_source_snapshot pins the complete staged EA development tree used to generate the distributable root EA. The validator checks every staged file's exact Git blob SHA and ensures no unmanifested source file is present.",
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
-    "branch": "feat/broker-agnostic-tick-adaptation",
-    "commit": "05d653ed547f88a7f8bd7fb800a246c1edd2702a",
+    "branch": "feat/broker-currency-metadata-and-tick-diagnostics",
+    "commit": "55ba8cefd791bce41588d539d81f324d7837cf83",
     "root": "development/EA",
-    "file_count": 102,
+    "file_count": 104,
     "files": [
       {
         "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
@@ -496,8 +496,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "328fa052126a2936e66e101649c54f1361551fb3",
-        "size_bytes": 115503
+        "git_blob_sha": "fc68792152afb68ee944b4190de95d8ef17addf6",
+        "size_bytes": 115480
       },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
@@ -655,6 +655,11 @@
         "size_bytes": 24394
       },
       {
+        "path": "development/EA/includes/Execution/TickHistoryQualityPolicy.mqh",
+        "git_blob_sha": "c11a3bf5d7561f3dea3d8893f6aab2c158925f1f",
+        "size_bytes": 1641
+      },
+      {
         "path": "development/EA/includes/Execution/TradeStateMachine.mqh",
         "git_blob_sha": "4f89105d1c9dd4e1879bb3010e0792f4b4293354",
         "size_bytes": 10473
@@ -696,8 +701,8 @@
       },
       {
         "path": "development/EA/includes/Portfolio/AccountRiskProfilePolicy.mqh",
-        "git_blob_sha": "8c4fee91bb8e3e343ce8e341227f7267a9c7982d",
-        "size_bytes": 10131
+        "git_blob_sha": "50bd495218ba3c65e9dd7e410493c4eb4a86b3d3",
+        "size_bytes": 11138
       },
       {
         "path": "development/EA/includes/Portfolio/EnvironmentPolicy.mqh",
@@ -811,8 +816,8 @@
       },
       {
         "path": "development/EA/includes/SmartMoney/ValueAreaEngine.mqh",
-        "git_blob_sha": "3f2a99a2e36ab3ee7cede57ff57b62c657436d55",
-        "size_bytes": 17634
+        "git_blob_sha": "4267f75e00ae56171240fbfbb8355791e1783e97",
+        "size_bytes": 20504
       },
       {
         "path": "development/EA/includes/SmartMoney/VolumeEngine.mqh",
@@ -941,8 +946,8 @@
       },
       {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
-        "git_blob_sha": "54f0cdb1daee940d45076dc05e910ea49de94fcb",
-        "size_bytes": 10291
+        "git_blob_sha": "a8c8dbfb61b8b4bf6356538cecf98a90e5dfe45e",
+        "size_bytes": 11408
       },
       {
         "path": "development/EA/tests/BrokerQuoteValidator.mq5",
@@ -998,6 +1003,11 @@
         "path": "development/EA/tests/TestHarness.mqh",
         "git_blob_sha": "b3d1768a9b6da99b9175832ea0425f5ebd564c39",
         "size_bytes": 877
+      },
+      {
+        "path": "development/EA/tests/TickHistoryQualityPolicy.mq5",
+        "git_blob_sha": "a0888c92fe91241cc2edf7370a157b2ee1f8de74",
+        "size_bytes": 2465
       }
     ]
   }
