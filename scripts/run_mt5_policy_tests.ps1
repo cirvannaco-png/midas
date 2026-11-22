@@ -46,7 +46,8 @@ $runtimeTests = @(
   "DynamicStopEngine",
   "FreshSweepAdditiveRouter",
   "OpposingPositionPolicy",
-  "PositionManagementPolicy"
+  "PositionManagementPolicy",
+  "PipCalculatorGeometry"
 )
 $terminal = Join-Path (Split-Path $env:METAEDITOR) "terminal64.exe"
 if (-not (Test-Path $terminal)) { throw "terminal64.exe was not found beside MetaEditor." }
