@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@96dd43731a26eedafb84849dd122962f1ce0e477
+// Staged EA source snapshot: cirvannaco-png/midas@e7ec958971ae633266a8035924a2e5f7219f481a
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -715,6 +715,35 @@ public:
          return 0.0;
       double value=directionalTickValue/tickSize;
       return MathIsValidNumber(value) && value>0.0 ? value : 0.0;
+     }
+
+   // Calculate simulated net PnL without letting adverse execution costs
+   // inherit the profitable-side tick value. signedPriceMove excludes costs;
+   // costPriceDistance is the aggregate entry+exit adverse price distance.
+   static bool       TryCalculateTradePnlFromSpec(const double signedPriceMove,
+                                                  const double lots,
+                                                  const double tickSize,
+                                                  const double profitTickValue,
+                                                  const double lossTickValue,
+                                                  const double costPriceDistance,
+                                                  double &pnlOut)
+     {
+      pnlOut=0.0;
+      if(!MathIsValidNumber(signedPriceMove) ||
+         !MathIsValidNumber(lots) || lots<=0.0 ||
+         !MathIsValidNumber(costPriceDistance) || costPriceDistance<0.0)
+         return false;
+      double directionalValue=ValuePerPriceUnitFromSpec(
+         tickSize,(signedPriceMove>0.0 ? profitTickValue : lossTickValue));
+      double conservativeCostValue=ValuePerPriceUnitFromSpec(tickSize,lossTickValue);
+      if(directionalValue<=0.0 || conservativeCostValue<=0.0) return false;
+      double gross=signedPriceMove*lots*directionalValue;
+      double costs=costPriceDistance*lots*conservativeCostValue;
+      double net=gross-costs;
+      if(!MathIsValidNumber(gross) || !MathIsValidNumber(costs) ||
+         !MathIsValidNumber(net)) return false;
+      pnlOut=net;
+      return true;
      }
 
    // Convert aggregate price-distance x lots into account-currency stop risk.
