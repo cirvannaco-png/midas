@@ -176,8 +176,8 @@ void OnStart()
       "direct KES conversion pair is identified from broker currency metadata");
    AssertTrue(IsKESConversionPairMetadata("USD","KES","USD",false),
       "inverse KES conversion pair is identified from broker currency metadata");
-   AssertTrue(IsKESConversionPairMetadata("KES","USD","USD",true),
-      "broker-specific symbol aliases do not affect currency metadata matching");
+   AssertTrue(IsKESConversionPairMetadata("kes","usd","usd",true),
+      "broker currency metadata matching is case-insensitive");
    AssertTrue(!IsKESConversionPairMetadata("EUR","USD","USD",true),
       "unrelated pair is rejected for direct KES conversion");
    AssertTrue(!IsKESConversionPairMetadata("USD","EUR","USD",false),
