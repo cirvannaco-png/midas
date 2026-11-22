@@ -152,6 +152,7 @@ bool CBrokerAdapter::ValidateMarketQuote(string symbol,bool isBuy,double &refere
      }
    double point=SymbolInfoDouble(symbol,SYMBOL_POINT);
    datetime serverNow=TimeTradeServer();
+   double observedSpread=(point>0.0 ? (tick.ask-tick.bid)/point : 0.0);
    if(!CBrokerQuoteValidator::Validate(tick.bid,tick.ask,point,serverNow,tick.time,
                                       m_maxQuoteAgeSeconds,m_maxSpreadPoints,
                                       isBuy,referencePrice,spreadPoints))
@@ -159,7 +160,7 @@ bool CBrokerAdapter::ValidateMarketQuote(string symbol,bool isBuy,double &refere
       PrintFormat("Midas BrokerAdapter: %s quote failed integrity gate (bid=%.10f ask=%.10f tick_time=%s server_time=%s max_age=%d spread_points=%.2f max_spread=%d).",
                   symbol,tick.bid,tick.ask,TimeToString(tick.time,TIME_DATE|TIME_SECONDS),
                   TimeToString(serverNow,TIME_DATE|TIME_SECONDS),m_maxQuoteAgeSeconds,
-                  spreadPoints,m_maxSpreadPoints);
+                  observedSpread,m_maxSpreadPoints);
       return false;
      }
    return true;
@@ -336,12 +337,12 @@ bool CBrokerAdapter::MarketBuy(string symbol,double volume,double sl,double tp,u
    ResetLastRequestStatus();
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,true)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double refPrice=0.0;
-   if(!ValidateMarketQuote(symbol,true,refPrice)) { m_lastLatencyUs=0; return false; }
-   if(!ValidateStopDistance(symbol,refPrice,sl,tp,true,"MarketBuy")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double refPrice=0.0;
+      if(!ValidateMarketQuote(symbol,true,refPrice) ||
+         !ValidateStopDistance(symbol,refPrice,sl,tp,true,"MarketBuy")) break;
       bool requestOk=m_trade.Buy(volume,symbol,0.0,sl,tp,comment);
       m_lastRequestAttempted=true;
       m_lastRetcode=m_trade.ResultRetcode();
@@ -367,12 +368,12 @@ bool CBrokerAdapter::MarketSell(string symbol,double volume,double sl,double tp,
    ResetLastRequestStatus();
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,false)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double refPrice=0.0;
-   if(!ValidateMarketQuote(symbol,false,refPrice)) { m_lastLatencyUs=0; return false; }
-   if(!ValidateStopDistance(symbol,refPrice,sl,tp,false,"MarketSell")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double refPrice=0.0;
+      if(!ValidateMarketQuote(symbol,false,refPrice) ||
+         !ValidateStopDistance(symbol,refPrice,sl,tp,false,"MarketSell")) break;
       bool requestOk=m_trade.Sell(volume,symbol,0.0,sl,tp,comment);
       m_lastRequestAttempted=true;
       m_lastRetcode=m_trade.ResultRetcode();
@@ -400,12 +401,12 @@ bool CBrokerAdapter::PlaceLimit(string symbol,ENUM_ORDER_TYPE type,double volume
    bool isBuy=(type==ORDER_TYPE_BUY_LIMIT);
    if(!IsConnected() || !IsMarketOpenForTrading(symbol,true,isBuy)) { m_lastLatencyUs=0; return false; }
    if(!ConfigureFillingForSymbol(symbol)) { m_lastLatencyUs=0; return false; }
-   double quoteReference=0.0;
-   if(!ValidateMarketQuote(symbol,isBuy,quoteReference) || quoteReference<=0.0) { m_lastLatencyUs=0; return false; }
-   if(!ValidateStopDistance(symbol,price,sl,tp,isBuy,"PlaceLimit")) { m_lastLatencyUs=0; return false; }
    ulong t0=GetMicrosecondCount();
    for(int i=0;i<m_maxRetries;i++)
      {
+      double quoteReference=0.0;
+      if(!ValidateMarketQuote(symbol,isBuy,quoteReference) || quoteReference<=0.0 ||
+         !ValidateStopDistance(symbol,price,sl,tp,isBuy,"PlaceLimit")) break;
       bool ok=isBuy
                ? m_trade.BuyLimit(volume,price,symbol,sl,tp,ORDER_TIME_GTC,0,comment)
                : m_trade.SellLimit(volume,price,symbol,sl,tp,ORDER_TIME_GTC,0,comment);
