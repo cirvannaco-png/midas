@@ -81,6 +81,27 @@ bool IsGoldRiskLimitedSymbol(const string symbol)
    return (StringFind(normalized,"XAU")>=0 || StringFind(normalized,"GOLD")>=0);
   }
 
+// Match conversion instruments by broker-reported currency metadata, never by
+// parsing a symbol's display name. Prefix/suffix aliases remain supported while
+// misleading names and unrelated symbols containing a currency code are rejected.
+bool IsKESConversionPairMetadata(const string baseCurrencyInput,
+                                 const string profitCurrencyInput,
+                                 const string accountCurrencyInput,
+                                 const bool directKESBase)
+  {
+   string baseCurrency=baseCurrencyInput;
+   string profitCurrency=profitCurrencyInput;
+   string accountCurrency=accountCurrencyInput;
+   StringToUpper(baseCurrency);
+   StringToUpper(profitCurrency);
+   StringToUpper(accountCurrency);
+   if(StringLen(accountCurrency)!=3 || baseCurrency=="" || profitCurrency=="")
+      return false;
+   if(directKESBase)
+      return (baseCurrency=="KES" && profitCurrency==accountCurrency);
+   return (baseCurrency==accountCurrency && profitCurrency=="KES");
+  }
+
 bool ResolveKESConversionFactorFromQuote(const double bid,
                                            const double ask,
                                            const bool directKESBase,
