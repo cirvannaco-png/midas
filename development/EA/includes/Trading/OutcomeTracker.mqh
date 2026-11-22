@@ -8,6 +8,7 @@
 #include "../Core/SignalLogger.mqh"
 #include "../Analysis/TFContext.mqh"
 #include "RiskEngine.mqh"
+#include "../Core/PipCalculator.mqh"
 #include "CalibrationEngine.mqh"
 #include "../Signals/SignalPublisher.mqh"
 
@@ -43,7 +44,7 @@ private:
    void              Resolve(int idx, string outcome, double exitPrice);
    datetime          ResolutionEpoch(const PendingSetup &p) const;
    double            PointSize() const;
-   double            ValuePerUnitDistance() const;
+   double            ValuePerUnitDistance(const bool lossSide=true) const;
    double            ApplyEntryCosts(double rawPrice, bool isBuy) const;
    double            ApplyExitCosts(double rawPrice, bool isBuy) const;
    string            SLHitLabel(const PendingSetup &p) const;
@@ -134,12 +135,14 @@ datetime COutcomeTracker::ResolutionEpoch(const PendingSetup &p) const
    return p.lastBarTime + barSeconds;
   }
 
-double COutcomeTracker::ValuePerUnitDistance() const
+double COutcomeTracker::ValuePerUnitDistance(const bool lossSide) const
   {
-   double tickSize = SymbolInfoDouble(m_symbol, SYMBOL_TRADE_TICK_SIZE);
-   double tickValue = SymbolInfoDouble(m_symbol, SYMBOL_TRADE_TICK_VALUE);
-   if(tickSize <= 0 || tickValue <= 0) return 0.0;
-   return tickValue / tickSize;
+   double tickSize=0.0,tickValue=0.0;
+   ENUM_SYMBOL_INFO_DOUBLE property=lossSide ? SYMBOL_TRADE_TICK_VALUE_LOSS
+                                             : SYMBOL_TRADE_TICK_VALUE_PROFIT;
+   if(!SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_SIZE,tickSize) ||
+      !SymbolInfoDouble(m_symbol,property,tickValue)) return 0.0;
+   return CPipCalculator::ValuePerPriceUnitFromSpec(tickSize,tickValue);
   }
 
 double COutcomeTracker::ApplyEntryCosts(double rawPrice, bool isBuy) const
@@ -165,14 +168,18 @@ void COutcomeTracker::CloseSlice(PendingSetup &p, double closeLots, double rawEx
   {
    if(closeLots <= 0 || p.lots <= 0) return;
    double exitPrice = ApplyExitCosts(rawExitPrice, isBuy);
-   double valuePerUnit = ValuePerUnitDistance();
-   double direction = isBuy ? 1.0 : -1.0;
-   double grossPnL = direction * (exitPrice - p.entryFillPrice) * closeLots * valuePerUnit;
+   double signedPriceMove=(isBuy ? 1.0 : -1.0)*(exitPrice-p.entryFillPrice);
+   // Profit-side and loss-side tick values may differ. Convert the signed
+   // trade move with its matching broker value; price-improvement costs use
+   // the conservative loss-side value below.
+   double valuePerUnit=ValuePerUnitDistance(signedPriceMove<=0.0);
+   double grossPnL=signedPriceMove*closeLots*valuePerUnit;
+   double costValuePerUnit=ValuePerUnitDistance(true);
    double commission = m_commissionPerLot * closeLots;
    p.realizedPnL += (grossPnL - commission);
    p.totalCommission += commission;
-   p.totalSpreadCost += (m_spreadPoints / 2.0) * PointSize() * closeLots * valuePerUnit;
-   p.totalSlippageCost += m_slippagePoints * PointSize() * closeLots * valuePerUnit;
+   p.totalSpreadCost += (m_spreadPoints / 2.0) * PointSize() * closeLots * costValuePerUnit;
+   p.totalSlippageCost += m_slippagePoints * PointSize() * closeLots * costValuePerUnit;
    p.remainingLots -= closeLots;
    if(p.remainingLots < 0) p.remainingLots = 0;
   }
@@ -264,8 +271,12 @@ void COutcomeTracker::FinalizeExit(int idx, PendingSetup &p, string outcome, dou
          m_stats.totalCommission += p.totalCommission;
          m_stats.totalSpreadCost += p.totalSpreadCost;
          m_stats.totalSlippageCost += p.totalSlippageCost;
-         double oneRDollar = p.mgmtRiskDist * ValuePerUnitDistance() * p.lots;
-         if(oneRDollar > 0) m_stats.sumRMultiple += p.realizedPnL / oneRDollar;
+         double tickSize=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_SIZE);
+         double lossTickValue=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE_LOSS);
+         double oneRDollar=CPipCalculator::MonetaryLossRiskFromSpec(
+                              p.mgmtRiskDist*p.lots,tickSize,lossTickValue);
+         if(oneRDollar>0.0 && MathIsValidNumber(p.realizedPnL))
+            m_stats.sumRMultiple+=p.realizedPnL/oneRDollar;
          if(m_calibrationEnabled) m_calibration.Record(p.setup.confidence, p.realizedPnL);
         }
      }
@@ -288,8 +299,12 @@ void COutcomeTracker::PublishIfConfigured(const PendingSetup &p, string coarseOu
    double realizedR = 0.0, mfeR = 0.0, maeR = 0.0;
    if(coarseOutcome != "no_fill" && coarseOutcome != "ambiguous" && p.mgmtRiskDist > 0)
      {
-      double oneRDollar = p.mgmtRiskDist * ValuePerUnitDistance() * p.lots;
-      if(oneRDollar > 0) realizedR = p.realizedPnL / oneRDollar;
+      double tickSize=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_SIZE);
+      double lossTickValue=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE_LOSS);
+      double oneRDollar=CPipCalculator::MonetaryLossRiskFromSpec(
+                           p.mgmtRiskDist*p.lots,tickSize,lossTickValue);
+      if(oneRDollar>0.0 && MathIsValidNumber(p.realizedPnL))
+         realizedR=p.realizedPnL/oneRDollar;
       mfeR = isBuy ? (p.mfePrice - p.sizingEntryPrice) / p.mgmtRiskDist
                    : (p.sizingEntryPrice - p.mfePrice) / p.mgmtRiskDist;
       maeR = isBuy ? (p.sizingEntryPrice - p.maePrice) / p.mgmtRiskDist
@@ -494,7 +509,7 @@ void COutcomeTracker::Update(CTFContext* executionCtx)
             if(p.lots > 0)
               {
                p.entryFillPrice = ApplyEntryCosts(p.sizingEntryPrice, isBuy);
-               double valuePerUnit = ValuePerUnitDistance();
+               double valuePerUnit = ValuePerUnitDistance(true);
                p.totalSpreadCost = (m_spreadPoints / 2.0) * PointSize() * p.lots * valuePerUnit;
                p.totalSlippageCost = m_slippagePoints * PointSize() * p.lots * valuePerUnit;
               }
