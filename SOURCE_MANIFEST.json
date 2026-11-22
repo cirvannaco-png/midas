@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-agnostic-tick-adaptation",
-    "commit": "84d263dcf2b70a5b8a2ccf9ace7247e6d5c3d1f3",
+    "commit": "05d653ed547f88a7f8bd7fb800a246c1edd2702a",
     "root": "development/EA",
     "file_count": 102,
     "files": [
@@ -601,8 +601,8 @@
       },
       {
         "path": "development/EA/includes/Execution/BrokerAdapter.mqh",
-        "git_blob_sha": "3b29511bd979050985ab8bdb3f9d39fe44ac42c7",
-        "size_bytes": 26745
+        "git_blob_sha": "0eb4180373662818142b56d1b528c36033dfb5b6",
+        "size_bytes": 26651
       },
       {
         "path": "development/EA/includes/Execution/BrokerQuoteValidator.mqh",
