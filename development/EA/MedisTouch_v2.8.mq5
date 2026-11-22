@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@6671afd1879095c2f12a44a20ab696ccc2896f05
+// Staged EA source snapshot: cirvannaco-png/midas@48536b1cdceed9575f712be06931c4165abd2dc8
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -17207,4 +17207,3 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
      }
   }
 //+------------------------------------------------------------------+
-
