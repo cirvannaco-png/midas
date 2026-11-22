@@ -5,6 +5,7 @@
 #define SIGNALLOGGER_MQH
 
 #include "Config.mqh"
+#include "PipCalculator.mqh"
 
 // Session labeling: v4 bucketed by raw server-clock hour, which drifts
 // wrong by however many hours the broker's server sits from GMT (and
@@ -422,12 +423,15 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
    double realizedR = 0.0;
    if(p.lots > 0 && p.mgmtRiskDist > 0)
      {
-      double tickSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
-      double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
-      if(tickSize > 0 && tickValue > 0)
+      double tickSize=0.0,lossTickValue=0.0;
+      if(SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE,tickSize) &&
+         SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_VALUE_LOSS,lossTickValue))
         {
-         double oneRDollar = p.mgmtRiskDist * (tickValue / tickSize) * p.lots;
-         if(oneRDollar > 0) realizedR = p.realizedPnL / oneRDollar;
+         double riskLotsDistance=p.mgmtRiskDist*p.lots;
+         double oneRDollar=CPipCalculator::MonetaryLossRiskFromSpec(
+                              riskLotsDistance,tickSize,lossTickValue);
+         if(oneRDollar>0.0 && MathIsValidNumber(p.realizedPnL))
+            realizedR=p.realizedPnL/oneRDollar;
         }
      }
 
