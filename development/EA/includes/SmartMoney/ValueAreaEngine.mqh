@@ -182,16 +182,14 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
          continue;
 
       double volume = 0.0;
+      bool hasRealVolume = false;
       if(MathIsValidNumber(tick.volume_real) && tick.volume_real > 0.0)
         {
          volume = tick.volume_real;
-         realVolumeTickCount++;
+         hasRealVolume = true;
         }
       else if(tick.volume > 0)
-        {
          volume = (double)tick.volume;
-         brokerVolumeTickCount++;
-        }
       else
          continue;
 
@@ -200,6 +198,11 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
       double rangeHigh = rangeLow + binSize * m_numBins;
       if(tick.last < rangeLow || tick.last > rangeHigh)
          continue;
+
+      if(hasRealVolume)
+         realVolumeTickCount++;
+      else
+         brokerVolumeTickCount++;
 
       int bin = BinForPrice(tick.last, rangeLow, binSize);
       volumes[bin] += volume;
