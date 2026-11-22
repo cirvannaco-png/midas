@@ -6,6 +6,7 @@
 
 #include "../Core/Config.mqh"
 #include "../Core/CandleData.mqh"
+#include "../Execution/TickHistoryQualityPolicy.mqh"
 
 // Cross-asset Value Area / Volume Profile engine.
 //
@@ -187,31 +188,18 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
 
       // CopyTicksRange should return chronological records. Reject malformed
       // timestamps/order rather than constructing a profile from ambiguous data.
-      if(tick.time_msc <= 0 ||
-         (ulong)tick.time_msc < fromMsc ||
-         (ulong)tick.time_msc > toMsc ||
-         (previousTickTimeMsc > 0 && tick.time_msc < previousTickTimeMsc))
+      if(!CTickHistoryQualityPolicy::Observe(tick.time_msc,(long)fromMsc,
+                                               (long)toMsc,previousTickTimeMsc,
+                                               firstTickTimeMsc,lastTickTimeMsc,
+                                               maxInterTickGapMsc,
+                                               sameMillisecondRecords))
         {
          PrintFormat("ValueArea: malformed or out-of-order trade tick history for %s at index=%d time_msc=%I64d previous_msc=%I64d expected_range=%I64d..%I64d; using bar-volume fallback",
                      m_candles.Symbol(),i,tick.time_msc,previousTickTimeMsc,
                      (long)fromMsc,(long)toMsc);
          return false;
         }
-      if(firstTickTimeMsc == 0)
-         firstTickTimeMsc = tick.time_msc;
-      if(previousTickTimeMsc > 0)
-        {
-         if(tick.time_msc == previousTickTimeMsc)
-            sameMillisecondRecords++;
-         else
-           {
-            long gapMsc = tick.time_msc - previousTickTimeMsc;
-            if(gapMsc > maxInterTickGapMsc)
-               maxInterTickGapMsc = gapMsc;
-           }
-        }
       previousTickTimeMsc = tick.time_msc;
-      lastTickTimeMsc = tick.time_msc;
 
       // COPY_TICKS_TRADE is deliberately the only tick source here. Bid/ask
       // quote updates from COPY_TICKS_ALL are never converted into volume.
