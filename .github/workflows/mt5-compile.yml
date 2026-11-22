@@ -36,7 +36,30 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $installer = Join-Path $env:RUNNER_TEMP "mt5setup.exe"
-          Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" -OutFile $installer
+          $installerUri = "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
+          $ProgressPreference = "SilentlyContinue"
+          $downloaded = $false
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            try {
+              Write-Host "Downloading the official MetaTrader 5 installer (attempt $attempt/4)."
+              Invoke-WebRequest -Uri $installerUri -OutFile $installer -TimeoutSec 180
+              if (-not (Test-Path $installer) -or (Get-Item $installer).Length -lt 1MB) {
+                throw "Installer download is missing or unexpectedly small."
+              }
+              $downloaded = $true
+              break
+            }
+            catch {
+              Remove-Item $installer -Force -ErrorAction SilentlyContinue
+              if ($attempt -eq 4) {
+                throw "Official MetaTrader 5 installer could not be downloaded after four attempts: $($_.Exception.Message)"
+              }
+              $delay = [int][Math]::Pow(2, $attempt) * 5
+              Write-Warning "MT5 download attempt $attempt failed: $($_.Exception.Message). Retrying in $delay seconds."
+              Start-Sleep -Seconds $delay
+            }
+          }
+          if (-not $downloaded) { throw "Official MetaTrader 5 installer download did not complete." }
           $installPath = "C:\MT5"
           $proc = Start-Process -FilePath $installer -ArgumentList '/auto /path:"C:\MT5"' -Wait -PassThru
           $editor = Join-Path $installPath "metaeditor64.exe"
