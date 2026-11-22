@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@a231959c12e5d362aba9a0e1037c043153daca2b
+// Staged EA source snapshot: cirvannaco-png/midas@a41be83dec5ae44de54a2576d741630d25b2ec09
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -3109,15 +3109,6 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
       totalObservedVolume += volume;
      }
 
-   if(totalObservedVolume <= 0.0)
-     {
-      PrintFormat("ValueArea: %s returned %d trade ticks but no usable in-range volume for %s..%s; using bar-volume fallback",
-                  m_candles.Symbol(),copied,
-                  TimeToString(oldest,TIME_DATE|TIME_MINUTES),
-                  TimeToString(newest,TIME_DATE|TIME_MINUTES));
-      return false;
-     }
-
    // Coverage lags, same-millisecond records and inter-tick gaps are reported
    // as diagnostics only. Multiple genuine prints can share a millisecond,
    // while illiquid instruments and closed sessions legitimately have gaps.
@@ -3130,6 +3121,15 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
                TimeToString((datetime)(firstTickTimeMsc/1000),TIME_DATE|TIME_SECONDS),
                TimeToString((datetime)(lastTickTimeMsc/1000),TIME_DATE|TIME_SECONDS),
                coverageStartLagSeconds,coverageEndLagSeconds);
+
+   if(totalObservedVolume <= 0.0)
+     {
+      PrintFormat("ValueArea: %s returned %d trade ticks but no usable in-range volume for %s..%s; using bar-volume fallback",
+                  m_candles.Symbol(),copied,
+                  TimeToString(oldest,TIME_DATE|TIME_MINUTES),
+                  TimeToString(newest,TIME_DATE|TIME_MINUTES));
+      return false;
+     }
 
    // Only label the profile REAL when every contributing trade tick supplied
    // real volume. Mixed feeds are conservatively classified as broker ticks.
