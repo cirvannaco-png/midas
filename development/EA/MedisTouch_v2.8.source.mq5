@@ -1158,7 +1158,6 @@ bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,
       for(int i=0;i<total;i++)
         {
          string candidate=SymbolName(i,false);
-         if(!SymbolSelect(candidate,true)) continue;
 
          // Broker metadata is authoritative. Symbol-name parsing is unsafe:
          // arbitrary prefixes/suffixes can contain currency-like text, and
@@ -1171,6 +1170,7 @@ bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,
          if(!IsKESConversionPairMetadata(baseCurrency,profitCurrency,
                                          accountCurrency,direct))
             continue;
+         if(!SymbolSelect(candidate,true)) continue;
 
          MqlTick tick;
          if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
