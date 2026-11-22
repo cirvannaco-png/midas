@@ -2,7 +2,7 @@ import unittest
 import pytest
 from datetime import datetime, timezone
 
-from tools.position_ledger_metrics import LedgerError, calculate_metrics, reconstruct_positions, reject_reserved_oos_entries
+from tools.position_ledger_metrics import LedgerError, calculate_metrics, read_deals, reconstruct_positions, reject_reserved_oos_entries
 
 
 def deal(pid, stamp, entry, volume, profit=0.0, commission=0.0, risk_cash=0.0, lane="A", row=2, symbol="EURUSD", strategy="", regime="", slippage_cost_cash=None, slippage_points=None, slippage_known=False):
@@ -15,7 +15,7 @@ def deal(pid, stamp, entry, volume, profit=0.0, commission=0.0, risk_cash=0.0, l
         "requested_price": 1.1 if slippage_known else None,
         "slippage_points": slippage_points if slippage_known else None,
         "slippage_cost_cash": slippage_cost_cash if slippage_known else None,
-        "slippage_known": slippage_known,
+        "slippage_known": slippage_known, "cashflows_complete": True,
     }
 
 
@@ -309,3 +309,75 @@ def test_standard_ledger_withholds_both_old_and_new_locked_oos_windows():
     for rows in (old_window, new_window):
         with pytest.raises(LedgerError, match="registered locked-OOS window"):
             reject_reserved_oos_entries(rows)
+
+
+
+def test_win_rate_reports_wilson_95_percent_interval_and_excludes_flats():
+    rows = [
+        deal(801, "2026-05-01T09:00:00", "in", 1.0, row=2),
+        deal(801, "2026-05-01T10:00:00", "out", 1.0, profit=10.0, row=3),
+        deal(802, "2026-05-02T09:00:00", "in", 1.0, row=4),
+        deal(802, "2026-05-02T10:00:00", "out", 1.0, profit=-5.0, row=5),
+        deal(803, "2026-05-03T09:00:00", "in", 1.0, row=6),
+        deal(803, "2026-05-03T10:00:00", "out", 1.0, profit=0.0, row=7),
+    ]
+    positions, ignored = reconstruct_positions(rows)
+    report = calculate_metrics(positions, 10000.0, ignored)
+    assert report["completed_positions"] == 3
+    assert report["wins"] == 1
+    assert report["losses"] == 1
+    assert report["breakeven_positions"] == 1
+    assert report["win_rate_pct_excluding_flats"] == 50.0
+    assert report["position_win_rate_95ci_pct"] == {
+        "lower_pct": 9.45, "upper_pct": 90.55, "method": "wilson_score_95"
+    }
+    assert report["win_rate_denominator_excludes_breakeven"] is True
+
+
+def test_csv_with_missing_deal_cost_component_excludes_position(tmp_path):
+    csv_path = tmp_path / "missing_fee.csv"
+    csv_path.write_text(
+        "position_id,time,entry,volume,profit,commission,swap\n"
+        "900,2026-05-01T09:00:00Z,in,1,0,-1,0\n"
+        "900,2026-05-01T10:00:00Z,out,1,10,-0.2,0\n",
+        encoding="utf-8",
+    )
+    deals = read_deals(csv_path)
+    assert all(row["cashflows_complete"] is False for row in deals)
+    positions, ignored = reconstruct_positions(deals)
+    assert positions == []
+    assert ignored["incomplete_cashflows"] == 1
+    report = calculate_metrics(positions, 10000.0, ignored)
+    assert report["status"] == "no_complete_positions"
+    assert report["ignored_groups"]["incomplete_cashflows"] == 1
+
+
+def test_csv_blank_cost_is_unknown_not_zero(tmp_path):
+    csv_path = tmp_path / "blank_fee.csv"
+    csv_path.write_text(
+        "position_id,time,entry,volume,profit,commission,swap,fee\n"
+        "901,2026-05-01T09:00:00Z,in,1,0,-1,0,\n"
+        "901,2026-05-01T10:00:00Z,out,1,10,-0.2,0,0\n",
+        encoding="utf-8",
+    )
+    deals = read_deals(csv_path)
+    assert deals[0]["cashflows_complete"] is False
+    positions, ignored = reconstruct_positions(deals)
+    assert positions == []
+    assert ignored["incomplete_cashflows"] == 1
+
+
+def test_csv_complete_zero_costs_are_valid_and_not_treated_as_missing(tmp_path):
+    csv_path = tmp_path / "zero_costs.csv"
+    csv_path.write_text(
+        "position_id,time,entry,volume,profit,commission,swap,fee\n"
+        "902,2026-05-01T09:00:00Z,in,1,0,0,0,0\n"
+        "902,2026-05-01T10:00:00Z,out,1,10,0,0,0\n",
+        encoding="utf-8",
+    )
+    deals = read_deals(csv_path)
+    assert all(row["cashflows_complete"] is True for row in deals)
+    positions, ignored = reconstruct_positions(deals)
+    assert len(positions) == 1
+    assert ignored["incomplete_cashflows"] == 0
+    assert positions[0]["net_pnl"] == 10.0

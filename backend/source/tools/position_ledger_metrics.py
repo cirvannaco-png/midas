@@ -126,6 +126,11 @@ def read_deals(path):
                 "commission": number(row.get(cols["commission"]) if "commission" in cols else None, "commission", row_num, 0.0),
                 "swap": number(row.get(cols["swap"]) if "swap" in cols else None, "swap", row_num, 0.0),
                 "fee": number(row.get(cols["fee"]) if "fee" in cols else None, "fee", row_num, 0.0),
+                # Missing cost columns or blank per-deal values are unknown, not zero.
+                "cashflows_complete": all(
+                    key in cols and row.get(cols[key]) is not None and str(row.get(cols[key])).strip() != ""
+                    for key in ("commission", "swap", "fee")
+                ),
                 "risk_cash": number(row.get(cols["risk_cash"]) if "risk_cash" in cols else None, "risk_cash", row_num, 0.0),
                 "lane": str(row.get(cols["lane"], "")).strip().upper() if "lane" in cols else "",
                 "symbol": str(row.get(cols["symbol"], "")).strip().upper() if "symbol" in cols else "",
@@ -168,7 +173,7 @@ def reconstruct_positions(deals, open_ids=None):
     grouped = defaultdict(list)
     for deal in deals:
         grouped[deal["position_id"]].append(deal)
-    ignored = {"open_position": 0, "incomplete_volume": 0, "inout_ambiguous": 0}
+    ignored = {"open_position": 0, "incomplete_volume": 0, "inout_ambiguous": 0, "incomplete_cashflows": 0}
     positions = []
     for pid, rows in grouped.items():
         rows.sort(key=lambda r: (r["time"], r["source_row"]))
@@ -188,6 +193,11 @@ def reconstruct_positions(deals, open_ids=None):
             continue
         if closed > opened + tolerance:
             ignored["inout_ambiguous"] += 1
+            continue
+        # Do not calculate a supposedly net outcome when any deal-level cost
+        # component is absent. A blank commission/swap/fee is not evidence of zero.
+        if any(not row.get("cashflows_complete", True) for row in rows):
+            ignored["incomplete_cashflows"] += 1
             continue
         risks = [r["risk_cash"] for r in rows if r["risk_cash"] > 0]
         if risks and max(risks) - min(risks) > max(0.01, max(risks) * 0.01):
@@ -227,6 +237,27 @@ def reconstruct_positions(deals, open_ids=None):
         })
     positions.sort(key=lambda p: (p["closed_at"], p["position_id"]))
     return positions, ignored
+
+
+def wilson_interval(successes: int, trials: int, z: float = 1.959963984540054):
+    """Two-sided 95% Wilson score interval for a binomial proportion."""
+    if trials <= 0:
+        return None
+    if successes < 0 or successes > trials:
+        raise LedgerError("wins must be between zero and the number of non-breakeven positions")
+    proportion = successes / trials
+    z2 = z * z
+    denominator = 1.0 + z2 / trials
+    center = (proportion + z2 / (2.0 * trials)) / denominator
+    margin = (
+        z * math.sqrt((proportion * (1.0 - proportion) / trials) + z2 / (4.0 * trials * trials))
+        / denominator
+    )
+    return {
+        "lower_pct": round(100.0 * max(0.0, center - margin), 2),
+        "upper_pct": round(100.0 * min(1.0, center + margin), 2),
+        "method": "wilson_score_95",
+    }
 
 
 def calculate_metrics(positions, initial_balance=10000.0, ignored=None):
@@ -352,6 +383,8 @@ def calculate_metrics(positions, initial_balance=10000.0, ignored=None):
         "wins": len(wins), "losses": len(losses), "breakeven_positions": len(flats),
         "position_win_rate_pct_including_flats": round(100 * len(wins) / len(positions), 2) if positions else None,
         "win_rate_pct_excluding_flats": round(100 * len(wins) / (len(wins) + len(losses)), 2) if wins or losses else None,
+        "position_win_rate_95ci_pct": wilson_interval(len(wins), len(wins) + len(losses)),
+        "win_rate_denominator_excludes_breakeven": True,
         "gross_profit": round(gross_win, 2), "gross_loss_abs": round(gross_loss, 2),
         "profit_factor": round(gross_win / gross_loss, 4) if gross_loss else (None if not gross_win else "no_losses"),
         "average_win": round(sum(p["net_pnl"] for p in wins) / len(wins), 2) if wins else None,
