@@ -419,3 +419,16 @@ def test_valid_scale_in_and_multiple_partial_exits_reconstruct_one_position():
     assert positions[0]["closing_volume"] == pytest.approx(1.0)
     assert positions[0]["net_pnl"] == pytest.approx(18.8)
     assert ignored["incomplete_volume"] == 0
+
+
+
+def test_duplicate_native_deal_ids_are_rejected(tmp_path):
+    csv_path = tmp_path / "duplicate-deals.csv"
+    csv_path.write_text(
+        "position_id,deal_id,time,entry,volume,profit,commission,swap,fee\\n"
+        "900,12345,2026-01-01T09:00:00Z,IN,1.0,0,-0.1,0,0\\n"
+        "900,12345,2026-01-01T10:00:00Z,OUT,1.0,1.0,-0.1,0,0\\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(LedgerError, match="duplicate deal identifier"):
+        read_deals(csv_path)
