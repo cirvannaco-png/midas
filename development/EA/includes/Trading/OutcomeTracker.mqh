@@ -44,9 +44,8 @@ private:
    void              Resolve(int idx, string outcome, double exitPrice);
    datetime          ResolutionEpoch(const PendingSetup &p) const;
    double            PointSize() const;
-   double            ValuePerUnitDistance(const bool lossSide=true) const;
+   double            LossValuePerUnitDistance() const;
    double            ApplyEntryCosts(double rawPrice, bool isBuy) const;
-   double            ApplyExitCosts(double rawPrice, bool isBuy) const;
    string            SLHitLabel(const PendingSetup &p) const;
    void              CloseSlice(PendingSetup &p, double closeLots, double rawExitPrice, bool isBuy);
    void              ApplyPartial(PendingSetup &p, double triggerPrice, bool isBuy);
@@ -135,13 +134,11 @@ datetime COutcomeTracker::ResolutionEpoch(const PendingSetup &p) const
    return p.lastBarTime + barSeconds;
   }
 
-double COutcomeTracker::ValuePerUnitDistance(const bool lossSide) const
+double COutcomeTracker::LossValuePerUnitDistance() const
   {
    double tickSize=0.0,tickValue=0.0;
-   ENUM_SYMBOL_INFO_DOUBLE property=lossSide ? SYMBOL_TRADE_TICK_VALUE_LOSS
-                                             : SYMBOL_TRADE_TICK_VALUE_PROFIT;
    if(!SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_SIZE,tickSize) ||
-      !SymbolInfoDouble(m_symbol,property,tickValue)) return 0.0;
+      !SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE_LOSS,tickValue)) return 0.0;
    return CPipCalculator::ValuePerPriceUnitFromSpec(tickSize,tickValue);
   }
 
@@ -149,12 +146,6 @@ double COutcomeTracker::ApplyEntryCosts(double rawPrice, bool isBuy) const
   {
    double costPoints = (m_spreadPoints / 2.0 + m_slippagePoints) * PointSize();
    return isBuy ? rawPrice + costPoints : rawPrice - costPoints;
-  }
-
-double COutcomeTracker::ApplyExitCosts(double rawPrice, bool isBuy) const
-  {
-   double costPoints = (m_spreadPoints / 2.0 + m_slippagePoints) * PointSize();
-   return isBuy ? rawPrice - costPoints : rawPrice + costPoints;
   }
 
 string COutcomeTracker::SLHitLabel(const PendingSetup &p) const
@@ -172,6 +163,7 @@ void COutcomeTracker::CloseSlice(PendingSetup &p, double closeLots, double rawEx
    double profitTickValue=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE_PROFIT);
    double lossTickValue=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE_LOSS);
    double point=PointSize();
+   if(!MathIsValidNumber(point) || point<=0.0) return;
    // Entry and exit each pay half the spread plus slippage. Convert that
    // adverse cost at the loss-side tick value even when the net trade wins.
    double roundTripCostDistance=(m_spreadPoints+2.0*m_slippagePoints)*point;
@@ -179,7 +171,7 @@ void COutcomeTracker::CloseSlice(PendingSetup &p, double closeLots, double rawEx
    if(!CPipCalculator::TryCalculateTradePnlFromSpec(
          signedPriceMove,closeLots,tickSize,profitTickValue,lossTickValue,
          roundTripCostDistance,netPnl)) return;
-   double costValuePerUnit=ValuePerUnitDistance(true);
+   double costValuePerUnit=LossValuePerUnitDistance();
    double commission=m_commissionPerLot*closeLots;
    if(!MathIsValidNumber(commission) || commission<0.0) return;
    p.realizedPnL += (netPnl-commission);
@@ -515,7 +507,7 @@ void COutcomeTracker::Update(CTFContext* executionCtx)
             if(p.lots > 0)
               {
                p.entryFillPrice = ApplyEntryCosts(p.sizingEntryPrice, isBuy);
-               double valuePerUnit = ValuePerUnitDistance(true);
+               double valuePerUnit = LossValuePerUnitDistance();
                p.totalSpreadCost = (m_spreadPoints / 2.0) * PointSize() * p.lots * valuePerUnit;
                p.totalSlippageCost = m_slippagePoints * PointSize() * p.lots * valuePerUnit;
               }
