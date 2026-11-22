@@ -48,13 +48,18 @@ void OnStart()
    ExpectNear(CPipCalculator::ValuePerPriceUnitFromSpec(0.00001,1.20),120000.0,1e-6,"profit-side PnL conversion");
    ExpectNear(CPipCalculator::ValuePerPriceUnitFromSpec(0.00001,0.80),80000.0,1e-6,"loss-side PnL conversion");
    Expect(CPipCalculator::ValuePerPriceUnitFromSpec(0.0,0.80)==0.0,"invalid tick size rejects PnL conversion");
+   double simulatedPnl=0.0;
+   Expect(CPipCalculator::TryCalculateTradePnlFromSpec(0.001,1.0,0.00001,1.20,0.80,0.0001,simulatedPnl),"profitable simulated PnL conversion succeeds");
+   ExpectNear(simulatedPnl,112.0,1e-8,"profit uses profit tick value while costs use loss tick value");
+   Expect(CPipCalculator::TryCalculateTradePnlFromSpec(-0.001,1.0,0.00001,1.20,0.80,0.0001,simulatedPnl),"losing simulated PnL conversion succeeds");
+   ExpectNear(simulatedPnl,-88.0,1e-8,"loss and costs both use loss tick value");
+   Expect(!CPipCalculator::TryCalculateTradePnlFromSpec(0.001,1.0,0.00001,1.20,0.0,0.0001,simulatedPnl),"missing loss tick value rejects simulated PnL");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.0,1.0,1.0)==0.0,"missing tick size rejected");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.00001,0.0,1.0)==0.0,"missing directional tick value rejected");
    Expect(CPipCalculator::PipValueFromSpec(0.0001,0.00001,1.0,0.0)==0.0,"zero lot size rejected");
 
    // Live R-value denominator must use loss-side tick value, not generic/profit value.
    ExpectNear(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,0.80),160.0,1e-10,"asymmetric loss-side monetary risk");
-   ExpectNear(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,0.80),160.0,1e-10,"realized-R denominator must remain loss-side under asymmetric tick values");
    ExpectNear(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,1.20),240.0,1e-10,"profit-side value would produce a different denominator");
    Expect(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.00001,0.0)==0.0,"missing loss tick value fails closed");
    Expect(CPipCalculator::MonetaryLossRiskFromSpec(0.002,0.0,0.80)==0.0,"missing tick size fails closed for R-value");
