@@ -484,16 +484,26 @@
   "note": "files[] is the immutable upstream baseline snapshot. current_source_snapshot pins the complete staged EA development tree used to generate the distributable root EA. The validator checks every staged file's exact Git blob SHA and ensures no unmanifested source file is present.",
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
-    "branch": "build/rankb-port-20261120",
-    "commit": "d88acca0f3b77d1db56d3cc520c860560b2d328a",
-    "git_tree_sha": "ace812e3fed18fd56c7460e5a0edd19b16c8a34b",
+    "branch": "feat/broker-agnostic-tick-adaptation",
+    "commit": "9ed70d8bde66f0d0c67fc97d9c0461a5065990a5",
+    "git_tree_sha": "6d0a00279e7a1473d5f6e912c2242a83a0601717",
     "root": "development/EA",
-    "file_count": 99,
+    "file_count": 100,
     "files": [
       {
+        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
+        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
+        "size_bytes": 15553
+      },
+      {
+        "path": "development/EA/MedisTouch_v2.8.source.mq5",
+        "git_blob_sha": "0f83177b11de90176f208e7dba49e6c8da2aa344",
+        "size_bytes": 115341
+      },
+      {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
-        "git_blob_sha": "0334cc0535829b03a1b3733f2e546354600727b1",
-        "size_bytes": 59115
+        "git_blob_sha": "e7bb9d660e1ff969d8aea661416425172ba88d28",
+        "size_bytes": 59186
       },
       {
         "path": "development/EA/includes/Analysis/TFContext.mqh",
@@ -542,8 +552,8 @@
       },
       {
         "path": "development/EA/includes/Core/PipCalculator.mqh",
-        "git_blob_sha": "9bb3923279aa917291a091c57ff92d3158fe1647",
-        "size_bytes": 3418
+        "git_blob_sha": "aaf28f7c23f79b0fab670cbffdeda55fab3288b3",
+        "size_bytes": 3754
       },
       {
         "path": "development/EA/includes/Core/SessionFilter.mqh",
@@ -592,8 +602,8 @@
       },
       {
         "path": "development/EA/includes/Execution/BrokerAdapter.mqh",
-        "git_blob_sha": "1bd0b532cfa7b02130ab2bcfdfbf9ac8cb57e665",
-        "size_bytes": 24803
+        "git_blob_sha": "82ba2bc52529e627c8238aa843cb8d2499e9bae0",
+        "size_bytes": 24847
       },
       {
         "path": "development/EA/includes/Execution/DynamicStopEngine.mqh",
@@ -751,14 +761,14 @@
         "size_bytes": 8538
       },
       {
-        "path": "development/EA/includes/SmartMoney/FibonacciEngine.mqh",
-        "git_blob_sha": "74df9e8c41352e1c43ad99d83e1aa0992b367380",
-        "size_bytes": 8793
-      },
-      {
         "path": "development/EA/includes/SmartMoney/FVG.mqh",
         "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
         "size_bytes": 5668
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/FibonacciEngine.mqh",
+        "git_blob_sha": "74df9e8c41352e1c43ad99d83e1aa0992b367380",
+        "size_bytes": 8793
       },
       {
         "path": "development/EA/includes/SmartMoney/Inducement.mqh",
@@ -926,16 +936,6 @@
         "size_bytes": 1047
       },
       {
-        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
-        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
-        "size_bytes": 15553
-      },
-      {
-        "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "0f83177b11de90176f208e7dba49e6c8da2aa344",
-        "size_bytes": 115341
-      },
-      {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
         "git_blob_sha": "54f0cdb1daee940d45076dc05e910ea49de94fcb",
         "size_bytes": 10291
@@ -969,6 +969,11 @@
         "path": "development/EA/tests/OpposingPositionPolicy.mq5",
         "git_blob_sha": "fe5db91a0e6a38733bde69ae23df2f13041051d8",
         "size_bytes": 4330
+      },
+      {
+        "path": "development/EA/tests/PipCalculatorGeometry.mq5",
+        "git_blob_sha": "d2a00045f9918f37e9cf76567399fac9fecb97ea",
+        "size_bytes": 2497
       },
       {
         "path": "development/EA/tests/PositionManagementPolicy.mq5",
