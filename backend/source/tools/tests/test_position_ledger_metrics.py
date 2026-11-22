@@ -396,10 +396,10 @@ def test_volume_path_rejects_exit_before_open_even_when_totals_balance():
 
 def test_volume_path_rejects_overclose_then_reopen_even_when_final_totals_balance():
     rows = [
-        deal(701, "2026-01-01T09:00:00", "in", 1.0, row=2),
-        deal(701, "2026-01-01T10:00:00", "out", 1.2, profit=5.0, row=3),
-        deal(701, "2026-01-01T11:00:00", "in", 0.2, row=4),
-        deal(701, "2026-01-01T12:00:00", "out", 0.0, row=5),
+        deal(701, "2026-01-01T09:00:00", "in", 0.5, row=2),
+        deal(701, "2026-01-01T10:00:00", "out", 0.8, profit=5.0, row=3),
+        deal(701, "2026-01-01T11:00:00", "in", 0.5, row=4),
+        deal(701, "2026-01-01T12:00:00", "out", 0.2, row=5),
     ]
     positions, ignored = reconstruct_positions(rows)
     assert positions == []
