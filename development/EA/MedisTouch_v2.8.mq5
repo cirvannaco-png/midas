@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@05d653ed547f88a7f8bd7fb800a246c1edd2702a
+// Staged EA source snapshot: cirvannaco-png/midas@e2f012e47baaf6182e5d28c2e9e878bb524e5fc8
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -3016,9 +3016,22 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
    ulong toMsc = ((ulong)TimeCurrent() * 1000) + 999;
 
    MqlTick ticks[];
+   ResetLastError();
    int copied = CopyTicksRange(m_candles.Symbol(), ticks, COPY_TICKS_TRADE, fromMsc, toMsc);
+   int copyError = GetLastError();
    if(copied <= 0)
+     {
+      PrintFormat("ValueArea: trade-tick history unavailable for %s over %s..%s (copied=%d error=%d); using bar-volume fallback",
+                  m_candles.Symbol(),TimeToString(oldest,TIME_DATE|TIME_MINUTES),
+                  TimeToString(newest,TIME_DATE|TIME_MINUTES),copied,copyError);
       return false;
+     }
+   if(ArraySize(ticks)!=copied)
+     {
+      PrintFormat("ValueArea: inconsistent trade-tick result for %s (reported=%d allocated=%d); using bar-volume fallback",
+                  m_candles.Symbol(),copied,ArraySize(ticks));
+      return false;
+     }
 
    int realVolumeTickCount = 0;
    int brokerVolumeTickCount = 0;
@@ -3073,7 +3086,13 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
      }
 
    if(totalObservedVolume <= 0.0)
+     {
+      PrintFormat("ValueArea: %s returned %d trade ticks but no usable in-range volume for %s..%s; using bar-volume fallback",
+                  m_candles.Symbol(),copied,
+                  TimeToString(oldest,TIME_DATE|TIME_MINUTES),
+                  TimeToString(newest,TIME_DATE|TIME_MINUTES));
       return false;
+     }
 
    // Only label the profile REAL when every contributing trade tick supplied
    // real volume. Mixed feeds are conservatively classified as broker ticks.
@@ -8571,6 +8590,27 @@ bool IsGoldRiskLimitedSymbol(const string symbol)
    string normalized=symbol;
    StringToUpper(normalized);
    return (StringFind(normalized,"XAU")>=0 || StringFind(normalized,"GOLD")>=0);
+  }
+
+// Match conversion instruments by broker-reported currency metadata, never by
+// parsing a symbol's display name. Prefix/suffix aliases remain supported while
+// misleading names and unrelated symbols containing a currency code are rejected.
+bool IsKESConversionPairMetadata(const string baseCurrencyInput,
+                                 const string profitCurrencyInput,
+                                 const string accountCurrencyInput,
+                                 const bool directKESBase)
+  {
+   string baseCurrency=baseCurrencyInput;
+   string profitCurrency=profitCurrencyInput;
+   string accountCurrency=accountCurrencyInput;
+   StringToUpper(baseCurrency);
+   StringToUpper(profitCurrency);
+   StringToUpper(accountCurrency);
+   if(StringLen(accountCurrency)!=3 || baseCurrency=="" || profitCurrency=="")
+      return false;
+   if(directKESBase)
+      return (baseCurrency=="KES" && profitCurrency==accountCurrency);
+   return (baseCurrency==accountCurrency && profitCurrency=="KES");
   }
 
 bool ResolveKESConversionFactorFromQuote(const double bid,
@@ -16558,33 +16598,33 @@ bool ResolveLiveKESPerAccountCurrency(const string accountCurrency,double &rate,
       for(int i=0;i<total;i++)
         {
          string candidate=SymbolName(i,false);
-         if(StringLen(candidate)<6) continue;
-         string normalized=candidate;
-         StringToUpper(normalized);
-         int nameLength=StringLen(normalized);
-         for(int offset=0;offset<=nameLength-6;offset++)
-           {
-            string baseCurrency=StringSubstr(normalized,offset,3);
-            string quoteCurrency=StringSubstr(normalized,offset+3,3);
-            bool direct=(baseCurrency=="KES" && quoteCurrency==accountCurrency);
-            bool inverse=(baseCurrency==accountCurrency && quoteCurrency=="KES");
-            if((direction==0 && !direct) || (direction==1 && !inverse)) continue;
-            if(!SymbolSelect(candidate,true)) continue;
+         if(!SymbolSelect(candidate,true)) continue;
 
-            MqlTick tick;
-            if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
-            long age=(long)now-(long)tick.time;
-            if(age<0 || age>maxAge) continue;
+         // Broker metadata is authoritative. Symbol-name parsing is unsafe:
+         // arbitrary prefixes/suffixes can contain currency-like text, and
+         // non-FX instruments may have unrelated display names.
+         string baseCurrency="",profitCurrency="";
+         if(!SymbolInfoString(candidate,SYMBOL_CURRENCY_BASE,baseCurrency) ||
+            !SymbolInfoString(candidate,SYMBOL_CURRENCY_PROFIT,profitCurrency))
+            continue;
+         bool direct=(direction==0);
+         if(!IsKESConversionPairMetadata(baseCurrency,profitCurrency,
+                                         accountCurrency,direct))
+            continue;
 
-            double candidateRate=0.0;
-            if(!ResolveKESConversionFactorFromQuote(tick.bid,tick.ask,direct,
-                                                    tick.time,now,maxAge,candidateRate))
-               continue;
+         MqlTick tick;
+         if(!SymbolInfoTick(candidate,tick) || tick.time<=0) continue;
+         long age=(long)now-(long)tick.time;
+         if(age<0 || age>maxAge) continue;
 
-            rate=candidateRate;
-            quoteSymbol=candidate;
-            return true;
-           }
+         double candidateRate=0.0;
+         if(!ResolveKESConversionFactorFromQuote(tick.bid,tick.ask,direct,
+                                                 tick.time,now,maxAge,candidateRate))
+            continue;
+
+         rate=candidateRate;
+         quoteSymbol=candidate;
+         return true;
         }
      }
 
