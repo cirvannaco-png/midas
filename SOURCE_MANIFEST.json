@@ -485,9 +485,9 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-agnostic-tick-adaptation",
-    "commit": "4551e30d4b1fb2c3b489fc20ef66476325483f89",
+    "commit": "84d263dcf2b70a5b8a2ccf9ace7247e6d5c3d1f3",
     "root": "development/EA",
-    "file_count": 100,
+    "file_count": 102,
     "files": [
       {
         "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
@@ -496,8 +496,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "0f83177b11de90176f208e7dba49e6c8da2aa344",
-        "size_bytes": 115341
+        "git_blob_sha": "328fa052126a2936e66e101649c54f1361551fb3",
+        "size_bytes": 115503
       },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
@@ -601,8 +601,13 @@
       },
       {
         "path": "development/EA/includes/Execution/BrokerAdapter.mqh",
-        "git_blob_sha": "82ba2bc52529e627c8238aa843cb8d2499e9bae0",
-        "size_bytes": 24847
+        "git_blob_sha": "3b29511bd979050985ab8bdb3f9d39fe44ac42c7",
+        "size_bytes": 26745
+      },
+      {
+        "path": "development/EA/includes/Execution/BrokerQuoteValidator.mqh",
+        "git_blob_sha": "4f8ed2c13d82855dab7998fd96130b81ff836bb2",
+        "size_bytes": 1696
       },
       {
         "path": "development/EA/includes/Execution/DynamicStopEngine.mqh",
@@ -938,6 +943,11 @@
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
         "git_blob_sha": "54f0cdb1daee940d45076dc05e910ea49de94fcb",
         "size_bytes": 10291
+      },
+      {
+        "path": "development/EA/tests/BrokerQuoteValidator.mq5",
+        "git_blob_sha": "a5a410bf131e29f56c6a25259e414056d396180d",
+        "size_bytes": 2634
       },
       {
         "path": "development/EA/tests/BrokerSpecSnapshot.mq5",
