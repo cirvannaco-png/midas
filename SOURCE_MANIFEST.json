@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-currency-metadata-and-tick-diagnostics",
-    "commit": "e74ea64ee467425e5f322b32c42071078ade1740",
+    "commit": "e1e09a652fbcb66137fdce25d741a67749e50360",
     "root": "development/EA",
     "file_count": 102,
     "files": [
@@ -941,8 +941,8 @@
       },
       {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
-        "git_blob_sha": "9db26f66c7b571f8ed06af17a5c8e00992821a8c",
-        "size_bytes": 11426
+        "git_blob_sha": "a8c8dbfb61b8b4bf6356538cecf98a90e5dfe45e",
+        "size_bytes": 11408
       },
       {
         "path": "development/EA/tests/BrokerQuoteValidator.mq5",
