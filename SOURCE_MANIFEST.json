@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-currency-metadata-and-tick-diagnostics",
-    "commit": "b8f0e129436aaa93d6d9c7bd4edc3f8d2c522ec5",
+    "commit": "e74ea64ee467425e5f322b32c42071078ade1740",
     "root": "development/EA",
     "file_count": 102,
     "files": [
@@ -496,7 +496,7 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "85786911d50b27bd31395f3be9e40c001cd7e0b3",
+        "git_blob_sha": "fc68792152afb68ee944b4190de95d8ef17addf6",
         "size_bytes": 115480
       },
       {
