@@ -167,19 +167,25 @@ string COutcomeTracker::SLHitLabel(const PendingSetup &p) const
 void COutcomeTracker::CloseSlice(PendingSetup &p, double closeLots, double rawExitPrice, bool isBuy)
   {
    if(closeLots <= 0 || p.lots <= 0) return;
-   double exitPrice = ApplyExitCosts(rawExitPrice, isBuy);
-   double signedPriceMove=(isBuy ? 1.0 : -1.0)*(exitPrice-p.entryFillPrice);
-   // Profit-side and loss-side tick values may differ. Convert the signed
-   // trade move with its matching broker value; price-improvement costs use
-   // the conservative loss-side value below.
-   double valuePerUnit=ValuePerUnitDistance(signedPriceMove<=0.0);
-   double grossPnL=signedPriceMove*closeLots*valuePerUnit;
+   double signedPriceMove=(isBuy ? 1.0 : -1.0)*(rawExitPrice-p.sizingEntryPrice);
+   double tickSize=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_SIZE);
+   double profitTickValue=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE_PROFIT);
+   double lossTickValue=SymbolInfoDouble(m_symbol,SYMBOL_TRADE_TICK_VALUE_LOSS);
+   double point=PointSize();
+   // Entry and exit each pay half the spread plus slippage. Convert that
+   // adverse cost at the loss-side tick value even when the net trade wins.
+   double roundTripCostDistance=(m_spreadPoints+2.0*m_slippagePoints)*point;
+   double netPnl=0.0;
+   if(!CPipCalculator::TryCalculateTradePnlFromSpec(
+         signedPriceMove,closeLots,tickSize,profitTickValue,lossTickValue,
+         roundTripCostDistance,netPnl)) return;
    double costValuePerUnit=ValuePerUnitDistance(true);
-   double commission = m_commissionPerLot * closeLots;
-   p.realizedPnL += (grossPnL - commission);
+   double commission=m_commissionPerLot*closeLots;
+   if(!MathIsValidNumber(commission) || commission<0.0) return;
+   p.realizedPnL += (netPnl-commission);
    p.totalCommission += commission;
-   p.totalSpreadCost += (m_spreadPoints / 2.0) * PointSize() * closeLots * costValuePerUnit;
-   p.totalSlippageCost += m_slippagePoints * PointSize() * closeLots * costValuePerUnit;
+   p.totalSpreadCost += (m_spreadPoints/2.0)*point*closeLots*costValuePerUnit;
+   p.totalSlippageCost += m_slippagePoints*point*closeLots*costValuePerUnit;
    p.remainingLots -= closeLots;
    if(p.remainingLots < 0) p.remainingLots = 0;
   }
