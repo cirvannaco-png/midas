@@ -146,6 +146,7 @@ def main():
         "coverageStartLagSeconds",
         "coverageEndLagSeconds",
         "outOfRangeTradePrintCount",
+        "malformed or out-of-order trade tick history",
         "no prints are deduplicated",
     )
     if not all(token in raw for token in tick_history_diagnostics):
