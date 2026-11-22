@@ -138,6 +138,18 @@ def main():
         "IsKESConversionPairMetadata(baseCurrency,profitCurrency,",
         "for(int direction=0;direction<2;direction++)")):
         fail.append("broker currency metadata conversion discovery regression")
+    tick_history_diagnostics = (
+        "firstTickTimeMsc",
+        "lastTickTimeMsc",
+        "sameMillisecondRecords",
+        "maxInterTickGapMsc",
+        "coverageStartLagSeconds",
+        "coverageEndLagSeconds",
+        "outOfRangeTradePrintCount",
+        "no prints are deduplicated",
+    )
+    if not all(token in raw for token in tick_history_diagnostics):
+        fail.append("trade-tick history coverage/gap/duplicate diagnostics regression")
 
     compact_ea="".join(raw.split())
     mtf_final=compact_ea.find("g_topDownMTF.AdjustSetup(sellSetup);")
