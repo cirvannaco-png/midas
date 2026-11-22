@@ -153,9 +153,22 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
    ulong toMsc = ((ulong)TimeCurrent() * 1000) + 999;
 
    MqlTick ticks[];
+   ResetLastError();
    int copied = CopyTicksRange(m_candles.Symbol(), ticks, COPY_TICKS_TRADE, fromMsc, toMsc);
+   int copyError = GetLastError();
    if(copied <= 0)
+     {
+      PrintFormat("ValueArea: trade-tick history unavailable for %s over %s..%s (copied=%d error=%d); using bar-volume fallback",
+                  m_candles.Symbol(),TimeToString(oldest,TIME_DATE|TIME_MINUTES),
+                  TimeToString(newest,TIME_DATE|TIME_MINUTES),copied,copyError);
       return false;
+     }
+   if(ArraySize(ticks)!=copied)
+     {
+      PrintFormat("ValueArea: inconsistent trade-tick result for %s (reported=%d allocated=%d); using bar-volume fallback",
+                  m_candles.Symbol(),copied,ArraySize(ticks));
+      return false;
+     }
 
    int realVolumeTickCount = 0;
    int brokerVolumeTickCount = 0;
@@ -210,7 +223,13 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
      }
 
    if(totalObservedVolume <= 0.0)
+     {
+      PrintFormat("ValueArea: %s returned %d trade ticks but no usable in-range volume for %s..%s; using bar-volume fallback",
+                  m_candles.Symbol(),copied,
+                  TimeToString(oldest,TIME_DATE|TIME_MINUTES),
+                  TimeToString(newest,TIME_DATE|TIME_MINUTES));
       return false;
+     }
 
    // Only label the profile REAL when every contributing trade tick supplied
    // real volume. Mixed feeds are conservatively classified as broker ticks.
