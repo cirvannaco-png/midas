@@ -172,6 +172,23 @@ void OnStart()
    AssertTrue(!GoldStopRiskWithinCashCap(7.50,0.0),
       "missing Gold cash cap fails closed");
 
+   AssertTrue(IsKESConversionPairMetadata("KES","USD","USD",true),
+      "direct KES conversion pair is identified from broker currency metadata");
+   AssertTrue(IsKESConversionPairMetadata("USD","KES","USD",false),
+      "inverse KES conversion pair is identified from broker currency metadata");
+   AssertTrue(IsKESConversionPairMetadata("KES","USD","USD",true),
+      "broker-specific symbol aliases do not affect currency metadata matching");
+   AssertTrue(!IsKESConversionPairMetadata("EUR","USD","USD",true),
+      "unrelated pair is rejected for direct KES conversion");
+   AssertTrue(!IsKESConversionPairMetadata("USD","EUR","USD",false),
+      "unrelated pair is rejected for inverse KES conversion");
+   AssertTrue(!IsKESConversionPairMetadata("XKES","USD","USD",true),
+      "currency-like symbol text is not mistaken for broker currency metadata");
+   AssertTrue(!IsKESConversionPairMetadata("KES","USDT","USD",true),
+      "different profit currency is not accepted as account-currency conversion");
+   AssertTrue(!IsKESConversionPairMetadata("KES","","USD",true),
+      "missing broker currency metadata fails closed");
+
    double accountCurrencyPerKES=0.0;
    AssertTrue(ResolveKESConversionFactorFromQuote(0.0065,0.0066,true,
       D'2026.11.08 10:00:00',D'2026.11.08 10:05:00',300,accountCurrencyPerKES) &&
