@@ -174,6 +174,12 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
    int brokerVolumeTickCount = 0;
    double totalObservedVolume = 0.0;
    long previousTickTimeMsc = 0;
+   long firstTickTimeMsc = 0;
+   long lastTickTimeMsc = 0;
+   long maxInterTickGapMsc = 0;
+   int sameMillisecondRecords = 0;
+   int usableTradePrintCount = 0;
+   int outOfRangeTradePrintCount = 0;
 
    for(int i = 0; i < copied; i++)
      {
@@ -186,7 +192,21 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
          (ulong)tick.time_msc > toMsc ||
          (previousTickTimeMsc > 0 && tick.time_msc < previousTickTimeMsc))
          return false;
+      if(firstTickTimeMsc == 0)
+         firstTickTimeMsc = tick.time_msc;
+      if(previousTickTimeMsc > 0)
+        {
+         if(tick.time_msc == previousTickTimeMsc)
+            sameMillisecondRecords++;
+         else
+           {
+            long gapMsc = tick.time_msc - previousTickTimeMsc;
+            if(gapMsc > maxInterTickGapMsc)
+               maxInterTickGapMsc = gapMsc;
+           }
+        }
       previousTickTimeMsc = tick.time_msc;
+      lastTickTimeMsc = tick.time_msc;
 
       // COPY_TICKS_TRADE is deliberately the only tick source here. Bid/ask
       // quote updates from COPY_TICKS_ALL are never converted into volume.
@@ -210,8 +230,12 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
       // The profile range is defined by the selected candle window.
       double rangeHigh = rangeLow + binSize * m_numBins;
       if(tick.last < rangeLow || tick.last > rangeHigh)
+        {
+         outOfRangeTradePrintCount++;
          continue;
+        }
 
+      usableTradePrintCount++;
       if(hasRealVolume)
          realVolumeTickCount++;
       else
@@ -230,6 +254,19 @@ bool CValueAreaEngine::BuildTickProfile(double rangeLow, double binSize, double 
                   TimeToString(newest,TIME_DATE|TIME_MINUTES));
       return false;
      }
+
+   // Coverage lags, same-millisecond records and inter-tick gaps are reported
+   // as diagnostics only. Multiple genuine prints can share a millisecond,
+   // while illiquid instruments and closed sessions legitimately have gaps.
+   double coverageStartLagSeconds=(double)(firstTickTimeMsc-(long)fromMsc)/1000.0;
+   double coverageEndLagSeconds=(double)((long)toMsc-lastTickTimeMsc)/1000.0;
+   PrintFormat("ValueArea tick history %s: returned=%d usable_prints=%d out_of_range=%d same_millisecond_records=%d max_inter_tick_gap_sec=%.1f first=%s last=%s start_coverage_lag_sec=%.1f end_coverage_lag_sec=%.1f (gap metrics are diagnostic; no prints are deduplicated)",
+               m_candles.Symbol(),copied,usableTradePrintCount,
+               outOfRangeTradePrintCount,sameMillisecondRecords,
+               (double)maxInterTickGapMsc/1000.0,
+               TimeToString((datetime)(firstTickTimeMsc/1000),TIME_DATE|TIME_SECONDS),
+               TimeToString((datetime)(lastTickTimeMsc/1000),TIME_DATE|TIME_SECONDS),
+               coverageStartLagSeconds,coverageEndLagSeconds);
 
    // Only label the profile REAL when every contributing trade tick supplied
    // real volume. Mixed feeds are conservatively classified as broker ticks.
