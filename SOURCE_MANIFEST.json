@@ -485,8 +485,8 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "feat/broker-agnostic-tick-adaptation",
-    "commit": "9e322182f557adceeb10086fdd6ea00d31aa1c9d",
-    "git_tree_sha": "46b744141e89dba5f6d7280aa8b8010d5d73f541",
+    "commit": "b5cd8cddab9fce25e0b267c40794cbe5a4f8f9c0",
+    "git_tree_sha": "4c9ac94ebe53dc88faff0adda4aa0be927468014",
     "root": "development/EA",
     "file_count": 100,
     "files": [
@@ -972,8 +972,8 @@
       },
       {
         "path": "development/EA/tests/PipCalculatorGeometry.mq5",
-        "git_blob_sha": "d2a00045f9918f37e9cf76567399fac9fecb97ea",
-        "size_bytes": 2497
+        "git_blob_sha": "39347265360071351fcd4f5059abcf65a9a8f87c",
+        "size_bytes": 3650
       },
       {
         "path": "development/EA/tests/PositionManagementPolicy.mq5",
