@@ -1,14 +1,14 @@
 # Integrated trading architecture audit
 
 Audit baseline: canonical single-file EA source plus the pinned Midas-touch2 backend snapshot
-at upstream commit 52d737237c08f36d668853312f643cb74d4548da.
+at upstream commit 6dad8a00a522e3fd507b0f2669de47bcb47e43ee.
 
 This is an implementation audit, not a profitability certification.
 
 ## 0. Source reconciliation and repository authority
 
 The former companion repository is `cirvanna-co-png/Midas-touch2-`, branch
-`main`, upstream commit `52d737237c08f36d668853312f643cb74d4548da`.
+`main`, upstream commit `6dad8a00a522e3fd507b0f2669de47bcb47e43ee`.
 Its complete 495-file project tree is present under `backend/source/` in this
 repository. All 495 upstream paths are represented. Three files in the
 imported snapshot have target-specific updates rather than byte-identical
