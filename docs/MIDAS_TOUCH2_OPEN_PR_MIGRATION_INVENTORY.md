@@ -10,7 +10,7 @@ The merged `main` history through `6dad8a00a522e3fd507b0f2669de47bcb47e43ee`
 has been compared with the last imported upstream snapshot and refreshed in
 `backend/source/`. That comparison found two commits and three changed files.
 
-The source repository also has 18 open pull requests. They are not in the merged
+The source repository also has 17 open pull requests. They are not in the merged
 `main` history and therefore are not included in the mainline snapshot refresh.
 They are listed here to prevent accidental omission. Each must be diffed against
 its base, checked for overlap with Midas's newer canonical implementation, and
@@ -39,7 +39,7 @@ be promoted merely because it exists on a source branch.
 | [#33](https://github.com/cirvannaco-png/Midas-touch2-/pull/33) | Feature-flagged environment hard-loss firewall | Research feature flag; require ablation and default-off verification |
 | [#32](https://github.com/cirvannaco-png/Midas-touch2-/pull/32) | Inducement structural provenance | Telemetry; inspect compatibility and lineage |
 | [#30](https://github.com/cirvannaco-png/Midas-touch2-/pull/30) | Causal SMC FVG loss-reduction candidate | Research candidate; preserve default/promotion boundary |
-| [#?](https://github.com/cirvannaco-png/Midas-touch2-) | Additional PR inventory | The GitHub search returned 18 open PRs; this list contains all 18 currently surfaced |
+| [#?](https://github.com/cirvannaco-png/Midas-touch2-) | Additional PR inventory | GitHub search returned 17 open PRs, all listed above |
 
 ## Completion rule
 
