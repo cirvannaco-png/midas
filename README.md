@@ -62,6 +62,10 @@ A release requires all of the following evidence:
 
 No backtest or win-rate target is a profitability guarantee. Keep live trading disabled until these gates have been evidenced and reviewed.
 
+### Account-wide margin admission
+
+The active Midas EA and bridge contract use one account-wide ledger book across symbols and Midas instances. Each new leg sends broker-calculated margin, a timestamped free-margin snapshot, and account currency. The bridge enforces a configurable 20% default free-margin buffer and returns the protocol marker `midas-account-margin-v1`; the EA blocks entries if the marker is absent. PostgreSQL concurrency, deployed-bridge verification, Windows MetaEditor, and broker-demo checks remain release gates. See `docs/MIDAS_MARGIN_ADMISSION_IMPLEMENTATION.md`.
+
 ## Single-repository source layout
 
 `cirvannaco-png/midas` is the one authoritative repository for Midas Touch 2. The former companion repository, [`cirvannaco-png/Midas-touch2-`](https://github.com/cirvannaco-png/Midas-touch2-), is retained as source provenance; its complete project tree is included under `backend/source/`. Builds, tests, MT5 packaging, and ongoing development are maintained from this repository.
@@ -82,7 +86,7 @@ The flattened upload EA is generated from the modular entrypoint and its active 
 
 ### Imported upstream project and supporting services
 
-`backend/source/` contains the full 495-file upstream project snapshot, refreshed through commit `6dad8a00a522e3fd507b0f2669de47bcb47e43ee`: FastAPI services, PostgreSQL migrations, Telegram bridge, deployment manifests, tests, research tooling, documentation, and the original upstream EA. `backend/SOURCE_REVISION.md` records its provenance and the small number of target-specific reconciliations.
+`backend/source/` contains the 495-file upstream base at commit `6dad8a00a522e3fd507b0f2669de47bcb47e43ee`, plus an explicit 19-file Midas overlay. The overlay preserves target-specific tester/deal-attribution work and the account-wide margin-admission API, tests, and protocol handshake. `backend/SOURCE_REVISION.md` and `backend/overlays/.../manifest.json` record the base commit and SHA-256 of each overlay file. `scripts/sync_backend_source.sh` refuses a different upstream commit until the overlay is reviewed and regenerated.
 
 The nested `backend/source/EA/` tree is an upstream reference snapshot, **not a second active EA build target**. The active EA build target is `development/EA/MedisTouch_v2.8.mq5`; its modular sources remain under `development/EA/`, and its native tests remain separate under `development/EA/tests/`. Workflows under `backend/source/.github/` are imported provenance only; GitHub Actions executes workflows from the root `.github/workflows/` directory.
 
@@ -91,7 +95,7 @@ The nested `backend/source/EA/` tree is an upstream reference snapshot, **not a 
 - `research/`: StrategyTune research reports and archived candidate artifacts. Gold M15 StrategyTune source/metadata for v2.6, v2.7, v2.12, and v2.13 are preserved under `research/strategytune/gold-m15/`.
 - `backend/source/tools/`: imported upstream validation, MQL5 architecture, MT5 variant-comparison, walk-forward, trailing-stop experiment, and deal-ledger analysis tools.
 - `backend/source/medis_touch/`: research/reference implementation; it is not the live MT5 EA or the production execution bridge.
-- `backend/source/telegram-bridge/`: FastAPI execution-ledger and signal bridge source, migrations, and service tests.
+- `backend/source/telegram-bridge/`: FastAPI execution-ledger and signal bridge source, migrations, and service tests. The Midas overlay requires `midas-account-margin-v1`; deploy the matching bridge before using an EA build that requires this protocol. The repository does not yet prove a live Midas bridge deployment.
 
 StrategyTune proxy results are not native MT5 Strategy Tester results. They do not prove parity for the EA's broker adapter, trailing-stop amendments, margin checks, commissions, slippage, swaps, or execution-ledger behavior. The Gold v2.13 report records this boundary and its negative 2025 expectancy; it is research evidence, not live-trading approval.
 

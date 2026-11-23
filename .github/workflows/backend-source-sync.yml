@@ -28,6 +28,6 @@ jobs:
 
       - name: Sync complete backend source snapshot
         env:
-          BACKEND_SOURCE_REF: main
+          BACKEND_SOURCE_REF: 6dad8a00a522e3fd507b0f2669de47bcb47e43ee
         run: bash scripts/sync_backend_source.sh
 

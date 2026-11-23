@@ -123,32 +123,24 @@ pending-order synchronization, deal-event ingestion, and reconciliation. This
 is the correct foundation for one authoritative admission ledger; the backend
 never submits broker orders.
 
-### Remaining work
+### Implemented in the Midas migration branch
 
-1. The EA portfolio key currently includes broker server, account login, and
-   magic number. Different Midas magic numbers therefore create separate books.
-   Introduce an explicit account-level Midas portfolio ID shared by all symbols
-   and Midas instances that must share risk.
-2. The EA PortfolioManager does not calculate proposed margin or check
-   ACCOUNT_MARGIN_FREE. No OrderCalcMargin call was found in the canonical EA.
-3. The backend reserve request carries risk in R and an empty factor map. Its
-   active reservation sum does not yet enforce a fresh broker margin snapshot
-   or factor/correlation budget.
-4. The backend portfolio_risk.py module is a deterministic reference evaluator;
-   it is not wired into execution admission. Its correlation matrix must be
-   sourced from validated, time-aligned returns, not guessed constants.
-5. Extend admission atomically to account-wide open-position risk, pending
-   orders, unfilled reservations, factor exposure, margin used, free margin,
-   and a configurable margin safety buffer. The EA should provide
-   OrderCalcMargin results and a timestamped account snapshot; stale or missing
-   snapshots must reject new exposure.
-6. Ensure reservations are not released merely because a lease expires or a
-   send times out. Broker evidence and reconciliation remain mandatory.
+1. The EA portfolio key is now account-scoped (`broker server:account login:midas`) and shared across symbols and Midas instances, independent of strategy magic number. Decision request IDs remain chart-instance-scoped to preserve idempotency.
+2. Each new execution leg calls broker `OrderCalcMargin` and captures positive `ACCOUNT_MARGIN_FREE`, UTC snapshot epoch, and account currency. Missing, non-finite, non-positive, stale, future, or mismatched evidence fails closed.
+3. The bridge serializes admission under the account portfolio's PostgreSQL advisory transaction lock, checks existing heat reservations and unreflected margin inside the same transaction, and keeps the existing 3R heat ceiling.
+4. The free-margin buffer defaults to 20% and is configurable through `MIDAS_MIN_FREE_MARGIN_BUFFER_RATIO` (accepted range 0.05–0.90). Pending-order margin and durable fill/transition timestamps prevent both post-snapshot undercount and double-counting exposure already reflected in a newer broker snapshot.
+5. The bridge health and reserve responses require protocol marker `midas-account-margin-v1`; the EA verifies it at health and reservation time. An older bridge cannot silently be treated as margin-aware.
+6. The Midas bridge tests and root static EA contracts are now included in canonical CI. The imported source tree's local changes are preserved by a commit-pinned, hash-verified overlay; future upstream refreshes fail closed until the overlay is reviewed and regenerated.
 
-The existing local PortfolioManager remains a useful secondary guard, but it
-must not compete with or replace the backend's single authoritative ledger.
+### Remaining release gates
 
-The margin-aware admission follow-up is tracked in canonical Midas issue [#36](https://github.com/cirvannaco-png/midas/issues/36), originating from source PR [#167](https://github.com/cirvannaco-png/Midas-touch2-/pull/167). The issue requires an atomic Midas-native implementation and does not authorize a source-code overwrite or a production margin-buffer default.
+1. Run the PostgreSQL concurrency integration test against a disposable PostgreSQL database using `MIDAS_TEST_POSTGRES_URL`. The local SQLite suite does not prove cross-connection advisory-lock behavior.
+2. Deploy the matching bridge version and verify authenticated health returns `margin_admission_version=midas-account-margin-v1`; no root Midas Render deployment manifest or deployed Midas service has yet been verified.
+3. Complete Windows MetaEditor compilation, native MT5 tests, and broker-demo evidence for BUY/SELL, pending orders, fills after snapshot, restart reconciliation, and rejected/ambiguous submissions.
+4. The backend reserve request still receives an empty factor map from the EA. Factor/correlation budgets remain separate work and must use validated, time-aligned returns rather than guessed constants.
+5. Ensure reservations are not released merely because a lease expires or a send times out. Broker evidence and reconciliation remain mandatory.
+
+The existing local PortfolioManager remains a useful secondary guard, but it must not compete with or replace the backend's single authoritative ledger. Issue [#36](https://github.com/cirvannaco-png/midas/issues/36) tracks the margin implementation and remaining release gates; source PR [#167](https://github.com/cirvanna-co-png/Midas-touch2-/pull/167) was reviewed but not copied verbatim.
 
 ## 3. Strategy/regime attribution and position outcomes
 
