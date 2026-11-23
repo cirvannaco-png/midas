@@ -7,7 +7,7 @@ This is an implementation audit, not a profitability certification.
 
 ## 0. Source reconciliation and repository authority
 
-The former companion repository is `cirvanna-co-png/Midas-touch2-`, branch
+The former companion repository is `cirvannaco-png/Midas-touch2-`, branch
 `main`, upstream commit `6dad8a00a522e3fd507b0f2669de47bcb47e43ee`.
 Its complete 495-file project tree is present under `backend/source/` in this
 repository. All 495 upstream paths are represented. Three files in the
@@ -136,11 +136,11 @@ never submits broker orders.
 
 1. Confirm the PostgreSQL concurrency integration test passes in root CI's disposable PostgreSQL 16 service using `MIDAS_TEST_POSTGRES_URL`. The local SQLite suite alone does not prove cross-connection advisory-lock behavior.
 2. Deploy the matching bridge version and verify authenticated health returns `margin_admission_version=midas-account-margin-v1`; no root Midas Render deployment manifest or deployed Midas service has yet been verified.
-3. Complete Windows MetaEditor compilation, native MT5 tests, and broker-demo evidence for BUY/SELL, pending orders, fills after snapshot, restart reconciliation, and rejected/ambiguous submissions.
+3. Windows MetaEditor compilation and deterministic native MT5 policy tests passed for the current MQL5 source in run [45239954725](https://github.com/cirvannaco-png/midas/actions/runs/45239954725). Complete selected-broker demo evidence for BUY/SELL, pending orders, fills after snapshot, restart reconciliation, and rejected/ambiguous submissions; rerun native compile/tests after any further MQL5 changes.
 4. The backend reserve request still receives an empty factor map from the EA. Factor/correlation budgets remain separate work and must use validated, time-aligned returns rather than guessed constants.
 5. Ensure reservations are not released merely because a lease expires or a send times out. Broker evidence and reconciliation remain mandatory.
 
-The existing local PortfolioManager remains a useful secondary guard, but it must not compete with or replace the backend's single authoritative ledger. Issue [#36](https://github.com/cirvannaco-png/midas/issues/36) tracks the margin implementation and remaining release gates; source PR [#167](https://github.com/cirvanna-co-png/Midas-touch2-/pull/167) was reviewed but not copied verbatim.
+The existing local PortfolioManager remains a useful secondary guard, but it must not compete with or replace the backend's single authoritative ledger. Issue [#36](https://github.com/cirvannaco-png/midas/issues/36) tracks the margin implementation and remaining release gates; source PR [#167](https://github.com/cirvannaco-png/Midas-touch2-/pull/167) was reviewed but not copied verbatim.
 
 ## 3. Strategy/regime attribution and position outcomes
 
@@ -219,11 +219,20 @@ or any strategy.
 ## Release status
 
 - Regime-first routing: implemented; independent family validation remains.
-- Account-wide portfolio budget: partial; magic-scoped risk exists, margin and
-  cross-magic consolidation remain.
+- Account-wide portfolio budget: account-wide margin admission is implemented
+  in the active EA and bridge with a shared account portfolio key, broker margin
+  calculation, fresh snapshot validation, atomic PostgreSQL reservation, and
+  snapshot-aware pending/fill accounting. Selected-broker demo verification
+  remains open.
 - Strategy/regime lineage: signal-level fields exist; per-position attribution
   across multi-leg executions needs a canonical join and tests.
 - Walk-forward tooling: regime-scoped filters and completed-position
   symbol/strategy/regime reports are implemented; enriched lineage export and
   integrated multi-instrument locked-OOS evidence are not yet certified.
-- Live trading promotion: not approved by this audit.
+- Validation: PostgreSQL-backed CI suite and Windows MetaEditor/native MT5
+  policy workflow passed on commit `212e47d6889139a275fe83aee2678164bf060431`.
+  A CI-only password-authentication hardening rerun is pending on the latest
+  branch head.
+- Live trading promotion: not approved by this audit; selected-broker demo
+  evidence, deployed bridge protocol verification, and remaining operational
+  release gates are still required.

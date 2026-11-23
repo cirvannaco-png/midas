@@ -4,15 +4,15 @@ Status: design reviewed; implementation intentionally deferred until Midas has a
 
 ## Why source PR #147 is not reusable as-is
 
-The source branch's OIDC trust is bound to `cirvanna-co-png/Midas-touch2-`, audience `midas-touch2-production`, and `https://midas-touch2.onrender.com`. Those identifiers are wrong for the canonical Midas repository. Its verifier checks signed GitHub Actions claims for issuer, audience, repository name, branch, environment, event and workflow path, but it does not bind immutable repository/owner IDs and does not consume a one-time `jti`. A still-valid token can therefore be replayed during its validity window. The route allowlist also includes mutating maintenance/retry POST endpoints, which must not be inherited without a separate Midas-specific threat review.
+The source branch's OIDC trust is bound to `cirvannaco-png/Midas-touch2-`, audience `midas-touch2-production`, and `https://midas-touch2.onrender.com`. Those identifiers are wrong for the canonical Midas repository. Its verifier checks signed GitHub Actions claims for issuer, audience, repository name, branch, environment, event and workflow path, but it does not bind immutable repository/owner IDs and does not consume a one-time `jti`. A still-valid token can therefore be replayed during its validity window. The route allowlist also includes mutating maintenance/retry POST endpoints, which must not be inherited without a separate Midas-specific threat review.
 
 ## Midas immutable identity
 
-- Canonical repository: `cirvanna-co-png/midas`
+- Canonical repository: `cirvannaco-png/midas`
 - GitHub repository ID: `1449162974`
 - GitHub owner ID: `275909084`
 - Required future audience: a new unique value scoped to Midas, not `midas-touch2-production`
-- Required subject: `repo:cirvanna-co-png/midas:environment:production`
+- Required subject: `repo:cirvannaco-png/midas:environment:production`
 
 Repository IDs above were read from the canonical GitHub repository metadata. The deployed service URL is deliberately unspecified: the root Midas repository has no root `render.yaml` and no root production-health or production-maintenance workflow. The nested `backend/source/.github` files are imported provenance and are not executed by GitHub Actions.
 

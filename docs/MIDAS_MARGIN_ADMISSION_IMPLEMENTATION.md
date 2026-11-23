@@ -1,6 +1,6 @@
 # Midas account-wide margin admission
 
-Status: implemented in the migration branch; local bridge tests pass, but PostgreSQL concurrency, Windows MetaEditor compilation, and broker-demo execution remain release gates.
+Status: implemented in the migration branch. Root CI and Windows MetaEditor validation passed for the MQL5 implementation commit; the PostgreSQL concurrency integration test is now wired to a disposable PostgreSQL 16 service but still needs a run on the latest CI configuration. Broker-demo execution remains a release gate.
 
 ## Contract
 
@@ -21,4 +21,4 @@ Status: implemented in the migration branch; local bridge tests pass, but Postgr
 - Static EA package checks: `python scripts/build_single_file.py` followed by `python scripts/validate_single_file.py`.
 - Root static regression: `python -m pytest tests/research/test_margin_admission_contract.py -q`.
 
-The local test environment is Linux and cannot provide native MetaEditor evidence. The local run skipped the PostgreSQL concurrency case because it had no database service; root CI now supplies an isolated PostgreSQL 16 service and executes that case. No broker demo or live-trading claim is made by this document.
+Windows MetaEditor compilation and deterministic native MT5 policy tests passed in [run 45239954725](https://github.com/cirvannaco-png/midas/actions/runs/45239954725) for commit `60ea185a1b628754b581ffed172df631faaf87e5`; subsequent commits changed documentation and CI configuration only. The local Linux run skipped the PostgreSQL concurrency case because it had no database service. Root CI now supplies an isolated PostgreSQL 16 service, but that latest workflow configuration has not yet been run. No full Strategy Tester or broker-demo execution is claimed.
