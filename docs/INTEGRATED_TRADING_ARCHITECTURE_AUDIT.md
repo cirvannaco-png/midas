@@ -148,6 +148,8 @@ never submits broker orders.
 The existing local PortfolioManager remains a useful secondary guard, but it
 must not compete with or replace the backend's single authoritative ledger.
 
+The margin-aware admission follow-up is tracked in canonical Midas issue [#36](https://github.com/cirvannaco-png/midas/issues/36), originating from source PR [#167](https://github.com/cirvannaco-png/Midas-touch2-/pull/167). The issue requires an atomic Midas-native implementation and does not authorize a source-code overwrite or a production margin-buffer default.
+
 ## 3. Strategy/regime attribution and position outcomes
 
 ### Already implemented
