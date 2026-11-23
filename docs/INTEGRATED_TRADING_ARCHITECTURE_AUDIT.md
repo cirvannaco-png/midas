@@ -134,7 +134,7 @@ never submits broker orders.
 
 ### Remaining release gates
 
-1. Run the PostgreSQL concurrency integration test against a disposable PostgreSQL database using `MIDAS_TEST_POSTGRES_URL`. The local SQLite suite does not prove cross-connection advisory-lock behavior.
+1. Confirm the PostgreSQL concurrency integration test passes in root CI's disposable PostgreSQL 16 service using `MIDAS_TEST_POSTGRES_URL`. The local SQLite suite alone does not prove cross-connection advisory-lock behavior.
 2. Deploy the matching bridge version and verify authenticated health returns `margin_admission_version=midas-account-margin-v1`; no root Midas Render deployment manifest or deployed Midas service has yet been verified.
 3. Complete Windows MetaEditor compilation, native MT5 tests, and broker-demo evidence for BUY/SELL, pending orders, fills after snapshot, restart reconciliation, and rejected/ambiguous submissions.
 4. The backend reserve request still receives an empty factor map from the EA. Factor/correlation budgets remain separate work and must use validated, time-aligned returns rather than guessed constants.

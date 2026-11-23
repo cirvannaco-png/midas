@@ -17,8 +17,8 @@ Status: implemented in the migration branch; local bridge tests pass, but Postgr
 
 ## Validation performed
 
-- Bridge tests: run with `cd backend/source/telegram-bridge && PYTHONPATH=.. python -m pytest -q`.
+- Bridge tests: run with `cd backend/source/telegram-bridge && PYTHONPATH=.. python -m pytest -q`. Root GitHub Actions CI starts an isolated PostgreSQL 16 service and sets `MIDAS_TEST_POSTGRES_URL`, so the concurrency test runs instead of being skipped in CI.
 - Static EA package checks: `python scripts/build_single_file.py` followed by `python scripts/validate_single_file.py`.
 - Root static regression: `python -m pytest tests/research/test_margin_admission_contract.py -q`.
 
-The test environment is Linux and cannot provide native MetaEditor evidence. PostgreSQL advisory-lock behavior still requires the dedicated `MIDAS_TEST_POSTGRES_URL` integration test against a disposable test database. No broker demo or live-trading claim is made by this document.
+The local test environment is Linux and cannot provide native MetaEditor evidence. The local run skipped the PostgreSQL concurrency case because it had no database service; root CI now supplies an isolated PostgreSQL 16 service and executes that case. No broker demo or live-trading claim is made by this document.
