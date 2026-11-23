@@ -12,28 +12,27 @@ has been compared with the last imported upstream snapshot and refreshed in
 
 The source repository also has 17 open pull requests. They are not in the merged
 `main` history and therefore are not included in the mainline snapshot refresh.
-They are listed here to prevent accidental omission. Each must be diffed against
-its base, checked for overlap with Midas's newer canonical implementation, and
-classified as: (a) safe to migrate, (b) research/provenance only, (c) superseded,
-or (d) blocked pending evidence. Draft or behavior-changing risk work must not
-be promoted merely because it exists on a source branch.
+All 17 exact PR heads were fetched and diffed against their recorded base commits.
+The branch-level review records each base/head SHA, diff size, findings and final
+Midas disposition. Draft or behavior-changing risk work is not promoted merely
+because it exists on a source branch.
 
-## Open pull requests requiring individual review
+## 17 open pull requests — exact branch review complete
 
 | Source PR | Subject | Initial migration treatment |
 |---:|---|---|
 | [#169](https://github.com/cirvannaco-png/Midas-touch2-/pull/169) | Gold trend-only candidate and holdout evidence | Research-only; migrate evidence and caveats, not live parameters |
 | [#168](https://github.com/cirvannaco-png/Midas-touch2-/pull/168) | Gold payoff ablation and no-promotion decision | Research evidence; preserve no-promotion decision |
-| [#167](https://github.com/cirvannaco-png/Midas-touch2-/pull/167) | Margin-aware portfolio admission | Behavior-changing execution/risk code; require full API/EA/DB and demo review |
-| [#150](https://github.com/cirvannaco-png/Midas-touch2-/pull/150) | Broker-neutral validation and tester timestamp provenance | Review for migration; likely overlaps existing Midas broker-neutral architecture |
-| [#147](https://github.com/cirvannaco-png/Midas-touch2-/pull/147) | Production auth, AI execution, position reconciliation and OOS isolation | Security-critical; migrate only after workflow/OIDC and execution-authority review |
+| [#167](https://github.com/cirvannaco-png/Midas-touch2-/pull/167) | Margin-aware portfolio admission | Midas-native implementation added with corrections; PostgreSQL, MetaEditor, deployment and demo gates remain |
+| [#150](https://github.com/cirvannaco-png/Midas-touch2-/pull/150) | Broker-neutral validation and tester timestamp provenance | Superseded by Midas verified-offset exporter; no weaker code copied |
+| [#147](https://github.com/cirvannaco-png/Midas-touch2-/pull/147) | Production auth, AI execution, position reconciliation and OOS isolation | Midas-specific security review complete; implementation deferred pending production origin and replay store |
 | [#144](https://github.com/cirvannaco-png/Midas-touch2-/pull/144) | 50% daily-loss cap research protocol | Do not promote the 50%/55% risk settings; preserve as a rejected/high-risk proposal unless separately approved |
 | [#143](https://github.com/cirvannaco-png/Midas-touch2-/pull/143) | Separate small-account and large-account risk profiles | Risk-policy change; compare against canonical Midas risk limits before migration |
 | [#118](https://github.com/cirvannaco-png/Midas-touch2-/pull/118) | Dedicated paid production PostgreSQL database | Infrastructure proposal; verify actual provider provisioning and billing state before adoption |
 | [#115](https://github.com/cirvannaco-png/Midas-touch2-/pull/115) | Fail-closed MT5 diagnostic parity evidence audit | Review research/evidence tooling and preserve non-promotion gates |
 | [#112](https://github.com/cirvannaco-png/Midas-touch2-/pull/112) | Diagnostic order-flow evidence and research validation | Draft research; no trading-behavior promotion without evidence |
 | [#76](https://github.com/cirvannaco-png/Midas-touch2-/pull/76) | Payoff asymmetry and entry precision research candidate | Research-only; inspect exact branch diff and locked-OOS limitations |
-| [#38](https://github.com/cirvannaco-png/Midas-touch2-/pull/38) | Dual-lane risk governor and position-level MT5 metrics | Behavior-changing risk work; preserve only after native MT5 and risk review |
+| [#38](https://github.com/cirvannaco-png/Midas-touch2-/pull/38) | Dual-lane risk governor and position-level MT5 metrics | Mostly superseded by active Midas; narrow retcode fix ported |
 | [#35](https://github.com/cirvannaco-png/Midas-touch2-/pull/35) | Capacity controls and weekday trade qualification | Risk/capacity behavior; compare to current Midas limits and tests |
 | [#34](https://github.com/cirvannaco-png/Midas-touch2-/pull/34) | Hierarchical decision engine hardening | Architecture change; compare to current active strategy/router lineage |
 | [#33](https://github.com/cirvannaco-png/Midas-touch2-/pull/33) | Feature-flagged environment hard-loss firewall | Research feature flag; require ablation and default-off verification |
@@ -42,7 +41,7 @@ be promoted merely because it exists on a source branch.
 
 ## Detailed disposition
 
-See [`MIDAS_TOUCH2_OPEN_PR_DISPOSITION_2026-11-23.md`](MIDAS_TOUCH2_OPEN_PR_DISPOSITION_2026-11-23.md) for per-PR decisions, evidence limits, target architecture conflicts, and follow-up actions. Margin-aware admission from source PR #167 is tracked as canonical Midas issue [#36](https://github.com/cirvannaco-png/midas/issues/36).
+See [`MIDAS_TOUCH2_OPEN_PR_BRANCH_LEVEL_REVIEW_2026-11-23.md`](MIDAS_TOUCH2_OPEN_PR_BRANCH_LEVEL_REVIEW_2026-11-23.md) for exact branch findings and final dispositions, and [`MIDAS_TOUCH2_OPEN_PR_DISPOSITION_2026-11-23.md`](MIDAS_TOUCH2_OPEN_PR_DISPOSITION_2026-11-23.md) for the summary. Margin admission remains tracked in canonical Midas issue [#36](https://github.com/cirvannaco-png/midas/issues/36).
 
 ## Completion rule
 

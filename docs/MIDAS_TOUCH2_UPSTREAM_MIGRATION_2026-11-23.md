@@ -45,3 +45,7 @@ mandatory. The migration does not force entries or authorize live trading.
 The upstream source snapshot is provenance/reference material. The only active MT5
 build target remains `development/EA/MedisTouch_v2.8.mq5`, generated from
 `development/EA/MedisTouch_v2.8.source.mq5` and `development/EA/includes/`.
+
+## Unmerged source PR branch review
+
+All 17 open source PR heads were subsequently fetched and diffed against their exact recorded base commits. The detailed findings and final Midas decisions are recorded in `MIDAS_TOUCH2_OPEN_PR_BRANCH_LEVEL_REVIEW_2026-11-23.md`. Margin admission from source PR #167 has been ported into the Midas EA/bridge contract with account-wide locking, strict snapshot validation, protocol handshake and regression coverage; source PR #38's remaining retcode defect was also corrected. Source OIDC, unvalidated strategy candidates, high-risk profiles and capacity changes were not blindly ported.
