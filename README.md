@@ -82,7 +82,7 @@ The flattened upload EA is generated from the modular entrypoint and its active 
 
 ### Imported upstream project and supporting services
 
-`backend/source/` contains the full 495-file upstream project snapshot at commit `52d737237c08f36d668853312f643cb74d4548da`: FastAPI services, PostgreSQL migrations, Telegram bridge, deployment manifests, tests, research tooling, documentation, and the original upstream EA. `backend/SOURCE_REVISION.md` records its provenance and the small number of target-specific reconciliations.
+`backend/source/` contains the full 495-file upstream project snapshot, refreshed through commit `6dad8a00a522e3fd507b0f2669de47bcb47e43ee`: FastAPI services, PostgreSQL migrations, Telegram bridge, deployment manifests, tests, research tooling, documentation, and the original upstream EA. `backend/SOURCE_REVISION.md` records its provenance and the small number of target-specific reconciliations.
 
 The nested `backend/source/EA/` tree is an upstream reference snapshot, **not a second active EA build target**. The active EA build target is `development/EA/MedisTouch_v2.8.mq5`; its modular sources remain under `development/EA/`, and its native tests remain separate under `development/EA/tests/`. Workflows under `backend/source/.github/` are imported provenance only; GitHub Actions executes workflows from the root `.github/workflows/` directory.
 
