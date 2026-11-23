@@ -231,8 +231,9 @@ or any strategy.
   integrated multi-instrument locked-OOS evidence are not yet certified.
 - Validation: PostgreSQL-backed CI suite and Windows MetaEditor/native MT5
   policy workflow passed on commit `212e47d6889139a275fe83aee2678164bf060431`.
-  A CI-only password-authentication hardening rerun is pending on the latest
-  branch head.
+  The follow-up password-authentication hardening run also passed on commit
+  `e56016827b08876e7bcf89207b0eea692e5fc3a0`; later branch changes are
+  documentation-only.
 - Live trading promotion: not approved by this audit; selected-broker demo
   evidence, deployed bridge protocol verification, and remaining operational
   release gates are still required.
