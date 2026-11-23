@@ -2,12 +2,12 @@
 
 - Upstream: https://github.com/cirvannaco-png/Midas-touch2-.git
 - Branch: main
-- Commit: 52d737237c08f36d668853312f643cb74d4548da
+- Commit: 6dad8a00a522e3fd507b0f2669de47bcb47e43ee
 - Snapshot path: backend/source/
 
 This imports the complete upstream project tree (495 files and all 495 paths),
 excluding its Git object database. It preserves source, tests, migrations,
-docs, deployment manifests, and research tooling. Three imported files have
+docs, deployment manifests, and research tooling. The imported snapshot is refreshed through 6dad8a00a522e3fd507b0f2669de47bcb47e43ee. Three imported files have
 target-specific extensions for execution-deal slippage provenance and the
 matching tests; the detailed paths and rationale are recorded in
 docs/INTEGRATED_TRADING_ARCHITECTURE_AUDIT.md.
