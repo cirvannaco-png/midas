@@ -39,7 +39,6 @@ be promoted merely because it exists on a source branch.
 | [#33](https://github.com/cirvannaco-png/Midas-touch2-/pull/33) | Feature-flagged environment hard-loss firewall | Research feature flag; require ablation and default-off verification |
 | [#32](https://github.com/cirvannaco-png/Midas-touch2-/pull/32) | Inducement structural provenance | Telemetry; inspect compatibility and lineage |
 | [#30](https://github.com/cirvannaco-png/Midas-touch2-/pull/30) | Causal SMC FVG loss-reduction candidate | Research candidate; preserve default/promotion boundary |
-| [#?](https://github.com/cirvannaco-png/Midas-touch2-) | Additional PR inventory | GitHub search returned 17 open PRs, all listed above |
 
 ## Completion rule
 
