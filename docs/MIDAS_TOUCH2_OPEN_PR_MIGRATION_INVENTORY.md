@@ -40,6 +40,10 @@ be promoted merely because it exists on a source branch.
 | [#32](https://github.com/cirvannaco-png/Midas-touch2-/pull/32) | Inducement structural provenance | Telemetry; inspect compatibility and lineage |
 | [#30](https://github.com/cirvannaco-png/Midas-touch2-/pull/30) | Causal SMC FVG loss-reduction candidate | Research candidate; preserve default/promotion boundary |
 
+## Detailed disposition
+
+See [`MIDAS_TOUCH2_OPEN_PR_DISPOSITION_2026-11-23.md`](MIDAS_TOUCH2_OPEN_PR_DISPOSITION_2026-11-23.md) for per-PR decisions, evidence limits, target architecture conflicts, and follow-up actions. Margin-aware admission from source PR #167 is tracked as canonical Midas issue [#36](https://github.com/cirvannaco-png/midas/issues/36).
+
 ## Completion rule
 
 This inventory is not proof that the open PRs have been migrated. The migration is
