@@ -497,7 +497,7 @@
       {
         "path": "development/EA/MedisTouch_v2.8.source.mq5",
         "git_blob_sha": "5aa2ef080f3673f665d328ec21be106753298714",
-        "size_bytes": 117757
+        "size_bytes": 117785
       },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
