@@ -38,15 +38,27 @@ The candidate was not profitable across the full 2025 sample. The second half er
 
 The candidate was negative in June and July, then positive in August through November 21. The 72 completed entries are still a modest sample; the strong recent result is not proof of durable edge.
 
+## Extended 2026 comparison: January 1–November 21
+
+The same three candidates were also run on ten independent monthly folds (October and November 1–21 combined). Each fold used the same USD 1,500 starting balance and risk overrides. Saved session rows were grouped by `openingFillId` to compute completed-entry statistics.
+
+| Candidate | Completed entry lots | Wins / losses | Win rate | Profit factor | Sum of monthly net P&L |
+|---|---:|---:|---:|---:|---:|
+| Trend-only v6 | 91 | 76 / 15 | 83.5% | 1.536 | **+$10.49** |
+| Direction-Aware Rank B v2 | 347 | 272 / 75 | 78.4% | 1.007 | +$0.60 |
+| Fresh-Sweep Router v3 | 197 | 152 / 45 | 77.2% | 1.062 | +$3.67 |
+
+These are sums of ten independently reset monthly simulations, not one continuously compounded account curve. The trend-only candidate had no trades in March and only 3 entries in February and 1 in April; the lower frequency is material when interpreting its result. It led this comparison, but it remains regime-sensitive: its 2025 combined result was negative and its 2026 January, June, and July folds were negative.
+
 ## Matched candidate comparison
 
 All values below are sums of independent monthly folds, each starting at USD 1,500. They are not compounded equity curves.
 
-| Candidate | Jul–Dec 2025 net | Jun–Nov 21 2026 net | Interpretation |
+| Candidate | Jul–Dec 2025 net | Jan–Nov 21 2026 net | Interpretation |
 |---|---:|---:|---|
-| Trend-only v6 | -$9.57 | +$7.70 | Best aggregate of the three in these two comparison blocks, but negative in 2025 |
-| Direction-Aware Rank B v2 | -$20.46 | -$5.39 | More frequent trading; materially weaker on these folds |
-| Fresh-Sweep Router v3 | -$12.50 | +$2.40 | Positive recent block, but below trend-only |
+| Trend-only v6 | -$9.57 | **+$10.49** | Best relative result in the 2026 block, but negative in 2025 |
+| Direction-Aware Rank B v2 | -$20.46 | +$0.60 | More frequent trading; near-flat net result on these folds |
+| Fresh-Sweep Router v3 | -$12.50 | +$3.67 | Positive 2026 block, but below trend-only |
 
 The six-month StrategyTune runs for Direction-Aware Rank B and Fresh-Sweep exceeded the per-run 120-second deadline. They were replaced with six completed independent monthly folds for each candidate. The monthly folds are the comparison evidence.
 
