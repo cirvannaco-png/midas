@@ -89,3 +89,10 @@ This is a partial port of the candidate's trend-regime eligibility rule into the
 The trend-only continuation gate is integrated as a **disabled research option** because it was the strongest relative candidate in the tested 2025 H2 and 2026 June–November comparison blocks. It is **not promoted to a production default**: the full 2025 combined result was negative, June–July 2026 were also negative, sample size is limited, and costs/native execution are not represented.
 
 Next acceptance gates: run matched native MT5 Strategy Tester ablations with the gate off/on, use the exact broker-server UTC offset evidence, preserve the user's current risk profile and all admission controls, evaluate an untouched future period, then run broker-demo stop modification, ledger, margin, and restart-recovery checks. No live trading is authorized by this research.
+
+
+## Locked OOS contamination disclosure — 2026-11-25
+
+The repository's locked reservation file specifies `2026-11-13T17:18:40Z` through `2027-02-13T17:18:40Z`, maturity through `2027-02-27T17:18:40Z`, status `reserved_unscored`, and requires external freshness attestation. This report's October 1–November 21 2026 fold intersects the reserved period. Its November 13–21 segment is therefore **not an untouched holdout** and is contaminated for candidate selection, parameter tuning, and independent OOS claims. Treat the full reported result as exploratory/descriptive only; do not use the overlapping segment as validation.
+
+No further strategy comparisons may use the reserved interval. Preserve the reservation and audit trail. A replacement holdout must be newly reserved strictly after the existing maturity end and externally freshness-attested before scoring. Do not silently reset or edit the existing reservation to make previously inspected data appear unused.
