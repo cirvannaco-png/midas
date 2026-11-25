@@ -44,6 +44,8 @@ private:
    bool         m_enabled;
    bool         m_enable_single_swing;
    bool         m_use_dual_lane_rank_b;
+   bool         m_trend_only_continuation;
+   double       m_min_trend_slope_atr;
    int          m_max_signal_age_bars;
    int          m_lookback_bars;
    double       m_directional_advantage;
@@ -140,6 +142,10 @@ private:
 
       const double atr = ATR(1);
       if(!(atr > 0.0)) return out;
+      if(!IsContinuationSlopeAllowed(TrendSlopeProxyATR(),
+                                     m_trend_only_continuation,
+                                     m_min_trend_slope_atr))
+         return out;
 
       double fast = 0.0;
       double slow = 0.0;
@@ -395,7 +401,8 @@ private:
 public:
                      CFreshSweepAdditiveRouter()
       : m_candles(NULL), m_enabled(false), m_enable_single_swing(false),
-        m_use_dual_lane_rank_b(false), m_max_signal_age_bars(4), m_lookback_bars(50),
+        m_use_dual_lane_rank_b(false), m_trend_only_continuation(false),
+        m_min_trend_slope_atr(0.45), m_max_signal_age_bars(4), m_lookback_bars(50),
         m_directional_advantage(5.0)
      {
      }
@@ -403,12 +410,18 @@ public:
    void Configure(CCandleData *candles, bool enabled,
                   bool enableSingleSwingFallback, int maxSignalAgeBars = 4,
                   int lookbackBars = 50, double directionalAdvantage = 5.0,
-                  bool useDualLaneRankB = false)
+                  bool useDualLaneRankB = false,
+                  bool trendOnlyContinuation = false,
+                  double minTrendSlopeATR = 0.45)
      {
       m_candles = candles;
       m_enabled = enabled;
       m_enable_single_swing = enableSingleSwingFallback;
       m_use_dual_lane_rank_b = useDualLaneRankB;
+      m_trend_only_continuation = trendOnlyContinuation;
+      m_min_trend_slope_atr = (MathIsValidNumber(minTrendSlopeATR) &&
+                               minTrendSlopeATR >= 0.0 && minTrendSlopeATR <= 5.0)
+                              ? minTrendSlopeATR : 0.45;
       m_max_signal_age_bars = MathMax(1, MathMin(20, maxSignalAgeBars));
       m_lookback_bars = MathMax(10, MathMin(100, lookbackBars));
       m_directional_advantage = (directionalAdvantage >= 0.0 &&
@@ -441,8 +454,19 @@ public:
      {
       // StrategyTune adaptiveFallbackPD: range <0.20, reject [0.20,0.45),
       // trend >=0.45. Negative/invalid slope values fail closed.
-      return trendSlopeATR >= 0.0 &&
+      return MathIsValidNumber(trendSlopeATR) && trendSlopeATR >= 0.0 &&
              (trendSlopeATR < 0.20 || trendSlopeATR >= 0.45);
+     }
+
+   static bool IsContinuationSlopeAllowed(double trendSlopeATR,
+                                          bool requireTrendOnly,
+                                          double minTrendSlopeATR = 0.45)
+     {
+      if(!requireTrendOnly) return true;
+      if(!MathIsValidNumber(trendSlopeATR) ||
+         !MathIsValidNumber(minTrendSlopeATR) || minTrendSlopeATR < 0.0)
+         return false;
+      return trendSlopeATR >= minTrendSlopeATR;
      }
 
    static bool SelectDirection(const MidasFreshSweepCandidate &buy,

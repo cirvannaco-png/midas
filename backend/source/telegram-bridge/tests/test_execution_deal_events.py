@@ -163,6 +163,7 @@ def test_execution_ledger_health_verifies_api_key_and_database(client):
         "database": "connected",
         "execution_ledger": "ready",
         "ledger_schema": "ready",
+        "margin_admission_version": "midas-account-margin-v1",
     }
 
 def test_breakeven_protected_open_position_accepts_zero_remaining_stop_risk(client):

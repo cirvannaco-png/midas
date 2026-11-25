@@ -55,6 +55,18 @@ void OnStart()
               "trend-like single-swing setups become eligible at 0.45 ATR");
    AssertTrue(!CFreshSweepAdditiveRouter::IsSingleSwingSlopeAllowed(-1.0),
               "invalid trend-slope measurements fail closed");
+   AssertTrue(CFreshSweepAdditiveRouter::IsContinuationSlopeAllowed(0.20,false,0.45),
+              "disabled continuation trend gate preserves the existing fallback");
+   AssertTrue(!CFreshSweepAdditiveRouter::IsContinuationSlopeAllowed(0.449,true,0.45),
+              "trend-only continuation rejects a slope below the configured threshold");
+   AssertTrue(CFreshSweepAdditiveRouter::IsContinuationSlopeAllowed(0.45,true,0.45),
+              "trend-only continuation admits the exact configured slope threshold");
+   AssertTrue(CFreshSweepAdditiveRouter::IsContinuationSlopeAllowed(0.90,true,0.45),
+              "trend-only continuation admits a stronger trend slope");
+   AssertTrue(!CFreshSweepAdditiveRouter::IsContinuationSlopeAllowed(-1.0,true,0.45),
+              "invalid slope evidence fails closed when trend-only mode is enabled");
+   AssertTrue(!CFreshSweepAdditiveRouter::IsContinuationSlopeAllowed(0.90,true,-0.1),
+              "invalid minimum slope configuration fails closed");
 
    MidasFreshSweepCandidate contBuy=Candidate(50.0);
    MidasFreshSweepCandidate contSell;

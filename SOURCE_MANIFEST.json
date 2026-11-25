@@ -496,8 +496,8 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "328fa052126a2936e66e101649c54f1361551fb3",
-        "size_bytes": 115503
+        "git_blob_sha": "5aa2ef080f3673f665d328ec21be106753298714",
+        "size_bytes": 117785
       },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
@@ -601,8 +601,8 @@
       },
       {
         "path": "development/EA/includes/Execution/BrokerAdapter.mqh",
-        "git_blob_sha": "0eb4180373662818142b56d1b528c36033dfb5b6",
-        "size_bytes": 26651
+        "git_blob_sha": "91b279e48ecf1f6161e89890f799c887b6158506",
+        "size_bytes": 26971
       },
       {
         "path": "development/EA/includes/Execution/BrokerQuoteValidator.mqh",
@@ -626,8 +626,8 @@
       },
       {
         "path": "development/EA/includes/Execution/ExecutionLedgerClient.mqh",
-        "git_blob_sha": "288497e66dc929b4365b860e9bf50e6230c9a81b",
-        "size_bytes": 17581
+        "git_blob_sha": "07115955d0fed0918cc3f1d5edafbf236aaa425e",
+        "size_bytes": 19888
       },
       {
         "path": "development/EA/includes/Execution/OrderManager.mqh",
@@ -881,8 +881,8 @@
       },
       {
         "path": "development/EA/includes/Trading/FreshSweepAdditiveRouter.mqh",
-        "git_blob_sha": "cb113a2e1f19430a22aece647cbebd71c5515aa8",
-        "size_bytes": 23582
+        "git_blob_sha": "0f7a8d43acd3c23fd98fc53aaf8f812d4656a61d",
+        "size_bytes": 24796
       },
       {
         "path": "development/EA/includes/Trading/OutcomeTracker.mqh",
@@ -906,8 +906,8 @@
       },
       {
         "path": "development/EA/includes/Trading/StrategyTradeZone.mqh",
-        "git_blob_sha": "cc735fc847521db99657530d013eea29a7a2d213",
-        "size_bytes": 18073
+        "git_blob_sha": "be0b0da9eaf1d80757ae18e35e7f666fc296c478",
+        "size_bytes": 18456
       },
       {
         "path": "development/EA/includes/Trading/Targets.mqh",
@@ -971,8 +971,8 @@
       },
       {
         "path": "development/EA/tests/FreshSweepAdditiveRouter.mq5",
-        "git_blob_sha": "469e715682e55c9f72efc61cf25ddf436ad5a0f2",
-        "size_bytes": 5962
+        "git_blob_sha": "76e604b03bb25266863299dea48474e0922095e5",
+        "size_bytes": 6960
       },
       {
         "path": "development/EA/tests/OpposingPositionPolicy.mq5",

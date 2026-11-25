@@ -261,7 +261,12 @@ bool CBrokerAdapter::ValidateStopDistance(string symbol, double refPrice, double
 bool CBrokerAdapter::LastRequestOk(string action)
   {
    uint code=m_trade.ResultRetcode();
-   if(code==TRADE_RETCODE_DONE || code==TRADE_RETCODE_PLACED || code==TRADE_RETCODE_DONE_PARTIAL) return true;
+   if(code==TRADE_RETCODE_DONE || code==TRADE_RETCODE_DONE_PARTIAL) return true;
+   // PLACED means accepted, not completed. It is valid for a new market or
+   // pending-order request only; stop changes, deletes and closes must wait
+   // for a completion retcode before their manager state can advance.
+   if(code==TRADE_RETCODE_PLACED &&
+      (action=="PlaceLimit" || action=="MarketBuy" || action=="MarketSell")) return true;
    PrintFormat("MedisTouch BrokerAdapter: %s failed, retcode=%d (%s)",action,code,m_trade.ResultRetcodeDescription());
    return false;
   }

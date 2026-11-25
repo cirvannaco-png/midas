@@ -410,3 +410,10 @@ but doesn't have to — an outcome with no matching `signals` row still records 
 `realized_r`/`mfe_r`/`mae_r` should be sent as `null`, not `0.0` — a real 0.0R scratch and "not
 applicable" are different things and the expectancy metrics need to tell them apart.
 
+
+
+### Account-wide margin admission
+
+The execution ledger reserves broker-calculated margin under a single Midas portfolio key per broker server/account, shared across Midas charts and symbols. Each reserve request requires `free_margin`, `required_margin`, `margin_snapshot_epoch` (UTC Unix seconds), and `account_currency`. The bridge rejects stale snapshots older than 10 seconds and timestamps more than 2 seconds in the future.
+
+`MIDAS_MIN_FREE_MARGIN_BUFFER_RATIO` configures the minimum free-margin buffer; the default is `0.20` (20%), and accepted values are `0.05` through `0.90`. Invalid values prevent service startup. Pending-order synchronization also requires broker-calculated `required_margin` and `account_currency`. Missing or contradictory margin evidence fails closed.

@@ -6,6 +6,8 @@ A caller must complete the existing EA order-check/send/acknowledgement path.
 from __future__ import annotations
 
 import math
+import os
+import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
@@ -15,6 +17,22 @@ from app.models import ExecutionLedger, ExecutionPositionModification, Portfolio
 
 LEASE_SECONDS = 30
 MAX_PORTFOLIO_HEAT_R = 3.0
+MAX_MARGIN_SNAPSHOT_AGE_SECONDS = 10.0
+MAX_MARGIN_SNAPSHOT_FUTURE_SECONDS = 2.0
+
+
+def _margin_buffer_ratio() -> float:
+    raw = os.getenv("MIDAS_MIN_FREE_MARGIN_BUFFER_RATIO", "0.20")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("MIDAS_MIN_FREE_MARGIN_BUFFER_RATIO must be numeric") from exc
+    if not math.isfinite(value) or not 0.05 <= value <= 0.90:
+        raise RuntimeError("MIDAS_MIN_FREE_MARGIN_BUFFER_RATIO must be between 0.05 and 0.90")
+    return value
+
+
+MIN_FREE_MARGIN_BUFFER_RATIO = _margin_buffer_ratio()
 TERMINAL_STATES = {"REJECTED", "CANCELLED", "RECONCILED"}
 ALLOWED_TRANSITIONS = {
     "RESERVED": {"CHECKED", "REJECTED", "CANCELLED"},
@@ -35,6 +53,83 @@ async def _portfolio_lock(session: AsyncSession, portfolio_key: str) -> None:
             ),
             {"portfolio_key": portfolio_key},
         )
+
+
+def _normalize_account_currency(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("account_currency must be a 3-8 character currency code")
+    normalized = value.strip().upper()
+    if not re.fullmatch(r"[A-Z]{3,8}", normalized):
+        raise ValueError("account_currency must be a 3-8 character alphabetic currency code")
+    return normalized
+
+
+def _validate_margin_snapshot(
+    *, free_margin: float, required_margin: float, margin_snapshot_epoch: int,
+    account_currency: str, now: datetime,
+) -> tuple[datetime, str]:
+    if isinstance(free_margin, bool) or not isinstance(free_margin, (int, float)) or not math.isfinite(free_margin) or free_margin <= 0:
+        raise ValueError("free_margin must be finite and greater than zero")
+    if isinstance(required_margin, bool) or not isinstance(required_margin, (int, float)) or not math.isfinite(required_margin) or required_margin <= 0:
+        raise ValueError("required_margin must be finite and greater than zero")
+    if isinstance(margin_snapshot_epoch, bool) or not isinstance(margin_snapshot_epoch, int) or margin_snapshot_epoch <= 0:
+        raise ValueError("margin_snapshot_epoch must be a positive UTC Unix timestamp")
+    currency = _normalize_account_currency(account_currency)
+    try:
+        snapshot_at = datetime.fromtimestamp(margin_snapshot_epoch, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError) as exc:
+        raise ValueError("margin_snapshot_epoch is invalid") from exc
+    age = (now - snapshot_at).total_seconds()
+    if age > MAX_MARGIN_SNAPSHOT_AGE_SECONDS or age < -MAX_MARGIN_SNAPSHOT_FUTURE_SECONDS:
+        raise ValueError("margin snapshot is stale or from the future")
+    return snapshot_at, currency
+
+
+def _event_time(row: ExecutionLedger) -> datetime | None:
+    raw = (row.result_json or {}).get("last_transition_at")
+    if not isinstance(raw, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _unreflected_margin(
+    rows: list[ExecutionLedger], *, snapshot_at: datetime, account_currency: str,
+) -> float:
+    total = 0.0
+    for row in rows:
+        if row.state in TERMINAL_STATES:
+            continue
+        request = row.request_json or {}
+        row_currency = request.get("account_currency")
+        if row_currency is not None and row_currency != account_currency:
+            raise ValueError("active portfolio rows use a different account currency")
+        state = row.state
+        event_at = _event_time(row)
+        # Reservations not yet sent to the broker are never represented in
+        # ACCOUNT_MARGIN_FREE. Ambiguous sends/recovery are also retained.
+        if state in {"RESERVED", "CHECKED", "SENT", "RECOVERING"}:
+            must_count = True
+        elif state in {"ACKED", "FILLED"}:
+            if event_at is None:
+                raise ValueError("active broker order/fill is missing durable transition-time evidence")
+            must_count = event_at > snapshot_at
+        else:
+            must_count = False
+        if not must_count:
+            continue
+        margin = request.get("required_margin")
+        if isinstance(margin, bool) or not isinstance(margin, (int, float)) or not math.isfinite(margin) or margin <= 0:
+            raise ValueError("active reservation has missing or invalid required-margin evidence")
+        if row_currency != account_currency:
+            raise ValueError("active reservation account currency is missing or mismatched")
+        total += float(margin)
+    return total
 
 
 def _validate_risk(
@@ -65,15 +160,24 @@ async def reserve_execution(
     risk_r: float,
     volatility: float,
     factors: dict[str, float],
+    free_margin: float,
+    required_margin: float,
+    margin_snapshot_epoch: int,
+    account_currency: str,
     max_heat_r: float = MAX_PORTFOLIO_HEAT_R,
     portfolio_key: str = "legacy-unscoped",
 ) -> bool:
-    """Atomically reserve normalized heat inside one account portfolio."""
+    """Atomically reserve portfolio heat and broker margin against one fresh account snapshot."""
     if not portfolio_key or len(portfolio_key) > 128:
         raise ValueError("portfolio_key must be 1-128 characters")
     _validate_risk(risk_r, volatility, factors)
     if not 0 < max_heat_r <= MAX_PORTFOLIO_HEAT_R:
         raise ValueError(f"max_heat_r must be in (0, {MAX_PORTFOLIO_HEAT_R}]")
+    now = datetime.now(timezone.utc)
+    snapshot_at, currency = _validate_margin_snapshot(
+        free_margin=free_margin, required_margin=required_margin,
+        margin_snapshot_epoch=margin_snapshot_epoch, account_currency=account_currency, now=now,
+    )
     await _portfolio_lock(session, portfolio_key)
 
     existing = await session.scalar(
@@ -109,7 +213,20 @@ async def reserve_execution(
     if current_heat + abs(risk_r) > max_heat_r:
         return False
 
-    now = datetime.now(timezone.utc)
+    active_rows = (
+        await session.execute(
+            select(ExecutionLedger)
+            .where(
+                ExecutionLedger.portfolio_key == portfolio_key,
+                ExecutionLedger.state.notin_(TERMINAL_STATES),
+            )
+            .with_for_update()
+        )
+    ).scalars().all()
+    unreflected = _unreflected_margin(active_rows, snapshot_at=snapshot_at, account_currency=currency)
+    if required_margin + unreflected > float(free_margin) * (1.0 - MIN_FREE_MARGIN_BUFFER_RATIO):
+        return False
+
     lease_until = now + timedelta(seconds=LEASE_SECONDS)
     session.add(
         ExecutionLedger(
@@ -123,7 +240,12 @@ async def reserve_execution(
                 "risk_r": risk_r,
                 "volatility": volatility,
                 "factor_exposure": factors,
+                "required_margin": float(required_margin),
+                "free_margin_snapshot": float(free_margin),
+                "margin_snapshot_epoch": margin_snapshot_epoch,
+                "account_currency": currency,
             },
+            result_json={"last_transition_at": now.isoformat()},
             created_at=now,
             lease_until=lease_until,
         )
@@ -178,6 +300,7 @@ async def transition_execution(
             if current.get(key) is True and result.get(key) is False:
                 return False
         current.update(result)
+        current["last_transition_at"] = datetime.now(timezone.utc).isoformat()
         row.result_json = current
         await session.flush()
         return True
@@ -235,6 +358,8 @@ async def transition_execution(
     now = datetime.now(timezone.utc)
     row.state = state
     if result is not None:
+        result = dict(result)
+        result["last_transition_at"] = now.isoformat()
         row.result_json = result
         for key, column in (
             ("broker_order_id", "broker_order_id"),
@@ -245,6 +370,8 @@ async def transition_execution(
             if value is not None:
                 setattr(row, column, str(value))
 
+    if result is None:
+        row.result_json = {**(row.result_json or {}), "last_transition_at": now.isoformat()}
     if state == "CHECKED":
         row.checked_at = now
     if state == "SENT":
@@ -427,7 +554,7 @@ async def reconcile_open_position(
                 "volatility": volatility,
                 "factor_exposure": factors,
             },
-            result_json={},
+            result_json={"last_transition_at": now.isoformat()},
             created_at=now,
             checked_at=now,
             sent_at=now,
@@ -452,6 +579,7 @@ async def reconcile_open_position(
     merged = dict(row.result_json or {})
     merged.update(
         {
+            "last_transition_at": now.isoformat(),
             "broker_confirmed_fill": True,
             "broker_reconciled": True,
             "broker_position_id": broker_position_id,
@@ -653,11 +781,16 @@ async def sync_pending_order(
     volatility: float,
     factors: dict[str, float],
     evidence_ref: str,
+    required_margin: float,
+    account_currency: str,
 ) -> tuple[str, float, bool]:
-    """Import a live pending order into the account portfolio's risk book."""
+    """Import a live pending order with margin evidence into the account risk book."""
     if not broker_order_id or not evidence_ref:
         raise ValueError("broker_order_id and evidence_ref are required")
     _validate_risk(risk_r, volatility, factors)
+    if isinstance(required_margin, bool) or not isinstance(required_margin, (int, float)) or not math.isfinite(required_margin) or required_margin <= 0:
+        raise ValueError("required_margin must be finite and greater than zero")
+    currency = _normalize_account_currency(account_currency)
     await _portfolio_lock(session, portfolio_key)
     row = await _lookup_broker_record(
         session, portfolio_key=portfolio_key, broker_order_id=broker_order_id
@@ -683,8 +816,10 @@ async def sync_pending_order(
                 "risk_r": risk_r,
                 "volatility": volatility,
                 "factor_exposure": factors,
+                "required_margin": float(required_margin),
+                "account_currency": currency,
             },
-            result_json={},
+            result_json={"last_transition_at": now.isoformat()},
             created_at=now,
             checked_at=now,
             sent_at=now,
@@ -694,14 +829,21 @@ async def sync_pending_order(
     else:
         if row.portfolio_key != portfolio_key:
             raise ValueError("pending order portfolio does not match")
-        if row.state not in {"RECONCILED", "CANCELLED", "REJECTED", "FILLED"}:
-            row.state = "ACKED"
+        if row.state in TERMINAL_STATES or row.state == "FILLED":
+            raise ValueError("live pending-order snapshot conflicts with a terminal or filled ledger state")
+        row.state = "ACKED"
         row.broker_order_id = broker_order_id
         row.symbol = symbol
+        row.request_json = {
+            **(row.request_json or {}),
+            "required_margin": float(required_margin),
+            "account_currency": currency,
+        }
         row.lease_until = now + timedelta(seconds=LEASE_SECONDS)
     merged = dict(row.result_json or {})
     merged.update(
         {
+            "last_transition_at": now.isoformat(),
             "broker_acknowledged": True,
             "broker_order_id": broker_order_id,
             "evidence_ref": evidence_ref,

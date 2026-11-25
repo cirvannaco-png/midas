@@ -12,12 +12,24 @@ from app.execution_control import (
     reconcile_open_position,
     reconcile_terminal_order,
     recover_expired_leases,
-    reserve_execution,
     sync_pending_order,
     transition_execution,
     update_position_risk,
 )
+from app.execution_control import (
+    reserve_execution as _reserve_execution,
+)
 from app.models import ExecutionLedger, ExecutionPositionModification, PortfolioReservation
+
+
+async def reserve_execution(session, **kwargs):
+    """Keep legacy heat tests explicit while supplying valid default margin evidence."""
+    kwargs.setdefault("free_margin", 10_000.0)
+    kwargs.setdefault("required_margin", 100.0)
+    kwargs.setdefault("margin_snapshot_epoch", int(datetime.now(timezone.utc).timestamp()) + 1)
+    kwargs.setdefault("account_currency", "USD")
+    return await _reserve_execution(session, **kwargs)
+
 
 TABLES = [
     Base.metadata.tables["execution_ledger"],
@@ -237,7 +249,12 @@ def test_execution_ledger_route_requires_api_key(client):
         "direction": "BUY",
         "risk_r": 0.25,
         "volatility": 0.5,
-        "factors": {"usd": 1.0},
+        "factors": {"usd": 1.0} ,
+        "free_margin": 1000.0,
+        "required_margin": 100.0,
+        "margin_snapshot_epoch": int(__import__("time").time()),
+        "account_currency": "USD",
+        "margin_admission_version": "midas-account-margin-v1",
     }
     missing = client.post("/execution-ledger/reserve", json=payload)
     assert missing.status_code == 422
@@ -259,11 +276,17 @@ def test_execution_ledger_api_is_mounted_and_rejects_duplicate_requests(client, 
         "direction": "BUY",
         "risk_r": 0.25,
         "volatility": 0.5,
-        "factors": {"usd": 1.0},
+        "factors": {"usd": 1.0} ,
+        "free_margin": 1000.0,
+        "required_margin": 100.0,
+        "margin_snapshot_epoch": int(__import__("time").time()),
+        "account_currency": "USD",
+        "margin_admission_version": "midas-account-margin-v1",
     }
     first = client.post("/execution-ledger/reserve", json=payload, headers=auth_headers)
     assert first.status_code == 200
     assert first.json()["state"] == "RESERVED"
+    assert first.json()["margin_admission_version"] == "midas-account-margin-v1"
 
     duplicate = client.post("/execution-ledger/reserve", json=payload, headers=auth_headers)
     assert duplicate.status_code == 409
@@ -442,6 +465,8 @@ async def test_pending_order_is_adopted_and_only_released_with_terminal_broker_e
                 volatility=0.7,
                 factors={},
                 evidence_ref="mt5-order-snapshot:4567",
+                required_margin=120.0,
+                account_currency="USD",
             )
             assert request_id == "pending:Broker:777:magic-9:4567"
             assert heat == 0.8
@@ -840,6 +865,11 @@ def test_ai_cannot_reserve_broker_execution_even_with_a_client_supplied_actor(cl
         "volatility": 0.1,
         "factors": {},
         "requested_by": "AI_AGENT",
+        "free_margin": 1000.0,
+        "required_margin": 100.0,
+        "margin_snapshot_epoch": int(__import__("time").time()),
+        "account_currency": "USD",
+        "margin_admission_version": "midas-account-margin-v1",
     }
     response = client.post(
         "/execution-ledger/reserve",
@@ -939,7 +969,12 @@ def test_invalid_bridge_key_is_rejected_before_reservation(client):
         "risk_r": 0.1,
         "volatility": 0.1,
         "factors": {},
-        "requested_by": "MT5_EA",
+        "requested_by": "MT5_EA" ,
+        "free_margin": 1000.0,
+        "required_margin": 100.0,
+        "margin_snapshot_epoch": int(__import__("time").time()),
+        "account_currency": "USD",
+        "margin_admission_version": "midas-account-margin-v1",
     }
     response = client.post(
         "/execution-ledger/reserve",
@@ -949,3 +984,123 @@ def test_invalid_bridge_key_is_rejected_before_reservation(client):
         },
     )
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_margin_admission_counts_prior_unfilled_reservations_against_same_snapshot():
+    engine, factory = await make_session_factory()
+    try:
+        snapshot = int(datetime.now(timezone.utc).timestamp())
+        async with factory() as session:
+            assert await reserve_execution(
+                session, request_id="margin-first", signal_id="margin-s1", symbol="EURUSD",
+                direction="BUY", risk_r=0.5, volatility=0.2, factors={}, portfolio_key="account-wide",
+                free_margin=1000.0, required_margin=500.0, margin_snapshot_epoch=snapshot,
+                account_currency="USD",
+            )
+            await session.commit()
+        async with factory() as session:
+            assert not await reserve_execution(
+                session, request_id="margin-second", signal_id="margin-s2", symbol="GBPUSD",
+                direction="SELL", risk_r=0.5, volatility=0.2, factors={}, portfolio_key="account-wide",
+                free_margin=1000.0, required_margin=350.0, margin_snapshot_epoch=snapshot,
+                account_currency="USD",
+            )
+            await session.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_margin_admission_rejects_stale_future_and_nonpositive_snapshots():
+    from app.execution_control import _validate_margin_snapshot
+
+    now = datetime.now(timezone.utc)
+    base = {"free_margin": 1000.0, "required_margin": 100.0, "account_currency": "USD", "now": now}
+    with pytest.raises(ValueError, match="stale or from the future"):
+        _validate_margin_snapshot(**base, margin_snapshot_epoch=int((now - timedelta(seconds=20)).timestamp()))
+    with pytest.raises(ValueError, match="stale or from the future"):
+        _validate_margin_snapshot(**base, margin_snapshot_epoch=int((now + timedelta(seconds=10)).timestamp()))
+    with pytest.raises(ValueError, match="free_margin"):
+        _validate_margin_snapshot(**{**base, "free_margin": 0.0}, margin_snapshot_epoch=int(now.timestamp()))
+    with pytest.raises(ValueError, match="required_margin"):
+        _validate_margin_snapshot(**{**base, "required_margin": 0.0}, margin_snapshot_epoch=int(now.timestamp()))
+
+
+@pytest.mark.asyncio
+async def test_margin_admission_rejects_currency_mismatch_and_missing_margin_on_ambiguous_row():
+    engine, factory = await make_session_factory()
+    try:
+        async with factory() as session:
+            assert await reserve_execution(
+                session, request_id="currency-first", signal_id="currency-s1", symbol="EURUSD",
+                direction="BUY", risk_r=0.5, volatility=0.2, factors={}, portfolio_key="account-currency",
+                free_margin=1000.0, required_margin=100.0,
+                margin_snapshot_epoch=int(datetime.now(timezone.utc).timestamp()), account_currency="USD",
+            )
+            await session.commit()
+        async with factory() as session:
+            with pytest.raises(ValueError, match="different account currency"):
+                await reserve_execution(
+                    session, request_id="currency-second", signal_id="currency-s2", symbol="EURUSD",
+                    direction="BUY", risk_r=0.5, volatility=0.2, factors={}, portfolio_key="account-currency",
+                    free_margin=1000.0, required_margin=100.0,
+                    margin_snapshot_epoch=int(datetime.now(timezone.utc).timestamp()), account_currency="KES",
+                )
+            await session.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_pending_order_margin_is_not_double_counted_after_fresh_broker_snapshot():
+    engine, factory = await make_session_factory()
+    try:
+        async with factory() as session:
+            request_id, _, _ = await sync_pending_order(
+                session, portfolio_key="pending-account", request_id="pending-margin-1",
+                broker_order_id="broker-pending-1", symbol="EURUSD", direction="BUY",
+                risk_r=0.5, volatility=0.2, factors={}, evidence_ref="mt5-order-snapshot:1",
+                required_margin=300.0, account_currency="USD",
+            )
+            row = await session.scalar(select(ExecutionLedger).where(ExecutionLedger.request_id == request_id))
+            row.result_json = {**(row.result_json or {}), "last_transition_at": (datetime.now(timezone.utc)-timedelta(seconds=3)).isoformat()}
+            await session.commit()
+        async with factory() as session:
+            assert await reserve_execution(
+                session, request_id="after-pending-snapshot", signal_id="pending-s2", symbol="GBPUSD",
+                direction="SELL", risk_r=0.5, volatility=0.2, factors={}, portfolio_key="pending-account",
+                free_margin=1000.0, required_margin=500.0,
+                margin_snapshot_epoch=int(datetime.now(timezone.utc).timestamp()), account_currency="USD",
+            )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_fill_after_snapshot_remains_in_margin_budget_until_next_snapshot():
+    engine, factory = await make_session_factory()
+    try:
+        snapshot = int(datetime.now(timezone.utc).timestamp())
+        async with factory() as session:
+            assert await reserve_execution(
+                session, request_id="filled-margin-1", signal_id="filled-s1", symbol="EURUSD",
+                direction="BUY", risk_r=0.5, volatility=0.2, factors={}, portfolio_key="filled-account",
+                free_margin=1000.0, required_margin=500.0, margin_snapshot_epoch=snapshot, account_currency="USD",
+            )
+            await session.commit()
+        async with factory() as session:
+            assert await transition_execution(session, request_id="filled-margin-1", state="CHECKED")
+            assert await transition_execution(session, request_id="filled-margin-1", state="SENT", result={"broker_order_id": "o-1"})
+            assert await transition_execution(session, request_id="filled-margin-1", state="FILLED", result={"broker_confirmed_fill": True, "broker_deal_id": "d-1"})
+            await session.commit()
+        async with factory() as session:
+            assert not await reserve_execution(
+                session, request_id="filled-margin-2", signal_id="filled-s2", symbol="GBPUSD",
+                direction="SELL", risk_r=0.5, volatility=0.2, factors={}, portfolio_key="filled-account",
+                free_margin=1000.0, required_margin=350.0, margin_snapshot_epoch=snapshot, account_currency="USD",
+            )
+            await session.rollback()
+    finally:
+        await engine.dispose()

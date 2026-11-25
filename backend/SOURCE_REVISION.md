@@ -1,29 +1,27 @@
-# Backend source snapshot
+# Backend source base and Midas overlay
 
 - Upstream: https://github.com/cirvannaco-png/Midas-touch2-.git
-- Branch: main
-- Commit: 52d737237c08f36d668853312f643cb74d4548da
-- Snapshot path: backend/source/
+- Reviewed upstream commit: `6dad8a00a522e3fd507b0f2669de47bcb47e43ee`
+- Snapshot path: `backend/source/`
+- Midas overlay manifest: `backend/overlays/upstream-6dad8a00a522e3fd507b0f2669de47bcb47e43ee/manifest.json`
+- Overlay files: 19
 
-This imports the complete upstream project tree (495 files and all 495 paths),
-excluding its Git object database. It preserves source, tests, migrations,
-docs, deployment manifests, and research tooling. Three imported files have
-target-specific extensions for execution-deal slippage provenance and the
-matching tests; the detailed paths and rationale are recorded in
-docs/INTEGRATED_TRADING_ARCHITECTURE_AUDIT.md.
+The upstream base contains the reviewed 495-file source tree. Midas-specific
+reconciliations are applied from the versioned overlay after every refresh;
+`backend/source/` is therefore the upstream base plus the explicit Midas
+overlay, not a byte-for-byte unmodified upstream checkout. The overlay
+manifest records each file's SHA-256 and size. `scripts/apply_backend_source_overlays.py`
+verifies the source commit and every overlay file hash, and fails closed on a
+different upstream commit. Review the new upstream diff and regenerate the
+overlay before changing the pin.
 
-Files nested under backend/source/.github/ are provenance only; GitHub Actions
-does not execute workflows from nested directories.
+The overlay preserves the target-specific tester/deal-attribution extensions
+and the Midas-native account-wide margin-admission contract, including its
+bridge API, regression tests, and protocol version. See
+`docs/MIDAS_MARGIN_ADMISSION_IMPLEMENTATION.md` and the overlay manifest for
+the exact files.
 
-The canonical distributable EA is the generated, self-contained
-`development/EA/MedisTouch_v2.8.mq5`, built from the modular entrypoint
-`development/EA/MedisTouch_v2.8.source.mq5` and local modules under
-`development/EA/includes/`. Native tests remain separate under
-`development/EA/tests/`. The imported
-backend/source/EA/ tree is the upstream reference snapshot, not a second
-active build target. The active MetaEditor workflow is
-.github/workflows/mt5-compile.yml.
-
-The snapshot is not a claim that every backend or research capability is wired
-into the root MT5 EA. Integration contracts and runtime validation remain
-separate gates.
+Files nested under `backend/source/.github/` are provenance only; GitHub
+Actions does not execute workflows from nested directories. The active Midas
+EA build is `development/EA/MedisTouch_v2.8.mq5`; active CI workflows are at
+the repository root.

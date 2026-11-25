@@ -11,6 +11,20 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: midas_test
+          POSTGRES_DB: midas_test
+          POSTGRES_PASSWORD: midas_ci_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U midas_test -d midas_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,6 +53,15 @@ jobs:
         run: python -m pytest tests/research/test_strategytune_session_reconcile.py -q
       - name: Test confidence diagnostics OOS evaluator
         run: python -m pytest tests/research/test_confidence_diagnostics.py -q
+      - name: Test canonical Midas bridge and account-wide margin admission
+        env:
+          PYTHONPATH: backend/source:backend/source/telegram-bridge
+          MIDAS_TEST_POSTGRES_URL: postgresql+asyncpg://midas_test:midas_ci_test_only@localhost:5432/midas_test
+        run: |
+          python -m pip install -r backend/source/telegram-bridge/requirements.txt pytest pytest-asyncio
+          python -m pytest backend/source/telegram-bridge -q
+      - name: Test account-wide margin, broker retcode, and backend overlay contracts
+        run: python -m pytest tests/research/test_margin_admission_contract.py tests/research/test_broker_retcode_contract.py tests/research/test_backend_source_overlay_contract.py -q
       - name: Commit deterministic generated EA when source changed
         if: github.event_name != 'pull_request'
         shell: bash

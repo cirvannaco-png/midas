@@ -11,6 +11,7 @@ private:
    string m_baseUrl;
    string m_apiKey;
    string m_portfolioKey;
+   string m_instanceKey;
    int    m_timeoutMs;
    bool   m_ready;
    bool   m_healthVerified;
@@ -27,7 +28,7 @@ private:
       return value;
      }
 
-   bool PostJson(const string path,const string &payload)
+   bool PostJson(const string path,const string &payload,const string expectedResponseToken="")
      {
       if(!m_ready) return false;
 
@@ -57,6 +58,17 @@ private:
          PrintFormat("Midas execution ledger: POST %s returned HTTP %d; response=%s",path,status,CharArrayToString(result));
          return false;
         }
+      if(StringLen(expectedResponseToken)>0)
+        {
+         string responseBody=CharArrayToString(result,0,-1,CP_UTF8);
+         if(StringFind(responseBody,expectedResponseToken)<0)
+           {
+            m_healthVerified=false;
+            m_admissionHealthy=false;
+            PrintFormat("Midas execution ledger: POST %s omitted required protocol confirmation; admission remains blocked. body=%s",path,responseBody);
+            return false;
+           }
+        }
       return true;
      }
 
@@ -69,6 +81,7 @@ public:
       m_apiKey=apiKey;
       m_timeoutMs=MathMax(1000,timeoutMs);
       m_portfolioKey="";
+      m_instanceKey="";
       m_ready=false;
       m_healthVerified=false;
       m_admissionHealthy=false;
@@ -82,12 +95,18 @@ public:
       string server=JsonSafe(AccountInfoString(ACCOUNT_SERVER));
       string login=IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN));
       string magicText=IntegerToString((long)magicNumber);
-      // Account + broker server + strategy magic defines an isolated risk book.
-      m_portfolioKey=server+":"+login+":"+magicText;
-      if(StringLen(m_portfolioKey)>80)
+      // One account-wide Midas book: all symbols and Midas instances share the
+      // same broker-server/account key, regardless of chart magic number.
+      m_portfolioKey=server+":"+login+":midas";
+      // Keep idempotency keys instance-scoped even though risk admission is
+      // account-scoped. ChartID prevents same-magic/same-symbol chart collisions.
+      m_instanceKey=magicText+":"+StringSubstr(JsonSafe(_Symbol),0,12)+":"+
+                    IntegerToString((int)_Period)+":"+IntegerToString((long)ChartID());
+      if(StringLen(m_portfolioKey)>96 || StringLen(m_instanceKey)>72)
         {
-         Print("Midas execution ledger: portfolio key exceeds safe request-ID budget.");
+         Print("Midas execution ledger: account or instance key exceeds safe request-ID budget.");
          m_portfolioKey="";
+         m_instanceKey="";
          return;
         }
       m_ready=true;
@@ -136,10 +155,11 @@ public:
       string quote=CharToString(34);
       string readinessToken=quote+"execution_ledger"+quote+":"+quote+"ready"+quote;
       string schemaToken=quote+"ledger_schema"+quote+":"+quote+"ready"+quote;
-      if(StringFind(body,readinessToken)<0 || StringFind(body,schemaToken)<0)
+      string marginToken=quote+"margin_admission_version"+quote+":"+quote+"midas-account-margin-v1"+quote;
+      if(StringFind(body,readinessToken)<0 || StringFind(body,schemaToken)<0 || StringFind(body,marginToken)<0)
         {
          m_admissionHealthy=false;
-         PrintFormat("Midas execution ledger: health response did not confirm execution_ledger=ready and ledger_schema=ready; body=%s",body);
+         PrintFormat("Midas execution ledger: health response did not confirm execution_ledger=ready, ledger_schema=ready, and margin_admission_version=midas-account-margin-v1; body=%s",body);
          return false;
         }
       m_healthVerified=true;
@@ -163,7 +183,7 @@ public:
 
    string RequestIdForDecision(const long decisionId,const int legIndex)
      {
-      return m_portfolioKey+":decision:"+IntegerToString(decisionId)+":leg:"+IntegerToString(legIndex);
+      return m_instanceKey+":decision:"+IntegerToString(decisionId)+":leg:"+IntegerToString(legIndex);
      }
 
    string RequestIdForPosition(const ulong positionIdentifier)
@@ -178,17 +198,24 @@ public:
 
    bool Reserve(const long decisionId,const int legIndex,const string signalId,
                 const string symbol,const string direction,const double riskR,
-                const double volatility,string &requestId)
+                const double volatility,const double requiredMargin,const double freeMargin,
+                const long marginSnapshotEpoch,const string accountCurrency,string &requestId)
      {
       requestId=RequestIdForDecision(decisionId,legIndex);
       if(!AdmissionReady() || StringLen(requestId)>128 || riskR<=0.0 ||
-         !MathIsValidNumber(riskR) || volatility<0.0 || !MathIsValidNumber(volatility))
+         !MathIsValidNumber(riskR) || volatility<0.0 || !MathIsValidNumber(volatility) ||
+         requiredMargin<=0.0 || !MathIsValidNumber(requiredMargin) ||
+         freeMargin<=0.0 || !MathIsValidNumber(freeMargin) || marginSnapshotEpoch<=0 ||
+         StringLen(accountCurrency)<3 || StringLen(accountCurrency)>8)
          return false;
       string payload=StringFormat(
-         "{\"portfolio_key\":\"%s\",\"request_id\":\"%s\",\"signal_id\":\"%s\",\"symbol\":\"%s\",\"direction\":\"%s\",\"risk_r\":%.8f,\"volatility\":%.8f,\"factors\":{},\"max_heat_r\":3.0,\"requested_by\":\"MT5_EA\"}",
+         "{\"portfolio_key\":\"%s\",\"request_id\":\"%s\",\"signal_id\":\"%s\",\"symbol\":\"%s\",\"direction\":\"%s\",\"risk_r\":%.8f,\"volatility\":%.8f,\"free_margin\":%.8f,\"required_margin\":%.8f,\"margin_snapshot_epoch\":%I64d,\"account_currency\":\"%s\",\"margin_admission_version\":\"midas-account-margin-v1\",\"factors\":{},\"max_heat_r\":3.0,\"requested_by\":\"MT5_EA\"}",
          JsonSafe(m_portfolioKey),JsonSafe(requestId),JsonSafe(signalId),
-         JsonSafe(symbol),JsonSafe(direction),riskR,volatility);
-      return PostJson("/execution-ledger/reserve",payload);
+         JsonSafe(symbol),JsonSafe(direction),riskR,volatility,freeMargin,requiredMargin,
+         marginSnapshotEpoch,JsonSafe(accountCurrency));
+      string quote=CharToString(34);
+      string versionToken=quote+"margin_admission_version"+quote+":"+quote+"midas-account-margin-v1"+quote;
+      return PostJson("/execution-ledger/reserve",payload,versionToken);
      }
 
    bool Transition(const string requestId,const string state,const string resultJson="{}")
@@ -217,16 +244,20 @@ public:
      }
 
    bool SyncPendingOrder(const ulong orderTicket,const string symbol,const string direction,
-                         const double riskR,const double volatility,const string evidenceRef,
+                         const double riskR,const double volatility,const double requiredMargin,
+                         const string accountCurrency,const string evidenceRef,
                          const string requestIdOverride="")
      {
-      if(!m_ready || orderTicket==0 || riskR<=0.0 || !MathIsValidNumber(riskR)) return false;
+      if(!m_ready || orderTicket==0 || riskR<=0.0 || !MathIsValidNumber(riskR) ||
+         requiredMargin<=0.0 || !MathIsValidNumber(requiredMargin) ||
+         StringLen(accountCurrency)<3 || StringLen(accountCurrency)>8) return false;
       string requestId=requestIdOverride;
       if(StringLen(requestId)==0) requestId=RequestIdForPendingOrder(orderTicket);
       string payload=StringFormat(
-         "{\"portfolio_key\":\"%s\",\"request_id\":\"%s\",\"broker_order_id\":\"%I64u\",\"symbol\":\"%s\",\"direction\":\"%s\",\"risk_r\":%.8f,\"volatility\":%.8f,\"factors\":{},\"evidence_ref\":\"%s\"}",
+         "{\"portfolio_key\":\"%s\",\"request_id\":\"%s\",\"broker_order_id\":\"%I64u\",\"symbol\":\"%s\",\"direction\":\"%s\",\"risk_r\":%.8f,\"volatility\":%.8f,\"required_margin\":%.8f,\"account_currency\":\"%s\",\"factors\":{},\"evidence_ref\":\"%s\"}",
          JsonSafe(m_portfolioKey),JsonSafe(requestId),orderTicket,
-         JsonSafe(symbol),JsonSafe(direction),riskR,MathMax(0.0,volatility),JsonSafe(evidenceRef));
+         JsonSafe(symbol),JsonSafe(direction),riskR,MathMax(0.0,volatility),
+         requiredMargin,JsonSafe(accountCurrency),JsonSafe(evidenceRef));
       return PostJson("/execution-ledger/sync-pending-order",payload);
      }
 

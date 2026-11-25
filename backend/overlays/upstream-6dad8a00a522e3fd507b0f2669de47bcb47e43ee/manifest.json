@@ -1,0 +1,103 @@
+{
+  "upstream_repository": "https://github.com/cirvannaco-png/Midas-touch2-.git",
+  "upstream_commit": "6dad8a00a522e3fd507b0f2669de47bcb47e43ee",
+  "overlay_path": "backend/overlays/upstream-6dad8a00a522e3fd507b0f2669de47bcb47e43ee",
+  "files": [
+    {
+      "path": "docs/CONTINUATION_ROUTER_MATCHED_MT5_TEST_PLAN_2026-11-19.md",
+      "sha256": "a861ae5dc0a0a2c978e16d1160841de34f4a18711e5f9d952a021ad72d9aa8e9",
+      "size_bytes": 14027
+    },
+    {
+      "path": "docs/COST_STRESS_WALK_FORWARD_AND_OOS_PROTOCOL_2026-10-13.md",
+      "sha256": "71e07c907185a42d1f76a96b2f42f1b3ebd3de28dc072d230324a27bc92b4124",
+      "size_bytes": 12870
+    },
+    {
+      "path": "docs/LOCKED_OOS_RESERVATION_2026-11-13_TO_2027-02-13.json",
+      "sha256": "013628e7736d5c4735561386b0f09307aa279f58c09f923fd5508c8b4e98ea1e",
+      "size_bytes": 329
+    },
+    {
+      "path": "telegram-bridge/README.md",
+      "sha256": "c00c4f1dd3b14bfd495be50f266c432de5cb26bbdc8d095d312dcd5adcb7bbb1",
+      "size_bytes": 34303
+    },
+    {
+      "path": "telegram-bridge/app/api/execution_ledger.py",
+      "sha256": "09f0b4e3042c12e4404bfc2342baeb3b6e2fb80b16c6128f768067d502007ab5",
+      "size_bytes": 25846
+    },
+    {
+      "path": "telegram-bridge/app/execution_control.py",
+      "sha256": "c4a02cf9561ac95345d356cceb4504851a25cbc30e6a44a4493571d6ec89d346",
+      "size_bytes": 42134
+    },
+    {
+      "path": "telegram-bridge/tests/test_execution_control.py",
+      "sha256": "b6390b952c887b9ac3c060c6ba5f35bcd71a63b6194070250b2156a9acd8ef68",
+      "size_bytes": 42571
+    },
+    {
+      "path": "telegram-bridge/tests/test_execution_deal_events.py",
+      "sha256": "41dde35beff455e0eaacdcabd130797ef9f0b9a57cfb33bd6431c6274971198b",
+      "size_bytes": 6294
+    },
+    {
+      "path": "telegram-bridge/tests/test_execution_ledger_health.py",
+      "sha256": "7b1d1f13a4fdea0ea0d1ad82b6bc8be8b82e52dad9155633379fddae7f785759",
+      "size_bytes": 2559
+    },
+    {
+      "path": "telegram-bridge/tests/test_execution_margin_postgres.py",
+      "sha256": "8141fbe656d8e19002d2a65fd062da1862a171ef24ea67f30f3090485936ed14",
+      "size_bytes": 3009
+    },
+    {
+      "path": "tools/compare_mt5_continuation_runs.py",
+      "sha256": "e1216e282e19a784d560e8101e93aa55a4a9685a1ef2e4282a61c02852e4564d",
+      "size_bytes": 47291
+    },
+    {
+      "path": "tools/cost_stress_monte_carlo.py",
+      "sha256": "de4916a24786bcd062c2dc8f702ce0b93fc242d5822b79f376795cdb93630457",
+      "size_bytes": 20426
+    },
+    {
+      "path": "tools/position_ledger_metrics.py",
+      "sha256": "7eaec03d88a4066100544c0b30875df3aa7cc529b56bcc7a257cfc93eb7a8e00",
+      "size_bytes": 31447
+    },
+    {
+      "path": "tools/strategytune_position_ledger.py",
+      "sha256": "e979ddf9d28ef4478d5529ef2679e3d7b9509a3a057f3a431748be1e2bc89f13",
+      "size_bytes": 13135
+    },
+    {
+      "path": "tools/tests/test_compare_mt5_continuation_runs.py",
+      "sha256": "5c69ca1a623de51ef98ff2b7a30486ebc3da9faa01cda8d46845b3f0e1bb979a",
+      "size_bytes": 22552
+    },
+    {
+      "path": "tools/tests/test_cost_stress_monte_carlo.py",
+      "sha256": "b763e992fc5542d351117c62b7a372514fb28ab26c4256d784c4bd69f9a0bb3d",
+      "size_bytes": 6138
+    },
+    {
+      "path": "tools/tests/test_position_ledger_metrics.py",
+      "sha256": "a6c5288eb34f961b24b27d582f5a91cb98e3833229c3b115b75aaec8de0eb999",
+      "size_bytes": 19919
+    },
+    {
+      "path": "tools/tests/test_strategytune_position_ledger.py",
+      "sha256": "0d74e6f681866655dd2dda0e67b4f2670cca8ae186c5dbfa80b99cab386deb0a",
+      "size_bytes": 3268
+    },
+    {
+      "path": "tools/tests/test_tester_deal_export_contract.py",
+      "sha256": "239098edaa44290d5b4ad271d83019df44fc146dbb20c5f00b01886a2300000c",
+      "size_bytes": 6945
+    }
+  ],
+  "deleted_paths": []
+}

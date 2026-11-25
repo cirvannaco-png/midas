@@ -31,6 +31,7 @@ def test_execution_ledger_health_reports_schema_ready(client, auth_headers):
     assert body["database"] == "connected"
     assert body["execution_ledger"] == "ready"
     assert body["ledger_schema"] == "ready"
+    assert body["margin_admission_version"] == "midas-account-margin-v1"
 
 
 @pytest.mark.parametrize("schema_gap", ["missing_table", "missing_column"])
