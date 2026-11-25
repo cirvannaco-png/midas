@@ -33,13 +33,13 @@ The 0.50R variant substantially improved this losing month's net result and prof
 
 The 0.35R variant added only $2.23 while reducing win rate by 5.21 percentage points and slightly reducing profit factor. The 0.50R variant turned a profitable baseline fold into a loss and reduced win rate by nearly 15 percentage points.
 
-## Combined July–September diagnostic
+## Continuous July–September diagnostic
 
-Summing the independently reset folds (not a compounded account curve):
-- Baseline 0.25R: 146 closed positions, 107 wins / 39 losses, 73.29% win rate, -$91.46 net.
-- Variant 0.50R: 146 closed positions, 90 wins / 56 losses, 61.64% win rate, -$69.26 net, 0.876 combined profit factor (computed from grouped gross wins/losses).
+Separate continuous three-month runs were also completed, with one USD 10,000 starting balance per run:
+- Baseline 0.25R: 146 closed positions, 107 wins / 39 losses, 73.29% win rate, -$88.92 net, profit factor 0.756.
+- Variant 0.50R: 146 closed positions, 90 wins / 56 losses, 61.64% win rate, -$64.82 net, profit factor 0.876.
 
-The 0.50R target improved the combined loss by $22.20 but did not produce positive expectancy, and its performance reversed between the two folds. This is regime dependence, not a robust improvement. The 0.35R target's combined net was -$88.03, only $3.43 better than baseline, with a lower win rate and no demonstrated robust profit-factor gain.
+The 0.50R target reduced the loss by $24.10 and improved profit factor, but lowered position win rate by 11.65 percentage points and remained unprofitable. Its performance also reversed between the July and August–September folds. This is regime dependence, not a robust improvement. For reference, adding the independently reset monthly-fold P&Ls gives -$91.46 for baseline and -$69.26 for 0.50R; those sums are not the same as the continuous three-month runs. The 0.35R monthly-fold P&L sum was -$88.03, only $3.43 better than baseline, with lower win rate and no demonstrated robust profit-factor gain.
 
 ## Later fold
 
