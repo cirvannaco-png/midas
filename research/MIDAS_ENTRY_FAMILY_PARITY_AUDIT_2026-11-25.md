@@ -15,6 +15,8 @@ This distinction is material:
 
 ## Source-level gate map
 
+There is also a direct continuation-formula mismatch. Native MQL5 `BuildContinuation` uses body ratio >= 0.35, signal range/ATR >= 0.45, an EMA pullback touch within eight bars, and quality floor 48. StrategyTune v2.14's `continuationChain` uses body ratio >= 0.40, range/ATR >= 0.60, a pullback touch within bars 1–5, and the configurable `fallbackQualityFloor` (default 55). Thus even an isolated StrategyTune continuation run would not be an exact native continuation replay without first aligning those conditions and proving completed-bar/indexing parity. Do not port its continuation metrics into production claims.
+
 | Entry family | StrategyTune research gate | Native MQL5 boundary |
 |---|---|---|
 | Strict SMC | `minQuality`, reward/risk floor, shared optional RVOL/Fibonacci checks | Existing native setup builders and shared scoring/decision validation; not the additive router's default route |
