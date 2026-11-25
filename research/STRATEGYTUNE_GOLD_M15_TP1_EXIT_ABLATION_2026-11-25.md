@@ -43,7 +43,7 @@ The 0.50R target reduced the loss by $24.10 and improved profit factor, but lowe
 
 ## Later fold
 
-A 0.50R run for 2025-10-01–2026-01-01 was submitted, but remained running at the time this report was written. It is excluded from all conclusions until a complete, warning-free result and position-grouped session rows are available.
+A 0.50R run for 2025-10-01–2026-01-01 was submitted but failed with `job exceeded deadline 120000ms`. It produced no valid result or saved session and is excluded from all conclusions. The pre-existing 0.25R baseline for this window is positive (+$13.28 platform P&L), so the proposed 0.50R variant has not passed this later-fold check.
 
 ## Decision
 
