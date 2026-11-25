@@ -92,7 +92,7 @@ The nested `backend/source/EA/` tree is an upstream reference snapshot, **not a 
 
 ### Research and external validation tools
 
-- `research/`: StrategyTune research reports and archived candidate artifacts. Gold M15 StrategyTune source/metadata for v2.6, v2.7, v2.12, and v2.13 are preserved under `research/strategytune/gold-m15/`. The latest position-grouped cross-candidate recheck is `research/STRATEGYTUNE_GOLD_M15_NOVEMBER_2026_CROSS_CANDIDATE_RECHECK.md`; it remains research-only and does not promote strategy defaults.
+- `research/`: StrategyTune research reports and archived candidate artifacts. Gold M15 StrategyTune source/metadata for v2.6, v2.7, v2.12, and v2.13 are preserved under `research/strategytune/gold-m15/`. The latest position-grouped cross-candidate recheck is `research/STRATEGYTUNE_GOLD_M15_NOVEMBER_2026_CROSS_CANDIDATE_RECHECK.md`; it remains research-only and does not promote strategy defaults. The TP1 exit ablation is archived in `research/STRATEGYTUNE_GOLD_M15_TP1_EXIT_ABLATION_2026-11-25.md`; neither tested target is promoted.
 - `backend/source/tools/`: imported upstream validation, MQL5 architecture, MT5 variant-comparison, walk-forward, trailing-stop experiment, and deal-ledger analysis tools.
 - `backend/source/medis_touch/`: research/reference implementation; it is not the live MT5 EA or the production execution bridge.
 - `backend/source/telegram-bridge/`: FastAPI execution-ledger and signal bridge source, migrations, and service tests. The Midas overlay requires `midas-account-margin-v1`; deploy the matching bridge before using an EA build that requires this protocol. The repository does not yet prove a live Midas bridge deployment.
