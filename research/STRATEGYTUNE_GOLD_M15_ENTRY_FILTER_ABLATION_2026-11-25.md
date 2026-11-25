@@ -37,3 +37,19 @@ All P&L is USD. The baseline July session had one position still open at the end
 **Reject both filter changes for promotion.** Keep `requireVolumeConfirmation=false` and the existing `minQuality=62` default. Do not alter EA behavior based on these two folds.
 
 Next research task should be a code-level audit of entry-family attribution: identify which family opens each position, ensure every intended quality/confirmation gate is applied consistently, and make persisted `openingFillId` outcomes the sole source for candidate-level statistics. Then repeat chronological training-fold ablations with adequate sample sizes and explicit drawdown/payoff criteria. Do not use the contaminated locked OOS interval (2026-11-13–2027-02-13) for tuning or validation. No live trading is authorized by this report.
+
+
+## Fibonacci-zone filter follow-up
+
+A further Aug–Sep 2025 run enabled `requireFibonacciZone=true` with the existing 50–61.8 retracement band. Grouped persisted-session results:
+
+| Configuration | Closed positions | Wins / losses | Win rate | Net P&L | Profit factor |
+|---|---:|---:|---:|---:|---:|
+| Baseline | 96 | 76 / 20 | 79.17% | +$25.85 | 1.139 |
+| Fibonacci-zone required | 4 | 3 / 1 | 75.00% | +$2.54 | 1.223 |
+
+The apparent PF increase is based on only four closed positions and is not statistically persuasive. The filter removed 95.8% of baseline positions and reduced the win rate; it does not demonstrate a reliable improvement. Keep `requireFibonacciZone=false` by default.
+
+## Updated conclusion
+
+The volume and Fibonacci filters are both too selective on the tested fold, with very small samples and worse grouped win rates. The quality threshold change did not alter the Aug–Sep position outcomes. No entry filter is promoted. The next useful engineering work is entry-family attribution and gate-coverage auditing, not more blind threshold sweeps.
