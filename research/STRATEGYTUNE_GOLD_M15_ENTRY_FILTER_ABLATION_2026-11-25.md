@@ -53,3 +53,17 @@ The apparent PF increase is based on only four closed positions and is not stati
 ## Updated conclusion
 
 The volume and Fibonacci filters are both too selective on the tested fold, with very small samples and worse grouped win rates. The quality threshold change did not alter the Aug–Sep position outcomes. No entry filter is promoted. The next useful engineering work is entry-family attribution and gate-coverage auditing, not more blind threshold sweeps.
+
+
+## Active single-swing quality gate follow-up
+
+Source inspection showed that `minQuality` gates the strict `chain()` family, while the active single-swing fallback has its own `singleSwingMinQuality` input. The Aug–Sep fold was therefore rerun with the relevant gate raised from 55 to 68:
+
+| Configuration | Closed positions | Wins / losses | Win rate | Net P&L | Profit factor |
+|---|---:|---:|---:|---:|---:|
+| Baseline (`singleSwingMinQuality=55`) | 96 | 76 / 20 | 79.17% | +$25.85 | 1.139 |
+| Raised gate (`singleSwingMinQuality=68`) | 86 | 67 / 19 | 77.91% | +$14.62 | 1.080 |
+
+The stricter gate removed 10 positions but lowered win rate by 1.26 percentage points, reduced net P&L by $11.23, and reduced profit factor. Reject the 68 threshold; keep the default 55.
+
+This confirms that the previous `minQuality=68` no-op was a wrong-gate experiment for the dominant fallback path, not evidence that all quality controls are inert. The active family-specific gate has now been tested directly and did not improve this fold.
