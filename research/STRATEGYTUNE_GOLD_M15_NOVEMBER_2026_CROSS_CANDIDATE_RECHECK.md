@@ -36,3 +36,17 @@ These are position-group counts, not engine close-row counts. The raw engine rep
 **No new strategy code or default changes are justified by this recheck.** The existing MQL5 `InpFreshSweepTrendOnlyContinuation` gate remains false by default, and the parent Fresh-Sweep additive router remains disabled by default. Keep the candidate research-only.
 
 The evidence supports retaining Fresh-Sweep and Trend-Only as controlled, opt-in research candidates, not enabling either in live defaults. Before promotion, require a locked, non-overlapping OOS period; cost-inclusive native MT5 Strategy Tester ablations; position-level accounting; and broker-demo validation of fills, margin admission, protective-stop amendments, ledger persistence, and restart recovery. No live trading is authorized by this report.
+
+
+## Locked out-of-sample contamination disclosure
+
+The repository also contains a locked reservation with:
+- `locked_oos_start=2026-11-13T17:18:40Z`
+- `locked_oos_end=2027-02-13T17:18:40Z`
+- `maturity_end=2027-02-27T17:18:40Z`
+- `status=reserved_unscored`
+- `external_freshness_attestation_required=true`
+
+The previously reported Trend-Only run covering 2026-10-01 through 2026-11-21 and the three follow-up runs covering 2026-11-01 through 2026-11-24 both intersect this reserved window. Therefore, the intersecting period has been exposed to strategy evaluation and is **contaminated for future candidate selection, parameter tuning, and independent OOS performance claims**. The results above are descriptive diagnostics only; they must not be represented as validation on the locked holdout.
+
+Do not run further strategy comparisons against the reserved interval. Preserve the reservation and its audit trail. A replacement holdout must be newly reserved strictly after the existing maturity end (2027-02-27T17:18:40Z), use a frozen strategy/configuration, and obtain the required external freshness attestation before scoring. The existing reservation file must not be silently edited or reset to make the old period appear unused.
