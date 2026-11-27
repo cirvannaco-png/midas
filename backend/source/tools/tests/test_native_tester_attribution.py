@@ -76,6 +76,7 @@ def test_outcome_reader_joins_by_stable_decision_id(tmp_path):
     rows = read_decision_outcomes(path)
     assert len(rows) == 1
     assert rows[0]["decision_id"] == "77"
+    assert rows[0]["run_id"] == "diagnostic-run"
     assert rows[0]["session"] == "SESSION_LONDON"
     assert rows[0]["mfe_r"] == 1.2
     assert rows[0]["realized_r"] == 0.1
