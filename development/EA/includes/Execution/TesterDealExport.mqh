@@ -23,6 +23,11 @@ struct TesterDealExportRow
    long decision_id;
    string strategy;
    string regime;
+   string direction;
+   string session;
+   double initial_stop_price;
+   double initial_stop_distance_points;
+   string deal_reason;
    double requested_price;
    double slippage_points;
    double slippage_cost_cash;
@@ -35,6 +40,10 @@ struct TesterPositionAttribution
    long decision_id;
    string strategy;
    string regime;
+   string direction;
+   string session;
+   double initial_stop_price;
+   double initial_stop_distance_points;
   };
 
 class CTesterDealExport
@@ -75,7 +84,9 @@ private:
      }
 
    void RememberAttribution(const ulong positionId,const long decisionId,
-                            const string strategy,const string regime)
+                            const string strategy,const string regime,
+                            const string direction,const string session,
+                            const double initialStopPrice,const double initialStopDistancePoints)
      {
       if(positionId==0) return;
       int index=AttributionIndex(positionId);
@@ -91,6 +102,10 @@ private:
          m_attributions[index].decision_id=decisionId;
          m_attributions[index].strategy=(StringLen(strategy)>0?strategy:"UNTAGGED");
          m_attributions[index].regime=(StringLen(regime)>0?regime:"UNTAGGED");
+         m_attributions[index].direction=(StringLen(direction)>0?direction:"UNTAGGED");
+         m_attributions[index].session=(StringLen(session)>0?session:"UNTAGGED");
+         m_attributions[index].initial_stop_price=initialStopPrice;
+         m_attributions[index].initial_stop_distance_points=initialStopDistancePoints;
          return;
         }
       if(m_attributions[index].strategy=="CONFLICT" ||
@@ -116,6 +131,14 @@ private:
          m_attributions[index].strategy=strategy;
       if(m_attributions[index].regime=="UNTAGGED" && StringLen(regime)>0 && regime!="UNTAGGED")
          m_attributions[index].regime=regime;
+      if(m_attributions[index].direction=="UNTAGGED" && StringLen(direction)>0 && direction!="UNTAGGED")
+         m_attributions[index].direction=direction;
+      if(m_attributions[index].session=="UNTAGGED" && StringLen(session)>0 && session!="UNTAGGED")
+         m_attributions[index].session=session;
+      if(m_attributions[index].initial_stop_price<=0.0 && initialStopPrice>0.0)
+         m_attributions[index].initial_stop_price=initialStopPrice;
+      if(m_attributions[index].initial_stop_distance_points<=0.0 && initialStopDistancePoints>0.0)
+         m_attributions[index].initial_stop_distance_points=initialStopDistancePoints;
      }
 
    string SafeName(string value)
@@ -221,7 +244,8 @@ private:
       ResetLastError();
       if(FileWrite(handle,"position_id","time","entry","volume","profit","commission",
                    "swap","fee","risk_cash","lane","deal_id","order_id","symbol",
-                   "decision_id","strategy","regime","requested_price","slippage_points",
+                   "decision_id","strategy","regime","direction","session","initial_stop_price",
+                   "initial_stop_distance_points","deal_reason","requested_price","slippage_points",
                    "slippage_cost_cash","slippage_known")==0)
          ok=false;
 
@@ -245,6 +269,11 @@ private:
                       IntegerToString(row.decision_id),
                       row.strategy,
                       row.regime,
+                      row.direction,
+                      row.session,
+                      (row.initial_stop_price>0.0?DoubleToString(row.initial_stop_price,10):""),
+                      (row.initial_stop_distance_points>0.0?DoubleToString(row.initial_stop_distance_points,8):""),
+                      row.deal_reason,
                       (row.slippage_known?DoubleToString(row.requested_price,10):""),
                       (row.slippage_known?DoubleToString(row.slippage_points,8):""),
                       (row.slippage_known?DoubleToString(row.slippage_cost_cash,8):""),
@@ -498,7 +527,9 @@ public:
                const double profit,const double commission,const double swap,
                const double fee,const double entryRiskCash,
                const long decisionId,const string strategy,const string regime,
-               const double requestedPrice,const double slippagePoints,
+               const string direction,const string session,
+               const double initialStopPrice,const double initialStopDistancePoints,
+               const string dealReason,const double requestedPrice,const double slippagePoints,
                const double slippageCostCash,const bool slippageKnown)
      {
       if(!m_enabled) return true;
@@ -531,7 +562,8 @@ public:
 
       int attribution=AttributionIndex(positionId);
       if(entry==DEAL_ENTRY_IN)
-         RememberAttribution(positionId,decisionId,strategy,regime);
+         RememberAttribution(positionId,decisionId,strategy,regime,direction,session,
+                             initialStopPrice,initialStopDistancePoints);
       else if(entry==DEAL_ENTRY_INOUT)
         {
          // A netting reversal preserves DEAL_POSITION_ID while changing exposure.
@@ -543,6 +575,8 @@ public:
             m_attributions[attribution].decision_id=0;
             m_attributions[attribution].strategy="CONFLICT";
             m_attributions[attribution].regime="CONFLICT";
+            m_attributions[attribution].direction="CONFLICT";
+            m_attributions[attribution].session="CONFLICT";
            }
         }
       else if(attribution<0 && decisionId>0)
@@ -551,6 +585,10 @@ public:
       long resolvedDecisionId=decisionId;
       string resolvedStrategy=strategy;
       string resolvedRegime=regime;
+      string resolvedDirection=direction;
+      string resolvedSession=session;
+      double resolvedInitialStopPrice=initialStopPrice;
+      double resolvedInitialStopDistancePoints=initialStopDistancePoints;
       if(attribution>=0)
         {
          // Once a netting reversal has made this identifier ambiguous, do not
@@ -561,6 +599,8 @@ public:
             resolvedDecisionId=0;
             resolvedStrategy="CONFLICT";
             resolvedRegime="CONFLICT";
+            resolvedDirection="CONFLICT";
+            resolvedSession="CONFLICT";
            }
          else
            {
@@ -569,10 +609,20 @@ public:
                resolvedStrategy=m_attributions[attribution].strategy;
             if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
                resolvedRegime=m_attributions[attribution].regime;
+            if(StringLen(resolvedDirection)==0 || resolvedDirection=="UNTAGGED")
+               resolvedDirection=m_attributions[attribution].direction;
+            if(StringLen(resolvedSession)==0 || resolvedSession=="UNTAGGED")
+               resolvedSession=m_attributions[attribution].session;
+            if(resolvedInitialStopPrice<=0.0)
+               resolvedInitialStopPrice=m_attributions[attribution].initial_stop_price;
+            if(resolvedInitialStopDistancePoints<=0.0)
+               resolvedInitialStopDistancePoints=m_attributions[attribution].initial_stop_distance_points;
            }
         }
       if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
       if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
+      if(StringLen(resolvedDirection)==0) resolvedDirection="UNTAGGED";
+      if(StringLen(resolvedSession)==0) resolvedSession="UNTAGGED";
 
       int seen=ArraySize(m_seenDeals);
       if(ArrayResize(m_seenDeals,seen+1)!=seen+1)
@@ -605,6 +655,11 @@ public:
       m_rows[count].decision_id=resolvedDecisionId;
       m_rows[count].strategy=resolvedStrategy;
       m_rows[count].regime=resolvedRegime;
+      m_rows[count].direction=resolvedDirection;
+      m_rows[count].session=resolvedSession;
+      m_rows[count].initial_stop_price=resolvedInitialStopPrice;
+      m_rows[count].initial_stop_distance_points=resolvedInitialStopDistancePoints;
+      m_rows[count].deal_reason=(StringLen(dealReason)>0?dealReason:"UNKNOWN");
       m_rows[count].requested_price=(slippageKnown?requestedPrice:0.0);
       m_rows[count].slippage_points=(slippageKnown?slippagePoints:0.0);
       m_rows[count].slippage_cost_cash=(slippageKnown?slippageCostCash:0.0);
