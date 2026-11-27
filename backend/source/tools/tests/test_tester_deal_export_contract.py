@@ -152,7 +152,8 @@ def test_export_metadata_contains_deal_level_cashflow_totals():
 
 def test_outcome_export_adds_stable_decision_and_session_join_keys():
     logger = read_modular("includes/Core/SignalLogger.mqh")
-    assert '"DecisionID", "Session"' in logger
+    assert '"DecisionID", "Session", "RunID"' in logger
+    assert "m_outcomeRunId" in logger
     assert "p.decisionId," in logger
     assert "EnumToString(p.setup.reasons.session)" in logger
 
