@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""Position-level diagnostics for native Midas MT5 tester deal + outcome exports.
+
+The deals CSV is authoritative for realized broker cashflows. The outcome CSV
+adds decision-level excursions and exit context. Partial exits are collapsed
+by position_id before calculating performance; decision-level outcomes are
+reported separately and never duplicated across multi-leg positions.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import math
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+from position_ledger_metrics import (
+    LedgerError,
+    calculate_metrics,
+    read_deals,
+    read_open_ids,
+    reconstruct_positions,
+    reject_reserved_oos_entries,
+)
+
+
+class AttributionError(ValueError):
+    pass
+
+
+def finite_number(value: str, field: str, row: int, *, optional: bool = False):
+    raw = (value or "").strip()
+    if not raw and optional:
+        return None
+    if not raw:
+        raise AttributionError(f"outcome row {row}: missing {field}")
+    try:
+        number = float(raw)
+    except ValueError as exc:
+        raise AttributionError(f"outcome row {row}: invalid {field}") from exc
+    if not math.isfinite(number):
+        raise AttributionError(f"outcome row {row}: non-finite {field}")
+    return number
+
+
+def read_export_metadata(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AttributionError(f"cannot read export metadata: {path}") from exc
+    if not isinstance(data, dict):
+        raise AttributionError("export metadata must be a JSON object")
+    if data.get("export_status") != "complete":
+        raise AttributionError("tester export is not marked complete")
+    expected = data.get("history_expected_deals")
+    recorded = data.get("history_recorded_deals")
+    missing = data.get("history_missing_deals")
+    if not all(isinstance(v, int) for v in (expected, recorded, missing)):
+        raise AttributionError("metadata lacks integer history reconciliation counts")
+    if expected != recorded or missing != 0:
+        raise AttributionError("tester export history reconciliation does not balance")
+    if data.get("deals_file_written") is not True or data.get("open_positions_file_written") is not True:
+        raise AttributionError("tester export artifacts are not both confirmed written")
+    if data.get("timestamp_basis") != "broker_wall_clock_with_explicit_offset":
+        raise AttributionError("unsupported or missing tester timestamp provenance")
+    offset = data.get("server_utc_offset_minutes")
+    if not isinstance(offset, int) or not -840 <= offset <= 840:
+        raise AttributionError("tester metadata has no verified broker UTC offset")
+    return data
+
+
+def read_position_labels(path: Path) -> dict[str, dict]:
+    required = {
+        "position_id", "direction", "session", "initial_stop_price",
+        "initial_stop_distance_points", "deal_reason",
+    }
+    grouped: dict[str, dict] = defaultdict(lambda: {
+        "directions": set(), "sessions": set(), "stop_prices": set(),
+        "stop_distances": set(), "deal_reasons": set(),
+    })
+    with path.open(newline="", encoding="utf-8-sig") as stream:
+        reader = csv.DictReader(stream)
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise AttributionError("deals CSV lacks required attribution columns: " + ", ".join(sorted(missing)))
+        for row_num, row in enumerate(reader, 2):
+            pid = (row.get("position_id") or "").strip()
+            if not pid:
+                raise AttributionError(f"deals row {row_num}: blank position_id")
+            target = grouped[pid]
+            direction = (row.get("direction") or "").strip().upper()
+            session = (row.get("session") or "").strip().upper()
+            reason = (row.get("deal_reason") or "").strip().upper()
+            if direction:
+                target["directions"].add(direction)
+            if session:
+                target["sessions"].add(session)
+            if reason:
+                target["deal_reasons"].add(reason)
+            stop_price = finite_number(row.get("initial_stop_price", ""), "initial_stop_price", row_num, optional=True)
+            stop_distance = finite_number(row.get("initial_stop_distance_points", ""), "initial_stop_distance_points", row_num, optional=True)
+            if stop_price is not None and stop_price > 0:
+                target["stop_prices"].add(round(stop_price, 10))
+            if stop_distance is not None and stop_distance > 0:
+                target["stop_distances"].add(round(stop_distance, 6))
+    output = {}
+    for pid, item in grouped.items():
+        if len(item["directions"]) > 1:
+            raise AttributionError(f"position {pid}: conflicting direction attribution")
+        # A position can be scaled into later; preserve the first known session
+        # from the exporter rather than inventing a session from its close time.
+        if len(item["sessions"]) > 1:
+            raise AttributionError(f"position {pid}: conflicting session attribution")
+        if len(item["stop_prices"]) > 1 or len(item["stop_distances"]) > 1:
+            raise AttributionError(f"position {pid}: conflicting initial-stop attribution")
+        output[pid] = {
+            "direction": next(iter(item["directions"]), "UNTAGGED"),
+            "session": next(iter(item["sessions"]), "UNTAGGED"),
+            "initial_stop_price": next(iter(item["stop_prices"]), None),
+            "initial_stop_distance_points": next(iter(item["stop_distances"]), None),
+            "deal_reasons": sorted(item["deal_reasons"]),
+        }
+    return output
+
+
+def read_decision_outcomes(path: Path) -> list[dict]:
+    required = {
+        "DecisionID", "Symbol", "Direction", "Session", "SelectedStrategy",
+        "Regime", "Outcome", "MFE_R", "MAE_R", "BarsHeld", "RealizedR",
+        "RealizedNetPnL", "OutcomeEpoch",
+    }
+    rows = []
+    seen = set()
+    with path.open(newline="", encoding="utf-8-sig") as stream:
+        reader = csv.DictReader(stream)
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise AttributionError("outcome CSV lacks required columns: " + ", ".join(sorted(missing)))
+        for row_num, row in enumerate(reader, 2):
+            decision = (row.get("DecisionID") or "").strip()
+            if not decision or decision == "0":
+                continue
+            if decision in seen:
+                raise AttributionError(f"outcome CSV contains duplicate DecisionID {decision}")
+            seen.add(decision)
+            if (row.get("Filled") or "").strip().lower() not in {"yes", "true", "1"}:
+                continue
+            rows.append({
+                "decision_id": decision,
+                "symbol": (row.get("Symbol") or "UNKNOWN").strip().upper(),
+                "direction": (row.get("Direction") or "UNTAGGED").strip().upper(),
+                "session": (row.get("Session") or "UNTAGGED").strip().upper(),
+                "strategy": (row.get("SelectedStrategy") or "UNTAGGED").strip().upper(),
+                "regime": (row.get("Regime") or "UNTAGGED").strip().upper(),
+                "exit_outcome": (row.get("Outcome") or "UNKNOWN").strip().upper(),
+                "mfe_r": finite_number(row.get("MFE_R", ""), "MFE_R", row_num),
+                "mae_r": finite_number(row.get("MAE_R", ""), "MAE_R", row_num),
+                "bars_held": finite_number(row.get("BarsHeld", ""), "BarsHeld", row_num),
+                "realized_r": finite_number(row.get("RealizedR", ""), "RealizedR", row_num),
+                "realized_net_pnl": finite_number(row.get("RealizedNetPnL", ""), "RealizedNetPnL", row_num),
+                "tp1_hit": (row.get("TP1_Hit") or "").strip().lower() in {"yes", "true", "1"},
+                "tp2_hit": (row.get("TP2_Hit") or "").strip().lower() in {"yes", "true", "1"},
+                "break_even_done": (row.get("BreakEvenDone") or "").strip().lower() in {"yes", "true", "1"},
+                "partial_done": (row.get("PartialDone") or "").strip().lower() in {"yes", "true", "1"},
+            })
+    return rows
+
+
+def summarize(rows: list[dict], initial_balance: float) -> dict:
+    wins = [p for p in rows if p["net_pnl"] > 1e-7]
+    losses = [p for p in rows if p["net_pnl"] < -1e-7]
+    flats = [p for p in rows if abs(p["net_pnl"]) <= 1e-7]
+    gp = sum(p["net_pnl"] for p in wins)
+    gl = -sum(p["net_pnl"] for p in losses)
+    r_values = [p["net_pnl"] / p["risk_cash"] for p in rows if p.get("risk_cash") and p["risk_cash"] > 0]
+    return {
+        "positions": len(rows), "wins": len(wins), "losses": len(losses), "breakeven": len(flats),
+        "win_rate_pct_excluding_flats": round(100 * len(wins) / (len(wins) + len(losses)), 2) if wins or losses else None,
+        "gross_profit": round(gp, 2), "gross_loss_abs": round(gl, 2),
+        "profit_factor": round(gp / gl, 4) if gl else (None if not gp else "no_losses"),
+        "net_pnl": round(sum(p["net_pnl"] for p in rows), 2),
+        "expectancy_per_position": round(sum(p["net_pnl"] for p in rows) / len(rows), 4) if rows else None,
+        "average_realized_R": round(sum(r_values) / len(r_values), 4) if r_values else None,
+        "positions_with_risk_cash": len(r_values),
+        "sample_status": "insufficient" if len(rows) < 30 else ("exploratory" if len(rows) < 100 else "larger_sample"),
+    }
+
+
+def grouped_metrics(positions: list[dict], initial_balance: float, keys: tuple[str, ...]) -> dict:
+    groups: dict[tuple, list] = defaultdict(list)
+    for p in positions:
+        groups[tuple(p.get(key, "UNKNOWN") for key in keys)].append(p)
+    output = {}
+    for key, rows in sorted(groups.items(), key=lambda x: tuple(str(v) for v in x[0])):
+        label = "|".join(str(v) for v in key)
+        output[label] = {**dict(zip(keys, key)), **summarize(rows, initial_balance)}
+    return output
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--deals", required=True, type=Path)
+    parser.add_argument("--open-positions", required=True, type=Path)
+    parser.add_argument("--metadata", required=True, type=Path)
+    parser.add_argument("--outcomes", required=True, type=Path)
+    parser.add_argument("--initial-balance", type=float, default=None)
+    parser.add_argument("--output", required=True, type=Path)
+    args = parser.parse_args()
+    try:
+        metadata = read_export_metadata(args.metadata)
+        deals = read_deals(args.deals)
+        reject_reserved_oos_entries(deals)
+        if len(deals) != metadata["history_recorded_deals"]:
+            raise AttributionError("deals CSV row count does not match export metadata")
+        open_ids = read_open_ids(args.open_positions)
+        positions, ignored = reconstruct_positions(deals, open_ids)
+        labels = read_position_labels(args.deals)
+        outcomes = read_decision_outcomes(args.outcomes)
+        decision_ids = {str(row["decision_id"]) for row in positions if row.get("decision_id")}
+        outcome_by_id = {row["decision_id"]: row for row in outcomes}
+        missing_outcomes = sorted(decision_ids - set(outcome_by_id))
+        initial_balance = args.initial_balance or float(metadata.get("initial_balance", 0.0))
+        if not math.isfinite(initial_balance) or initial_balance <= 0:
+            raise AttributionError("initial balance must be supplied or present in metadata")
+
+        deals_by_position: dict[str, list[dict]] = defaultdict(list)
+        for deal in deals:
+            deals_by_position[deal["position_id"]].append(deal)
+
+        enriched = []
+        for position in positions:
+            pid = position["position_id"]
+            position.update(labels.get(pid, {}))
+            rows = deals_by_position[pid]
+            position["gross_deal_profit"] = round(sum(d["profit"] for d in rows), 8)
+            position["commission_cashflow"] = round(sum(d["commission"] for d in rows), 8)
+            position["swap_cashflow"] = round(sum(d["swap"] for d in rows), 8)
+            position["fee_cashflow"] = round(sum(d["fee"] for d in rows), 8)
+            position["slippage_complete"] = all(d.get("slippage_known", False) for d in rows)
+            position["slippage_cost_cash"] = (
+                round(sum(d["slippage_cost_cash"] for d in rows), 8)
+                if position["slippage_complete"] else None
+            )
+            position["exit_deal_reasons"] = sorted({
+                str(raw.get("deal_reason", "")).upper()
+                for raw in csv.DictReader(args.deals.open(newline="", encoding="utf-8-sig"))
+                if str(raw.get("position_id", "")).strip() == pid and str(raw.get("entry", "")).upper() in {"OUT", "OUT_BY", "DEAL_ENTRY_OUT", "DEAL_ENTRY_OUT_BY"}
+            })
+            enriched.append(position)
+
+        total_rows = deals
+        losses = [p for p in enriched if p["net_pnl"] < -1e-7]
+        cost_breakdown = {
+            "gross_deal_profit_cashflow": round(sum(d["profit"] for d in total_rows), 2),
+            "commission_cashflow": round(sum(d["commission"] for d in total_rows), 2),
+            "swap_cashflow": round(sum(d["swap"] for d in total_rows), 2),
+            "fee_cashflow": round(sum(d["fee"] for d in total_rows), 2),
+            "known_adverse_slippage_cost_cash": round(sum(d["slippage_cost_cash"] for d in total_rows if d.get("slippage_known")), 2),
+            "deals_with_known_slippage": sum(1 for d in total_rows if d.get("slippage_known")),
+            "deals_with_unknown_slippage": sum(1 for d in total_rows if not d.get("slippage_known")),
+            "loss_positions": len(losses),
+            "loss_position_commission_cashflow": round(sum(p["commission_cashflow"] for p in losses), 2),
+            "loss_position_swap_cashflow": round(sum(p["swap_cashflow"] for p in losses), 2),
+            "loss_position_fee_cashflow": round(sum(p["fee_cashflow"] for p in losses), 2),
+            "loss_positions_with_complete_slippage": sum(1 for p in losses if p["slippage_complete"]),
+            "loss_position_known_slippage_cost_cash": round(sum(p["slippage_cost_cash"] or 0.0 for p in losses), 2),
+            "baseline_spread_points_mean": metadata.get("spread_points_mean"),
+            "baseline_spread_points_max": metadata.get("spread_points_max"),
+            "spread_cash_note": "Baseline spread is embedded in MT5 tester fills; do not subtract it again. Use cost_stress_monte_carlo.py for incremental spread-widening scenarios.",
+        }
+
+        joined_outcomes = [row for row in outcomes if row["decision_id"] in decision_ids]
+        premature = [
+            row for row in joined_outcomes
+            if row["exit_outcome"] not in {"SL_HIT", "FINALTP_HIT"}
+            and row["mfe_r"] >= 1.0 and row["realized_r"] <= 0.25
+        ]
+        report = {
+            "schema_version": 1,
+            "source": {
+                "deals_csv": str(args.deals), "open_positions_csv": str(args.open_positions),
+                "metadata_json": str(args.metadata), "outcomes_csv": str(args.outcomes),
+                "run_id": metadata.get("run_id"), "symbol": metadata.get("symbol"),
+                "account_currency": metadata.get("account_currency"),
+                "initial_balance": initial_balance, "export_status": metadata.get("export_status"),
+                "history_expected_deals": metadata.get("history_expected_deals"),
+                "history_recorded_deals": metadata.get("history_recorded_deals"),
+                "history_missing_deals": metadata.get("history_missing_deals"),
+                "timestamp_basis": metadata.get("timestamp_basis"),
+                "server_utc_offset_minutes": metadata.get("server_utc_offset_minutes"),
+            },
+            "position_metrics": summarize(enriched, initial_balance),
+            "by_symbol_direction": grouped_metrics(enriched, initial_balance, ("symbol", "direction")),
+            "by_symbol_strategy_family": grouped_metrics(enriched, initial_balance, ("symbol", "strategy")),
+            "by_symbol_strategy_direction_session": grouped_metrics(
+                enriched, initial_balance, ("symbol", "strategy", "direction", "session")
+            ),
+            "by_symbol_strategy_regime_direction_session": grouped_metrics(
+                enriched, initial_balance, ("symbol", "strategy", "regime", "direction", "session")
+            ),
+            "decision_excursion_metrics": {
+                "matched_decisions": len(joined_outcomes),
+                "missing_decision_outcomes": missing_outcomes,
+                "mean_mfe_R": round(sum(r["mfe_r"] for r in joined_outcomes) / len(joined_outcomes), 4) if joined_outcomes else None,
+                "mean_mae_R": round(sum(r["mae_r"] for r in joined_outcomes) / len(joined_outcomes), 4) if joined_outcomes else None,
+                "mean_bars_held": round(sum(r["bars_held"] for r in joined_outcomes) / len(joined_outcomes), 2) if joined_outcomes else None,
+                "mean_realized_R": round(sum(r["realized_r"] for r in joined_outcomes) / len(joined_outcomes), 4) if joined_outcomes else None,
+                "possible_premature_exit_candidates": len(premature),
+                "premature_exit_rule": "decision-level non-SL/non-TP exit with MFE_R >= 1.0 and RealizedR <= 0.25; diagnostic candidate only, not proof of an avoidable exit",
+                "by_strategy_session": grouped_metrics(
+                    [
+                        {**r, "net_pnl": r["realized_net_pnl"], "risk_cash": 1.0}
+                        for r in joined_outcomes
+                    ], initial_balance, ("symbol", "strategy", "direction", "session")
+                ),
+            },
+            "loss_cost_attribution": cost_breakdown,
+            "ignored_or_censored_position_groups": ignored,
+            "attribution_coverage": {
+                "positions": len(enriched),
+                "direction_tagged": sum(1 for p in enriched if p.get("direction") not in {"", "UNTAGGED", "CONFLICT"}),
+                "session_tagged": sum(1 for p in enriched if p.get("session") not in {"", "UNTAGGED", "CONFLICT"}),
+                "strategy_tagged": sum(1 for p in enriched if p.get("strategy") not in {"", "UNTAGGED", "CONFLICT"}),
+                "slippage_complete_positions": sum(1 for p in enriched if p.get("slippage_complete")),
+                "slippage_unknown_positions": sum(1 for p in enriched if not p.get("slippage_complete")),
+            },
+            "interpretation": {
+                "position_unit": "stable MT5 position_id; partial close deals are collapsed",
+                "decision_excursions": "one outcome row per decision; reported separately and not duplicated across multi-leg positions",
+                "commission_swap_fee": "signed broker deal cashflows included once in net P&L",
+                "slippage": "adverse cash cost reported only where every deal in the position has valid requested-price provenance",
+                "spread": "baseline spread already embedded in tester fills; only incremental widening belongs in cost stress",
+                "drawdown": "closed-position settlement sequence; not tick-level equity drawdown",
+                "promotion": "diagnostic ranking only; no family is promoted automatically",
+            },
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        print(json.dumps({"output": str(args.output), "completed_positions": len(enriched), "matched_decisions": len(joined_outcomes)}, indent=2))
+        return 0
+    except (OSError, LedgerError, AttributionError, ValueError) as exc:
+        print(f"native_tester_attribution: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
