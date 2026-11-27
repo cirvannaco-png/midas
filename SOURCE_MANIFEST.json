@@ -485,20 +485,10 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "research/native-tester-attribution-diagnostics-20261127",
-    "commit": "a0f105151bed27bc1aee539e967cd9878b007cd0",
+    "commit": "28083b6e9cc7b25f193ce60a85a0b6690b760133",
     "root": "development/EA",
-    "file_count": 102,
+    "file_count": 103,
     "files": [
-      {
-        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
-        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
-        "size_bytes": 15553
-      },
-      {
-        "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "f5403e635213f2b132aa114127b35881d8d02dd8",
-        "size_bytes": 117367
-      },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
         "git_blob_sha": "a6a50a472e045e53897e448bbfbf389701e0b0aa",
@@ -556,8 +546,8 @@
       },
       {
         "path": "development/EA/includes/Core/SessionFilter.mqh",
-        "git_blob_sha": "a93ec39663e825af999c8926fd47585b53409067",
-        "size_bytes": 10114
+        "git_blob_sha": "d42775d72ac1832e7f373c56e90920f4b64680b9",
+        "size_bytes": 10692
       },
       {
         "path": "development/EA/includes/Core/SignalLogger.mqh",
@@ -765,14 +755,14 @@
         "size_bytes": 8538
       },
       {
-        "path": "development/EA/includes/SmartMoney/FVG.mqh",
-        "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
-        "size_bytes": 5668
-      },
-      {
         "path": "development/EA/includes/SmartMoney/FibonacciEngine.mqh",
         "git_blob_sha": "74df9e8c41352e1c43ad99d83e1aa0992b367380",
         "size_bytes": 8793
+      },
+      {
+        "path": "development/EA/includes/SmartMoney/FVG.mqh",
+        "git_blob_sha": "7bc8caeaa1ba42697c4c011408d50782bc6d3a5c",
+        "size_bytes": 5668
       },
       {
         "path": "development/EA/includes/SmartMoney/Inducement.mqh",
@@ -940,6 +930,16 @@
         "size_bytes": 1047
       },
       {
+        "path": "development/EA/MedisTouch_Indicator_v2.8.mq5",
+        "git_blob_sha": "27eb4b95df3d8e58ab86300e02ab386da2836af1",
+        "size_bytes": 15553
+      },
+      {
+        "path": "development/EA/MedisTouch_v2.8.source.mq5",
+        "git_blob_sha": "f5403e635213f2b132aa114127b35881d8d02dd8",
+        "size_bytes": 117367
+      },
+      {
         "path": "development/EA/tests/AccountRiskProfilePolicy.mq5",
         "git_blob_sha": "54f0cdb1daee940d45076dc05e910ea49de94fcb",
         "size_bytes": 10291
@@ -993,6 +993,11 @@
         "path": "development/EA/tests/ProductionRuntimePreflight.mq5",
         "git_blob_sha": "950880379115e3769cf5f770b08670c54d940146",
         "size_bytes": 6984
+      },
+      {
+        "path": "development/EA/tests/SessionFilterUtc.mq5",
+        "git_blob_sha": "6ebb19bd30c3a219b7b2a6d4f92b66d2f67e0095",
+        "size_bytes": 2601
       },
       {
         "path": "development/EA/tests/TestHarness.mqh",
