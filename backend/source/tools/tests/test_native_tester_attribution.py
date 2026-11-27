@@ -18,8 +18,8 @@ from analyze_native_tester_attribution import (  # noqa: E402
 def test_metadata_requires_complete_reconciled_export(tmp_path):
     path = tmp_path / "meta.json"
     path.write_text(
-        '{"export_status":"complete","history_expected_deals":2,'
-        '"history_recorded_deals":2,"history_missing_deals":0,'
+        '{"export_status":"complete","run_id":"diagnostic-run_123","symbol":"EURUSD",'
+        '"history_expected_deals":2,"history_recorded_deals":2,"history_missing_deals":0,"deals_exported":2,'
         '"deals_file_written":true,"open_positions_file_written":true,'
         '"timestamp_basis":"broker_wall_clock_with_explicit_offset",'
         '"server_utc_offset_minutes":180}',
