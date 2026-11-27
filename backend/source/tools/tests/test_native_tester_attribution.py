@@ -35,9 +35,9 @@ def test_position_labels_keep_direction_session_and_stop_geometry(tmp_path):
     path = tmp_path / "deals.csv"
     path.write_text(
         "position_id,direction,session,initial_stop_price,"
-        "initial_stop_distance_points,deal_reason,entry\n"
-        "10,BUY,SESSION_LONDON,1.0800,120,DEAL_REASON_EXPERT,IN\n"
-        "10,BUY,SESSION_LONDON,1.0800,120,DEAL_REASON_SL,OUT\n",
+        "initial_stop_distance_points,deal_reason,spread_points_observed,spread_observed,volume,entry\n"
+        "10,BUY,SESSION_LONDON,1.0800,120,DEAL_REASON_EXPERT,1.2,true,0.5,IN\n"
+        "10,BUY,SESSION_LONDON,1.0800,120,DEAL_REASON_SL,1.4,true,0.5,OUT\n",
         encoding="utf-8",
     )
     labels = read_position_labels(path)
@@ -51,9 +51,9 @@ def test_position_label_conflicts_fail_closed(tmp_path):
     path = tmp_path / "deals.csv"
     path.write_text(
         "position_id,direction,session,initial_stop_price,"
-        "initial_stop_distance_points,deal_reason,entry\n"
-        "10,BUY,SESSION_LONDON,1.0800,120,DEAL_REASON_EXPERT,IN\n"
-        "10,SELL,SESSION_LONDON,1.0800,120,DEAL_REASON_SL,OUT\n",
+        "initial_stop_distance_points,deal_reason,spread_points_observed,spread_observed,volume,entry\n"
+        "10,BUY,SESSION_LONDON,1.0800,120,DEAL_REASON_EXPERT,1.2,true,0.5,IN\n"
+        "10,SELL,SESSION_LONDON,1.0800,120,DEAL_REASON_SL,1.4,true,0.5,OUT\n",
         encoding="utf-8",
     )
     with pytest.raises(AttributionError, match="conflicting direction"):
