@@ -117,7 +117,10 @@ private:
                      strategy!=m_attributions[index].strategy) ||
                     (StringLen(regime)>0 && regime!="UNTAGGED" &&
                      m_attributions[index].regime!="UNTAGGED" &&
-                     regime!=m_attributions[index].regime);
+                     regime!=m_attributions[index].regime) ||
+                    (StringLen(direction)>0 && direction!="UNTAGGED" &&
+                     m_attributions[index].direction!="UNTAGGED" &&
+                     direction!=m_attributions[index].direction);
       if(conflict)
         {
          m_attributions[index].decision_id=0;
