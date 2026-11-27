@@ -1,10 +1,11 @@
 from pathlib import Path
 import sys
 
-TOOLS = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(TOOLS))
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
-from test_tester_deal_export_contract import read_modular  # noqa: E402
+
+def read_modular(path: str) -> str:
+    return (REPO_ROOT / "development" / "EA" / path).read_text(encoding="utf-8")
 
 
 def test_strategy_tester_session_uses_explicit_server_utc_offset():
