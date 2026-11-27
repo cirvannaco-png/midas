@@ -399,7 +399,9 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
                "KeyLevelSource", "KeyLevelReaction", "KeyLevelScore",
                // v2.15 — same rationale. OutcomeEpoch is appended so legacy
                // positional columns remain stable in this versioned outcome file.
-               "SelectedStrategy", "SelectedStrategyScore", "OutcomeEpoch");
+               "SelectedStrategy", "SelectedStrategyScore", "OutcomeEpoch",
+               // Stable lineage and session fields are appended to preserve legacy column positions.
+               "DecisionID", "Session");
       m_outcomeHeaderWritten = true;
      }
 
@@ -473,7 +475,9 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
             DoubleToString(p.setup.reasons.keylevel_score, 1),
             SelectedStrategyLabel(p.setup.reasons.selected_strategy),
             DoubleToString(p.setup.reasons.selected_strategy_score, 1),
-            (long)resolvedAt);
+            (long)resolvedAt,
+            p.decisionId,
+            EnumToString(p.setup.reasons.session));
 
    FileClose(handle);
    return true;
