@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "research/native-tester-attribution-diagnostics-20261127",
-    "commit": "7f7d77a8fa35cfd771f3470e1a90b5356802b19e",
+    "commit": "fffd58a2a1762ea0632bb373b5be8a461889dc64",
     "root": "development/EA",
     "file_count": 102,
     "files": [
@@ -561,8 +561,8 @@
       },
       {
         "path": "development/EA/includes/Core/SignalLogger.mqh",
-        "git_blob_sha": "7b7c2d336270ccfaeee5695278ea7b5787fa9fdd",
-        "size_bytes": 27010
+        "git_blob_sha": "8461345216f020be19931fc0082d1fd1972aa4b3",
+        "size_bytes": 27113
       },
       {
         "path": "development/EA/includes/Decision/DecisionEngine.mqh",
