@@ -50,11 +50,32 @@ The platform closed-row count is not the number of independent entry positions: 
 | Fresh-Sweep v3 | `10e8b9f7-dbf6-42a3-a1c3-6ad537269e4f` | `decb0950-3dd2-4ac7-9206-daf02cccf7c4` | `044f35be-c105-4bf3-bdd2-2868c4b8f4b0` |
 | Direction-Aware Rank B v2 | `a2d7e38a-6dd4-4867-acbb-3f04799be29d` | `a5f56099-0880-4659-82bd-0994f1966143` | `530d48d2-3573-4116-8475-818ba4339faf` |
 
-All nine runs completed their requested 30-day window. They were research runs without saved sessions, so their aggregate P&L/drawdown can be compared, but authoritative per-position win rate and attribution cannot be recovered from those runs.
+All nine matched runs were repeated with saved sessions. Their authoritative whole-position outcomes below group partial close rows by `openingFillId`; the open GBPUSD remainder in the Direction-Aware session is excluded from completed-position metrics.
+
+### Authoritative whole-position results
+
+| Candidate | Instrument | Completed entries | Wins / losses | Entry win rate | Profit factor | Net P&L | Avg win | Avg loss |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Trend-Only v6 | Gold | 45 | 34 / 11 | 75.6% | 0.804 | -$20.45 | $2.47 | $9.50 |
+| Trend-Only v6 | EURUSD | 47 | 38 / 9 | 80.9% | 0.722 | -$24.34 | $1.67 | $9.74 |
+| Trend-Only v6 | GBPUSD | 54 | 41 / 13 | 75.9% | 0.722 | -$33.18 | $2.10 | $9.19 |
+| Fresh-Sweep v3 | Gold | 80 | 63 / 17 | 78.8% | 0.850 | -$24.44 | $2.21 | $9.61 |
+| Fresh-Sweep v3 | EURUSD | 68 | 54 / 14 | 79.4% | 0.670 | -$44.80 | $1.69 | $9.70 |
+| Fresh-Sweep v3 | GBPUSD | 84 | 61 / 23 | 72.6% | 0.752 | -$48.19 | $2.40 | $8.46 |
+| Direction-Aware Rank B v2 | Gold | 89 | 67 / 22 | 75.3% | 0.770 | -$48.79 | $2.44 | $9.65 |
+| Direction-Aware Rank B v2 | EURUSD | 76 | 60 / 16 | 78.9% | 0.705 | -$45.75 | $1.82 | $9.69 |
+| Direction-Aware Rank B v2 | GBPUSD | 79 | 57 / 22 | 72.2% | 0.748 | -$46.74 | $2.44 | $8.45 |
+
+All nine candidates have position-level profit factor below 1 and negative net P&L. The best observed PF is Fresh-Sweep on Gold at 0.850, which is still unprofitable. This confirms that the row-level win-rate inflation is not the only issue: the completed positions themselves have negative expectancy in this fold.
+
+Saved session records for the matched cross-market runs:
+- Trend-Only v6: Gold `fnszg8cs3ar23r4h6ol9eka2`; EURUSD `bpwu36rwklmbunj4i0hwlxfy`; GBPUSD `zlk5kubbnfmlhtzgqxl7m38n`.
+- Fresh-Sweep v3: Gold `nblbrhpew2w0b7pmeomh7v93`; EURUSD `yufyecufh8xwkkblzg5x3y96`; GBPUSD `j0mzchwgq4wvopju3zni13jl`.
+- Direction-Aware Rank B v2: Gold `ehkjw18klu3m1mt5ofluxl2x`; EURUSD `ixlnk90xblsegofr3sr95mdk`; GBPUSD `xl7n1fzl8i6xowknxs79bym5`. The GBPUSD session ended with one open residual row; it is not counted as a completed position.
 
 ## Gold whole-position reconciliation and exit ablation
 
-Saved sessions were used for the Gold Trend-Only candidate so that partial close rows could be grouped by `openingFillId`.
+Saved sessions were used for all nine matched candidate/instrument combinations so partial close rows could be grouped by `openingFillId` and the cross-market win-rate/PF comparisons could be calculated at the completed-position level.
 
 ### Baseline fold: 2025-12-13 through 2026-01-13
 
