@@ -208,9 +208,27 @@ def summarize(rows: list[dict], initial_balance: float) -> dict:
         "gross_profit": round(gp, 2), "gross_loss_abs": round(gl, 2),
         "profit_factor": round(gp / gl, 4) if gl else (None if not gp else "no_losses"),
         "net_pnl": round(sum(p["net_pnl"] for p in rows), 2),
+        "return_pct_initial_balance": round(100 * sum(p["net_pnl"] for p in rows) / initial_balance, 4) if initial_balance > 0 else None,
         "expectancy_per_position": round(sum(p["net_pnl"] for p in rows) / len(rows), 4) if rows else None,
         "average_realized_R": round(sum(r_values) / len(r_values), 4) if r_values else None,
         "positions_with_risk_cash": len(r_values),
+        "mean_initial_stop_distance_points": round(
+            sum(p["initial_stop_distance_points"] for p in rows if p.get("initial_stop_distance_points") is not None)
+            / sum(1 for p in rows if p.get("initial_stop_distance_points") is not None), 4
+        ) if any(p.get("initial_stop_distance_points") is not None for p in rows) else None,
+        "positions_with_initial_stop_data": sum(1 for p in rows if p.get("initial_stop_distance_points") is not None),
+        "stop_loss_exit_positions": sum(1 for p in rows if "DEAL_REASON_SL" in p.get("exit_deal_reasons", [])),
+        "mean_commission_cashflow_per_position": round(sum(p.get("commission_cashflow", 0.0) for p in rows) / len(rows), 4) if rows else None,
+        "mean_swap_cashflow_per_position": round(sum(p.get("swap_cashflow", 0.0) for p in rows) / len(rows), 4) if rows else None,
+        "mean_fee_cashflow_per_position": round(sum(p.get("fee_cashflow", 0.0) for p in rows) / len(rows), 4) if rows else None,
+        "mean_known_slippage_cost_per_position": round(
+            sum(p["slippage_cost_cash"] for p in rows if p.get("slippage_complete") and p.get("slippage_cost_cash") is not None)
+            / sum(1 for p in rows if p.get("slippage_complete") and p.get("slippage_cost_cash") is not None), 4
+        ) if any(p.get("slippage_complete") and p.get("slippage_cost_cash") is not None for p in rows) else None,
+        "mean_estimated_embedded_spread_cost_per_position": round(
+            sum(p["estimated_embedded_spread_cost_cash"] for p in rows if p.get("estimated_embedded_spread_cost_cash") is not None)
+            / sum(1 for p in rows if p.get("estimated_embedded_spread_cost_cash") is not None), 4
+        ) if any(p.get("estimated_embedded_spread_cost_cash") is not None for p in rows) else None,
         "sample_status": "insufficient" if len(rows) < 30 else ("exploratory" if len(rows) < 100 else "larger_sample"),
     }
 
