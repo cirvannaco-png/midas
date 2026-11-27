@@ -1787,6 +1787,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
       string exportSession="UNTAGGED";
       string exportDirection="UNTAGGED";
       double initialStopDistancePoints=0.0;
+      double initialStopPrice=0.0;
       double requestedPrice=0.0;
       double slippagePoints=0.0;
       double slippageCostCash=0.0;
@@ -1803,6 +1804,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
          double entryStop=HistoryOrderGetDouble(exportOrder,ORDER_SL);
          if(entry==DEAL_ENTRY_IN && entryStop>0.0 && dealVolume>0.0 && dealPrice>0.0)
            {
+            initialStopPrice=entryStop;
             entryRiskCash=g_risk.RiskAmountForLots(_Symbol,dealVolume,dealPrice,entryStop);
             double pointSize=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
             if(pointSize>0.0)
@@ -1858,7 +1860,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
             HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash,
             exportDecisionId,exportStrategy,exportRegime,
             exportDirection,exportSession,
-            (entry==DEAL_ENTRY_IN?HistoryOrderGetDouble(exportOrder,ORDER_SL):0.0),
+            initialStopPrice,
             initialStopDistancePoints,
             EnumToString((ENUM_DEAL_REASON)HistoryDealGetInteger(trans.deal,DEAL_REASON)),
             requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
