@@ -164,6 +164,34 @@ Saved M30 sessions:
 
 The Gold result looked promising on the first fold, but failed the next chronological fold with the same setting: 31 completed entries, 24 wins / 7 losses, 77.4% win rate, PF 0.814, net -$14.00, max drawdown $57.17. The filter therefore does not establish a robust Gold edge and is not promoted.
 
+The same 2.5 ATR setting was then tested on three additional chronological Gold folds:
+
+| Window | Completed entries | Wins / losses | Entry win rate | PF | Net P&L | Max drawdown |
+|---|---:|---:|---:|---:|---:|---:|
+| 2026-02-13–2026-03-13 | 26 | 18 / 8 | 69.2% | 0.662 | -$24.01 | $43.13 |
+| 2026-03-13–2026-04-13 | 29 | 22 / 7 | 75.9% | 0.838 | -$9.63 | $48.60 |
+| 2026-04-13–2026-05-13 | 26 | 21 / 5 | 80.8% | 0.810 | -$8.66 | $39.39 |
+
+This confirms the filter's first-fold positive result was not persistent: four consecutive follow-on folds were negative. Saved sessions: `gqbx964ai7xgp9pypokco496`, `nytaa4oq9wix1ryckz0iifvg`, and `lxkw68tushtqsluxiwege1hq`.
+
+### Strict-family isolation
+
+The Trend-Only script normally disables its strict-family lane and trades through its continuation fallback. To check whether the strict-family lane alone was stronger, it was enabled while both single-swing and continuation fallbacks were disabled. The same M15 Gold risk controls were retained.
+
+| Window | Completed entries | Wins / losses | Entry win rate | PF | Net P&L | Max drawdown |
+|---|---:|---:|---:|---:|---:|---:|
+| 2025-12-13–2026-01-13 | 6 | 5 / 1 | 83.3% | 1.412 | +$10.31 | $38.21 |
+| 2026-01-13–2026-02-13 | 28 | 23 / 5 | 82.1% | 0.918 | -$9.27 | $65.92 |
+| 2026-02-13–2026-03-13 | 21 | 17 / 4 | 81.0% | 0.607 | -$39.82 | $70.36 |
+
+The first fold's apparent PF above 1 came from only six completed entries and included one -USD 25 loss. It failed in both following folds. The strict-family plus continuation configuration also lost money on the first fold: 49 completed entries, 37 wins / 12 losses, 75.5% win rate, PF 0.777, net -USD 28.92. Neither configuration is promoted.
+
+Saved strict-family sessions:
+- Strict only, first fold: `jb61h12z7ulqs9sxnv3t3erk`.
+- Strict plus continuation, first fold: `yr08rb9ljx9ehstjtocssxvg`.
+- Strict only, second fold: `n4mu3fvo3hhlftk94kpr5it2`.
+- Strict only, third fold: `ykhm3m449iy74roqmn4efeiu`.
+
 Saved sessions:
 - First-fold Gold: `z685vouju1t4omqyhp16nvne`; EURUSD: `r72mq253pc9ffdy2egrb3ce7`; GBPUSD: `asjfw3czz8hsurjl58bxan1a`.
 - Second-fold Gold: `yvf29u1ihsw07ad39cor5hwx`.
