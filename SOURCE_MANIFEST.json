@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "research/native-tester-attribution-diagnostics-20261127",
-    "commit": "f7f71a93dedc0e3d7ee8bda0a2d91299333906fe",
+    "commit": "7f7d77a8fa35cfd771f3470e1a90b5356802b19e",
     "root": "development/EA",
     "file_count": 102,
     "files": [
@@ -651,8 +651,8 @@
       },
       {
         "path": "development/EA/includes/Execution/TesterDealExport.mqh",
-        "git_blob_sha": "ce82ff69ae1d42200f1fb79ab9d008210bf1cf08",
-        "size_bytes": 29119
+        "git_blob_sha": "2fae956a567d424cc089f820b84e3c7d15e1d3d4",
+        "size_bytes": 29240
       },
       {
         "path": "development/EA/includes/Execution/TradeStateMachine.mqh",
