@@ -13783,6 +13783,10 @@ private:
          m_attributions[index].decision_id=0;
          m_attributions[index].strategy="CONFLICT";
          m_attributions[index].regime="CONFLICT";
+         m_attributions[index].direction="CONFLICT";
+         m_attributions[index].session="CONFLICT";
+         m_attributions[index].initial_stop_price=0.0;
+         m_attributions[index].initial_stop_distance_points=0.0;
          return;
         }
       if(m_attributions[index].decision_id<=0 && decisionId>0)
@@ -14270,6 +14274,8 @@ public:
             resolvedRegime="CONFLICT";
             resolvedDirection="CONFLICT";
             resolvedSession="CONFLICT";
+            resolvedInitialStopPrice=0.0;
+            resolvedInitialStopDistancePoints=0.0;
            }
          else
            {
