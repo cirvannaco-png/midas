@@ -17371,7 +17371,9 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
             HistoryDealGetDouble(trans.deal,DEAL_SWAP),
             HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash,
             exportDecisionId,exportStrategy,exportRegime,
-            exportDirection,exportSession,initialStopPrice,initialStopDistancePoints,
+            exportDirection,exportSession,
+            initialStopPrice,
+            initialStopDistancePoints,
             EnumToString((ENUM_DEAL_REASON)HistoryDealGetInteger(trans.deal,DEAL_REASON)),
             observedSpreadPoints,spreadObserved,
             requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
