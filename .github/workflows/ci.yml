@@ -3,7 +3,7 @@ on:
   # Branch pushes regenerate and commit the distributable artifact; pull requests
   # only verify that the committed artifact already matches the modular source.
   push:
-    branches: ["build/**", "release/**"]
+    branches: ["build/**", "release/**", "research/**"]
   pull_request:
   workflow_dispatch:
 permissions:
