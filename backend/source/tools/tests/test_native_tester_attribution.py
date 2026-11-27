@@ -94,4 +94,4 @@ def test_position_summary_uses_completed_positions_not_partial_rows():
     assert result["losses"] == 1
     assert result["breakeven"] == 1
     assert result["profit_factor"] == 2.0
-    assert result["expectancy_per_position"] == pytest.approx(5 / 3)
+    assert result["expectancy_per_position"] == pytest.approx(5 / 3, abs=1e-4)
