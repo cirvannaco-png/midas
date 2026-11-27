@@ -614,7 +614,7 @@ datetime CSessionFilter::CurrentSessionStartGMT()
       case SESSION_LONDON:            startHour = londonStart; break;
       case SESSION_NEWYORK:           startHour = nyStart;     break;
       case SESSION_TOKYO:             startHour = 0;           break; // Tokyo doesn't observe DST — fixed window, unaffected
-      default:                        return 0;                       // SESSION_DEAD — no boundary to report
+      default:                        return 0;                       // SESSION_DEAD/SESSION_UNKNOWN — no boundary to report
      }
 
    MqlDateTime st = t;
@@ -635,7 +635,7 @@ bool CSessionFilter::IsAllowed()
       case SESSION_LONDON:            return m_allowLondon;
       case SESSION_NEWYORK:           return m_allowNewYork;
       case SESSION_TOKYO:             return m_allowTokyo;
-      default:                        return false; // SESSION_DEAD — off by design, no allow flag for it
+      default:                        return false; // SESSION_DEAD and SESSION_UNKNOWN fail closed when the gate is enabled
      }
   }
 #endif
