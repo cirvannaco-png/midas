@@ -119,6 +119,8 @@ def main():
         "outcome export isolates each tester run": r'MedisTouch_Outcomes_v3_.*safeRunId',
         "tester session classifier uses explicit server UTC offset": r'CurrentGMT[\s\S]{0,600}TimeCurrent\(\)-\(datetime\)\(m_testerServerUtcOffsetMinutes\*60\)',
         "missing tester UTC offset produces unknown session": r'return SESSION_UNKNOWN',
+        "tester session conversion is a pure validated helper": r'ServerTimeToGMT\(datetime serverTime,int offsetMinutes\)',
+        "DST-aware session classifier is independently testable": r'SessionAtGMT\(datetime nowGmt\)',
         "automatic and manual session filters receive tester offset": r'g_scoring.ConfigureSessionFilter[\s\S]{0,200}InpTesterServerUtcOffsetMinutes[\s\S]{0,160}g_operatorSessionFilter.SetTesterServerUtcOffsetMinutes'
     }
     for name,pattern in native_deal_attribution_checks.items():
