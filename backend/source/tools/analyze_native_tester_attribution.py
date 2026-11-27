@@ -369,6 +369,23 @@ def main() -> int:
             if row["exit_outcome"] not in {"SL_HIT", "FINALTP_HIT"}
             and row["mfe_r"] >= 1.0 and row["realized_r"] <= 0.25
         ]
+        family_metrics = grouped_metrics(enriched, initial_balance, ("symbol", "strategy"))
+        family_priority = []
+        for cohort in family_metrics.values():
+            pf = cohort.get("profit_factor")
+            expectancy = cohort.get("expectancy_per_position")
+            count = cohort.get("positions", 0)
+            if count < 30:
+                priority = "insufficient_sample"
+            elif isinstance(pf, (int, float)) and pf >= 1.05 and isinstance(expectancy, (int, float)) and expectancy > 0:
+                priority = "candidate_for_independent_replication"
+            else:
+                priority = "deprioritize"
+            family_priority.append({
+                "symbol": cohort.get("symbol"), "strategy": cohort.get("strategy"),
+                "positions": count, "profit_factor": pf,
+                "expectancy_per_position": expectancy, "priority": priority,
+            })
         report = {
             "schema_version": 1,
             "source": {
@@ -385,7 +402,8 @@ def main() -> int:
             },
             "position_metrics": summarize(enriched, initial_balance),
             "by_symbol_direction": grouped_metrics(enriched, initial_balance, ("symbol", "direction")),
-            "by_symbol_strategy_family": grouped_metrics(enriched, initial_balance, ("symbol", "strategy")),
+            "by_symbol_strategy_family": family_metrics,
+            "family_research_priority": family_priority,
             "by_symbol_strategy_direction_session": grouped_metrics(
                 enriched, initial_balance, ("symbol", "strategy", "direction", "session")
             ),
