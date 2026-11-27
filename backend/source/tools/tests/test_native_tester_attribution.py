@@ -65,10 +65,10 @@ def test_position_label_conflicts_fail_closed(tmp_path):
 def test_outcome_reader_joins_by_stable_decision_id(tmp_path):
     path = tmp_path / "outcomes.csv"
     path.write_text(
-        "DecisionID,Symbol,Direction,Session,SelectedStrategy,Regime,Outcome,"
+        "DecisionID,RunID,Symbol,Direction,Session,SelectedStrategy,Regime,Outcome,"
         "MFE_R,MAE_R,BarsHeld,RealizedR,RealizedNetPnL,OutcomeEpoch,Filled,"
         "TP1_Hit,TP2_Hit,BreakEvenDone,PartialDone\n"
-        "77,EURUSD,BUY,SESSION_LONDON,STRATEGY_SMC,REGIME_TRENDING,closed,"
+        "77,diagnostic-run,EURUSD,BUY,SESSION_LONDON,STRATEGY_SMC,REGIME_TRENDING,closed,"
         "1.2,0.8,12,0.1,2.5,1790000000,Yes,Yes,No,Yes,Yes\n",
         encoding="utf-8",
     )
