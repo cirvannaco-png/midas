@@ -12,7 +12,7 @@ def test_strategy_tester_session_uses_explicit_server_utc_offset():
     session = read_modular("includes/Core/SessionFilter.mqh")
     assert "datetime CSessionFilter::CurrentGMT()" in session
     assert "MQLInfoInteger(MQL_TESTER)" in session
-    assert "TimeCurrent()-(datetime)(m_testerServerUtcOffsetMinutes*60)" in session
+    assert "ServerTimeToGMT(TimeCurrent(),m_testerServerUtcOffsetMinutes)" in session
     assert "return SESSION_UNKNOWN;" in session
     assert "return TimeGMT();" in session
     assert "static datetime ServerTimeToGMT(datetime serverTime,int offsetMinutes)" in session
