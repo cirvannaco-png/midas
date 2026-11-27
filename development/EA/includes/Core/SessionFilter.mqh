@@ -48,6 +48,8 @@ public:
    void              Configure(bool enabled, bool allowTokyo = false, bool allowLondon = true,
                                bool allowNewYork = true, bool allowOverlap = true);
    void              SetTesterServerUtcOffsetMinutes(int offsetMinutes);
+   static datetime   ServerTimeToGMT(datetime serverTime,int offsetMinutes);
+   static ENUM_TRADING_SESSION SessionAtGMT(datetime nowGmt);
    ENUM_TRADING_SESSION CurrentSession();
    // v2.17 addition — for CExtendedKeyLevels::NearestSessionLevel(),
    // which needs to know WHEN the current session opened, not just
@@ -84,7 +86,7 @@ datetime CSessionFilter::CurrentGMT()
      {
       if(m_testerServerUtcOffsetMinutes < -840 || m_testerServerUtcOffsetMinutes > 840)
          return 0; // unknown, never mislabel broker server time as UTC
-      return TimeCurrent()-(datetime)(m_testerServerUtcOffsetMinutes*60);
+      return ServerTimeToGMT(TimeCurrent(),m_testerServerUtcOffsetMinutes);
      }
    return TimeGMT();
   }
@@ -147,9 +149,14 @@ bool CSessionFilter::IsUSDST(datetime gmtNow)
 //+------------------------------------------------------------------+
 // London local session ~08:00-16:30; New York local session ~08:00-17:00.
 // Each city's own DST state shifts its GMT window by exactly one hour.
-ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
+datetime CSessionFilter::ServerTimeToGMT(datetime serverTime,int offsetMinutes)
   {
-   datetime nowGmt = CurrentGMT();
+   if(serverTime<=0 || offsetMinutes < -840 || offsetMinutes > 840) return 0;
+   return serverTime-(datetime)(offsetMinutes*60);
+  }
+//+------------------------------------------------------------------+
+ENUM_TRADING_SESSION CSessionFilter::SessionAtGMT(datetime nowGmt)
+  {
    if(nowGmt<=0) return SESSION_UNKNOWN;
    MqlDateTime t;
    TimeToStruct(nowGmt, t);
@@ -172,6 +179,11 @@ ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
    if(newyork) return SESSION_NEWYORK;
    if(tokyo)   return SESSION_TOKYO;
    return SESSION_DEAD;
+  }
+//+------------------------------------------------------------------+
+ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
+  {
+   return SessionAtGMT(CurrentGMT());
   }
 //+------------------------------------------------------------------+
 // Same start-hour derivation CurrentSession() uses, just returning the
