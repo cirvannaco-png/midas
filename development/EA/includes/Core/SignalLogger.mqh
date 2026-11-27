@@ -57,9 +57,9 @@ void CSignalLogger::Init(string symbol, int gmtOffsetOverrideHours)
    m_filename = "MedisTouch_Signals_" + symbol + ".csv";
     m_smcFilename = "MedisTouch_SMC_Structures_" + symbol + ".csv";
     m_smcHeaderWritten = FileIsExist(m_smcFilename);
-   // Version the outcome stream because the new OutcomeEpoch column is required by the
-   // chronological evidence builder. Never append new-schema rows to a legacy header.
-   m_outcomeFilename = "MedisTouch_Outcomes_v2_" + symbol + ".csv";
+   // Version the outcome stream when its schema changes. Never append new-schema
+   // decision/session lineage fields to an older outcome header.
+   m_outcomeFilename = "MedisTouch_Outcomes_v3_" + symbol + ".csv";
    m_headerWritten = FileIsExist(m_filename);
    m_outcomeHeaderWritten = FileIsExist(m_outcomeFilename);
    m_gmtOffsetOverrideHours = gmtOffsetOverrideHours;
