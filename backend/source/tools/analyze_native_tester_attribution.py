@@ -61,6 +61,10 @@ def read_export_metadata(path: Path) -> dict:
         raise AttributionError("metadata lacks integer history reconciliation counts")
     if expected != recorded or missing != 0:
         raise AttributionError("tester export history reconciliation does not balance")
+    if data.get("deals_exported") != recorded:
+        raise AttributionError("exported deal count does not match recorded history")
+    if not str(data.get("run_id", "")).strip() or not str(data.get("symbol", "")).strip():
+        raise AttributionError("tester metadata lacks run identity or symbol")
     if data.get("deals_file_written") is not True or data.get("open_positions_file_written") is not True:
         raise AttributionError("tester export artifacts are not both confirmed written")
     if data.get("timestamp_basis") != "broker_wall_clock_with_explicit_offset":
