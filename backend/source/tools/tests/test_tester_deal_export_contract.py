@@ -151,7 +151,7 @@ def test_export_metadata_contains_deal_level_cashflow_totals():
 
 
 def test_outcome_export_adds_stable_decision_and_session_join_keys():
-    logger = read_modular("Core/SignalLogger.mqh")
+    logger = read_modular("includes/Core/SignalLogger.mqh")
     assert '"DecisionID", "Session"' in logger
     assert "p.decisionId," in logger
     assert "EnumToString(p.setup.reasons.session)" in logger
@@ -159,6 +159,6 @@ def test_outcome_export_adds_stable_decision_and_session_join_keys():
 
 
 def test_outcome_csv_schema_is_versioned_for_decision_session_extension():
-    logger = read_modular("Core/SignalLogger.mqh")
+    logger = read_modular("includes/Core/SignalLogger.mqh")
     assert 'm_outcomeFilename = "MedisTouch_Outcomes_v3_" + symbol + "_" + safeRunId + ".csv";' in logger
     assert 'safeRunId+="_"+IntegerToString((long)GetTickCount());' in logger
