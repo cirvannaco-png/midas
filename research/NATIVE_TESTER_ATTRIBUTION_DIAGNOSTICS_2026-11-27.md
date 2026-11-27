@@ -24,7 +24,7 @@ The outcome log is versioned and isolated per tester run:
 
 - `MedisTouch_Outcomes_v3_<symbol>_<run-id>_<tick-count>.csv`
 
-It includes stable `DecisionID` and `Session` columns appended after the previous schema, preserving all earlier column positions. It also contains direction, strategy, regime, exit outcome, realized R, MFE_R, MAE_R, bars held, TP1/TP2 hits, break-even and partial-close state. A unique file per tester run prevents decision IDs from colliding when several test reports for the same symbol are compared.
+It includes stable `DecisionID`, `Session` and `RunID` columns appended after the previous schema, preserving all earlier column positions. It also contains direction, strategy, regime, exit outcome, realized R, MFE_R, MAE_R, bars held, TP1/TP2 hits, break-even and partial-close state. The analyzer verifies that the outcome RunID matches the prefix of the deal-export metadata run ID. A unique file per tester run prevents decision IDs from colliding when several test reports for the same symbol are compared.
 
 ## Session and strategy labels
 
@@ -66,7 +66,7 @@ No strategy family is automatically promoted. A cohort with fewer than 30 comple
 Run the EA in the Windows MetaTrader 5 Strategy Tester (or a Windows MT5 VPS). Android/Termux alone cannot execute the native MetaEditor/Strategy Tester workflow.
 
 1. Use the exact intended production EA revision and freeze the `.set` inputs, symbol, timeframe, broker data source, account currency, leverage, commission and test interval.
-2. Set `InpTesterExportRunId` to a unique readable run label.
+2. Set `InpTesterExportRunId` to a unique readable run label using only letters, numbers, underscores or hyphens. The outcome file records this base RunID; the deal exporter adds its own unique suffix.
 3. Set `InpTesterServerUtcOffsetMinutes` to the verified historical broker-server UTC offset for that test interval. The default sentinel intentionally disables evidence export. Split the test at broker timezone/DST offset changes.
 4. Run the test with real ticks where available. Do not use the locked OOS windows for diagnostic tuning.
 5. Retrieve the three exporter artifacts from MT5 Common Files:
