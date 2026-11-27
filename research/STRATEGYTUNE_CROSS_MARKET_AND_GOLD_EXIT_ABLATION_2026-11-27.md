@@ -127,6 +127,49 @@ Saved session records:
 
 Whole-position metrics above were calculated by summing each position's partial-close P&L by `openingFillId`. The close rows were available from saved sessions; the in-run close observer was not treated as authoritative.
 
+## Timeframe and stop-width follow-up experiments
+
+These were additional StrategyTune research-only experiments using the Trend-Only v6 proxy. They do not modify the native EA.
+
+### M30 timeframe comparison
+
+- Window: 2025-12-13 through 2026-01-13.
+- Timeframe: M30; `maxHoldBars=60` to preserve the M15 baseline's 30-hour time cap.
+- Other risk controls: `maxPortfolioRiskPercent=2.0`, `maxConcurrentLots=2`; remaining inputs at defaults.
+- Whole-position metrics use saved-session rows grouped by `openingFillId`.
+
+| Instrument | Completed entries | Wins / losses | Entry win rate | PF | Net P&L | Max drawdown |
+|---|---:|---:|---:|---:|---:|---:|
+| Gold | 24 | 18 / 6 | 75.0% | 0.816 | -$9.62 | $41.20 |
+| EURUSD | 34 | 24 / 10 | 70.6% | 0.489 | -$39.03 | $53.59 |
+| GBPUSD | 31 | 24 / 7 | 77.4% | 0.991 | -$0.44 | $26.84 |
+
+GBPUSD was near breakeven on this fold, but the next chronological fold (2026-01-13 through 2026-02-13) failed: 33 completed entries, 23 wins / 10 losses, 69.7% win rate, PF 0.771, net -$17.55, max drawdown $46.09. M30 is not approved as a profitability fix.
+
+Saved M30 sessions:
+- First fold Gold: `z5mcs9640em80tjdkchg2rpk`; EURUSD: `ts2btt4zhz21if6x8kwumb5m`; GBPUSD: `b0oe4rkwyt2uxwvs1ixot8od`.
+- Second-fold GBPUSD: `r26mlgpgqpuixirha20fze3h`.
+
+### Continuation maximum-stop-width filter
+
+- M15, same 2025-12-13 through 2026-01-13 fold.
+- Changed only `continuationMaxStopATR` from 4.0 to 2.5; kept portfolio cap at 2.0% and max concurrent lots at 2.
+- Other inputs remained at defaults.
+
+| Instrument | Completed entries | Wins / losses | Entry win rate | PF | Net P&L | Max drawdown |
+|---|---:|---:|---:|---:|---:|---:|
+| Gold | 20 | 17 / 3 | 85.0% | 1.429 | +$12.31 | $19.86 |
+| EURUSD | 22 | 15 / 7 | 68.2% | 0.411 | -$36.60 | $62.59 |
+| GBPUSD | 29 | 20 / 9 | 69.0% | 0.441 | -$46.27 | $55.11 |
+
+The Gold result looked promising on the first fold, but failed the next chronological fold with the same setting: 31 completed entries, 24 wins / 7 losses, 77.4% win rate, PF 0.814, net -$14.00, max drawdown $57.17. The filter therefore does not establish a robust Gold edge and is not promoted.
+
+Saved sessions:
+- First-fold Gold: `z685vouju1t4omqyhp16nvne`; EURUSD: `r72mq253pc9ffdy2egrb3ce7`; GBPUSD: `asjfw3czz8hsurjl58bxan1a`.
+- Second-fold Gold: `yvf29u1ihsw07ad39cor5hwx`.
+
+The stop-width filter's first-fold Gold PF above 1 is an isolated result, not a validated strategy. It is especially important not to select it after seeing the fold and then describe the same fold as independent validation. The next test must be a fresh, preregistered chronological period, and any candidate must pass several periods with cost-inclusive assumptions.
+
 ## Diagnostic hypotheses — not approved filters
 
 - Quality-score buckets were non-monotonic in the first Gold fold. For example, the 80–89 bucket was net positive while the 90–100 bucket was net negative. A simple higher quality threshold is not supported by this sample.
