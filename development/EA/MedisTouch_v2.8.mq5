@@ -208,7 +208,7 @@ enum ENUM_VALUE_PROFILE_SOURCE { VA_SOURCE_UNDEFINED, VA_SOURCE_REAL_TRADE_TICKS
 enum ENUM_VALUE_PROFILE_STATE { VA_STATE_UNDEFINED, VA_STATE_BALANCED, VA_STATE_ACCEPTED_ABOVE, VA_STATE_ACCEPTED_BELOW, VA_STATE_REJECTED_ABOVE, VA_STATE_REJECTED_BELOW };
 enum ENUM_OB_STATE { OB_FRESH, OB_TESTED, OB_MITIGATED };
 enum ENUM_VOL_REGIME { VOL_REGIME_UNDEFINED, VOL_REGIME_LOW, VOL_REGIME_NORMAL, VOL_REGIME_HIGH };
-enum ENUM_TRADING_SESSION { SESSION_DEAD, SESSION_TOKYO, SESSION_LONDON, SESSION_NEWYORK, SESSION_LONDON_NY_OVERLAP };
+enum ENUM_TRADING_SESSION { SESSION_DEAD, SESSION_TOKYO, SESSION_LONDON, SESSION_NEWYORK, SESSION_LONDON_NY_OVERLAP, SESSION_UNKNOWN };
 enum ENUM_MARKET_REGIME { REGIME_UNDEFINED, REGIME_TRENDING, REGIME_RANGING, REGIME_TRANSITION };
 enum ENUM_SMC_STRUCTURE_STATE { SMC_WAIT, SMC_INVALID, SMC_VALID, SMC_STALE, SMC_INVALIDATED };
 enum ENUM_BREAKOUT_CLASS { BREAKOUT_NONE, BREAKOUT_EXPANSION, BREAKOUT_LIQUIDITY, BREAKOUT_FAILED, BREAKOUT_EXHAUSTION };
@@ -450,7 +450,9 @@ private:
    bool              m_allowNewYork;
    bool              m_allowOverlap;   // London/NY overlap — highest-liquidity window, allowed even if
                                         // m_allowLondon/m_allowNewYork are individually off
+   int               m_testerServerUtcOffsetMinutes; // explicit broker-server minus UTC offset in tester
 
+   datetime          CurrentGMT();
    static int        DaysInMonth(int year, int month);
    static datetime   NthSunday(int year, int month, int n); // n>0: nth Sunday; n<0: last Sunday
    static bool       IsEUDST(datetime gmtNow);   // London/EU: last Sun Mar - last Sun Oct
@@ -460,6 +462,7 @@ public:
                      CSessionFilter();
    void              Configure(bool enabled, bool allowTokyo = false, bool allowLondon = true,
                                bool allowNewYork = true, bool allowOverlap = true);
+   void              SetTesterServerUtcOffsetMinutes(int offsetMinutes);
    ENUM_TRADING_SESSION CurrentSession();
    // v2.17 addition — for CExtendedKeyLevels::NearestSessionLevel(),
    // which needs to know WHEN the current session opened, not just
@@ -473,7 +476,8 @@ public:
   };
 //+------------------------------------------------------------------+
 CSessionFilter::CSessionFilter() : m_enabled(false), m_allowTokyo(false), m_allowLondon(true),
-                                    m_allowNewYork(true), m_allowOverlap(true) {}
+                                    m_allowNewYork(true), m_allowOverlap(true),
+                                    m_testerServerUtcOffsetMinutes(99999) {}
 //+------------------------------------------------------------------+
 void CSessionFilter::Configure(bool enabled, bool allowTokyo, bool allowLondon, bool allowNewYork, bool allowOverlap)
   {
@@ -482,6 +486,22 @@ void CSessionFilter::Configure(bool enabled, bool allowTokyo, bool allowLondon, 
    m_allowLondon = allowLondon;
    m_allowNewYork = allowNewYork;
    m_allowOverlap = allowOverlap;
+  }
+//+------------------------------------------------------------------+
+void CSessionFilter::SetTesterServerUtcOffsetMinutes(int offsetMinutes)
+  {
+   m_testerServerUtcOffsetMinutes=(offsetMinutes>=-840 && offsetMinutes<=840 ? offsetMinutes : 99999);
+  }
+//+------------------------------------------------------------------+
+datetime CSessionFilter::CurrentGMT()
+  {
+   if((bool)MQLInfoInteger(MQL_TESTER))
+     {
+      if(m_testerServerUtcOffsetMinutes < -840 || m_testerServerUtcOffsetMinutes > 840)
+         return 0; // unknown, never mislabel broker server time as UTC
+      return TimeCurrent()-(datetime)(m_testerServerUtcOffsetMinutes*60);
+     }
+   return TimeGMT();
   }
 //+------------------------------------------------------------------+
 int CSessionFilter::DaysInMonth(int year, int month)
@@ -544,7 +564,8 @@ bool CSessionFilter::IsUSDST(datetime gmtNow)
 // Each city's own DST state shifts its GMT window by exactly one hour.
 ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
   {
-   datetime nowGmt = TimeGMT();
+   datetime nowGmt = CurrentGMT();
+   if(nowGmt<=0) return SESSION_UNKNOWN;
    MqlDateTime t;
    TimeToStruct(nowGmt, t);
    int h = t.hour;
@@ -575,7 +596,8 @@ ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
 // begun before both sides are open.
 datetime CSessionFilter::CurrentSessionStartGMT()
   {
-   datetime nowGmt = TimeGMT();
+   datetime nowGmt = CurrentGMT();
+   if(nowGmt<=0) return 0;
    MqlDateTime t;
    TimeToStruct(nowGmt, t);
 
@@ -6561,7 +6583,8 @@ public:
    // the London/NY overlap; blocks Tokyo-only and dead hours. Pass
    // enabled=false to restore pre-v2.8 all-sessions behavior.
    void              ConfigureSessionFilter(bool enabled, bool allowTokyo = false, bool allowLondon = true,
-                                            bool allowNewYork = true, bool allowOverlap = true);
+                                            bool allowNewYork = true, bool allowOverlap = true,
+                                            int testerServerUtcOffsetMinutes = 99999);
    // v2.9 addition. FVGScore() now ranks every qualifying FVG and keeps
    // the best-scoring one instead of returning the first match found —
    // "first" had no relationship to "best" (freshness/proximity), so two
@@ -6797,9 +6820,11 @@ void CScoringEngine::ConfigureVolatilityRegime(bool blockLowVolRegime, int lookb
   }
 //+------------------------------------------------------------------+
 void CScoringEngine::ConfigureSessionFilter(bool enabled, bool allowTokyo, bool allowLondon,
-                                            bool allowNewYork, bool allowOverlap)
+                                            bool allowNewYork, bool allowOverlap,
+                                            int testerServerUtcOffsetMinutes)
   {
    m_sessionFilter.Configure(enabled, allowTokyo, allowLondon, allowNewYork, allowOverlap);
+   m_sessionFilter.SetTesterServerUtcOffsetMinutes(testerServerUtcOffsetMinutes);
   }
 //+------------------------------------------------------------------+
 void CScoringEngine::ConfigureFVGProximity(double maxDistATR)
@@ -16400,7 +16425,7 @@ int OnInit()
       g_topDownMTF.Configure(InpMTFMaxConfidenceAdjustment,InpMTFChochLookbackBars);
       Print("Midas: direction-agnostic D1/H4/H1/M30/M15/M5/M1 scoring enabled; matched validation is required before production activation.");
      }
-   g_scoring.Init(g_trendCtx,g_bosCtx,g_liqCtx,g_fvgCtx,g_chartCtx,&g_chartCtx.candles);g_scoring.ConfigureMTFStructureAlignment(InpRequireMtfStructureAlignment,InpMtfMaxBosAgeBars);g_scoring.ConfigureInducement(InpImpulseLookbackBars,InpImpulseATRMult,InpImpulseBodyRatio,InpEqualTolATR,InpMaxLegExtend,InpRequirePremiumDiscount,InpRequireDistributionPhase,InpPhaseRangeLookback,InpPhaseCompressionATRMult);g_scoring.ConfigureVolumeFibonacci(InpRequireVolumeConfirmation,InpRVOLThreshold,InpRequireFibonacciZone,InpFibZoneMinPct,InpFibZoneMaxPct);g_scoring.ConfigureValueArea(InpRequireValueAreaLocation,InpBlockValueAreaContradictions);g_scoring.ConfigureHtfOrderBlock(g_htfObCtx,InpRequireHtfOB,InpOBDistATRMax);g_scoring.ConfigureVolatilityRegime(InpBlockLowVolRegime,InpVolRegimeLookback,InpVolRegimeLowPct,InpVolRegimeHighPct);g_scoring.ConfigureSessionFilter(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_operatorSessionFilter.Configure(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_scoring.ConfigureSweepQuality(InpRequireMinSweepGrade,(ENUM_SWEEP_GRADE)InpMinSweepGrade,InpRequireFreshSetup,InpMaxBarsSinceBOS);g_scoring.ConfigureChaseFilter(InpRequireChaseFilter,InpMaxChaseDistATR);g_scoring.ConfigureFVGProximity(InpFVGMaxDistATR);g_scoring.ConfigureLearnedDiagnostics(InpDiagContradictionWeight,InpDiagEnvWeight,InpDiagExecWeight);g_scoring.ConfigureStrategyDiagnostics(InpMomentumBreakoutRecencyBars,InpBreakoutLiqOverlapBars,InpBreakoutExtensionLookbackBars,InpBreakoutExhaustionATRMult,InpMomentumLookbackBars);g_scoring.ConfigureMeanReversionDiagnostics(InpReversionMinStretchATR,InpReversionSRZoneATRTolerance,InpReversionWickRejectionRatio,InpReversionLiqRecencyBars,InpReversionTrendConflictRecencyBars,InpReversionTrendConflictMinStrength);g_scoring.ConfigureKeyLevelDiagnostics(InpKeyLevelLookbackBars,InpKeyLevelSearchATRMax,InpKeyLevelTouchToleranceATRMult,InpKeyLevelAbsorptionMinTouches,InpKeyLevelWickRejectionRatio,InpKeyLevelRoundStep);g_scoring.ConfigureStrategySelection(InpMinSelectionScore);
+   g_scoring.Init(g_trendCtx,g_bosCtx,g_liqCtx,g_fvgCtx,g_chartCtx,&g_chartCtx.candles);g_scoring.ConfigureMTFStructureAlignment(InpRequireMtfStructureAlignment,InpMtfMaxBosAgeBars);g_scoring.ConfigureInducement(InpImpulseLookbackBars,InpImpulseATRMult,InpImpulseBodyRatio,InpEqualTolATR,InpMaxLegExtend,InpRequirePremiumDiscount,InpRequireDistributionPhase,InpPhaseRangeLookback,InpPhaseCompressionATRMult);g_scoring.ConfigureVolumeFibonacci(InpRequireVolumeConfirmation,InpRVOLThreshold,InpRequireFibonacciZone,InpFibZoneMinPct,InpFibZoneMaxPct);g_scoring.ConfigureValueArea(InpRequireValueAreaLocation,InpBlockValueAreaContradictions);g_scoring.ConfigureHtfOrderBlock(g_htfObCtx,InpRequireHtfOB,InpOBDistATRMax);g_scoring.ConfigureVolatilityRegime(InpBlockLowVolRegime,InpVolRegimeLookback,InpVolRegimeLowPct,InpVolRegimeHighPct);g_scoring.ConfigureSessionFilter(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap,InpTesterServerUtcOffsetMinutes);g_operatorSessionFilter.Configure(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_operatorSessionFilter.SetTesterServerUtcOffsetMinutes(InpTesterServerUtcOffsetMinutes);g_scoring.ConfigureSweepQuality(InpRequireMinSweepGrade,(ENUM_SWEEP_GRADE)InpMinSweepGrade,InpRequireFreshSetup,InpMaxBarsSinceBOS);g_scoring.ConfigureChaseFilter(InpRequireChaseFilter,InpMaxChaseDistATR);g_scoring.ConfigureFVGProximity(InpFVGMaxDistATR);g_scoring.ConfigureLearnedDiagnostics(InpDiagContradictionWeight,InpDiagEnvWeight,InpDiagExecWeight);g_scoring.ConfigureStrategyDiagnostics(InpMomentumBreakoutRecencyBars,InpBreakoutLiqOverlapBars,InpBreakoutExtensionLookbackBars,InpBreakoutExhaustionATRMult,InpMomentumLookbackBars);g_scoring.ConfigureMeanReversionDiagnostics(InpReversionMinStretchATR,InpReversionSRZoneATRTolerance,InpReversionWickRejectionRatio,InpReversionLiqRecencyBars,InpReversionTrendConflictRecencyBars,InpReversionTrendConflictMinStrength);g_scoring.ConfigureKeyLevelDiagnostics(InpKeyLevelLookbackBars,InpKeyLevelSearchATRMax,InpKeyLevelTouchToleranceATRMult,InpKeyLevelAbsorptionMinTouches,InpKeyLevelWickRejectionRatio,InpKeyLevelRoundStep);g_scoring.ConfigureStrategySelection(InpMinSelectionScore);
    g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_decision.ConfigureFreshSweepAdditiveRouter(InpEnableFreshSweepAdditiveRouter,InpFreshSweepEnableSingleSwingFallback,InpFreshSweepMaxSignalAgeBars,InpFreshSweepDirectionalAdvantage,InpFreshSweepUseDualLaneRankB);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride,
                 ((bool)MQLInfoInteger(MQL_TESTER)?InpTesterExportRunId:"live"));g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber,3,300,InpMaxQuoteAgeSeconds,InpMaxSpreadPoints);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
    if(StringLen(InpConfigSyncEndpoint)>0){g_configSync.Init(_Symbol,InpConfigSyncEndpoint,InpBridgeApiKey,InpWeightSetVersion,InpWebRequestTimeoutMs);EventSetTimer(MathMax(60,InpConfigSyncPollMinutes*60));}g_tracker.ConfigurePublishing(&g_publisher,InpWeightSetVersion);g_portfolio.Init(g_activeRiskLimits.maxPortfolioRiskPercent,g_activeRiskLimits.maxPositionsPerSymbol,g_activeRiskLimits.maxPositionsPerGroup,InpMagicNumber,&g_risk);g_riskGuard.Init(_Symbol,g_activeRiskLimits.maxDailyLossPercent,g_activeRiskLimits.maxDrawdownPercent,g_activeRiskLimits.deriskStartPercent,g_activeRiskLimits.deriskFloor,InpEnableProgressiveDailyLossDeRisk);if(InpUseNewsFilter)g_newsFilter.Load(InpNewsFilterFile,InpNewsMinutesBefore,InpNewsMinutesAfter);g_scoring.ConfigureNewsAwareness(GetPointer(g_newsFilter),InpNewsWarnMinutesBefore,InpNewsWarnMinutesAfter,InpNewsWarnMultiplier);g_recovery.Init(&g_store,&g_orders,InpMagicNumber,_Symbol);int restored=g_recovery.Recover();if(restored>0)PrintFormat("MedisTouch EA: recovery restored %d live trade(s).",restored);TradeDecisionRecord prior[];int n=g_store.LoadAll(prior);long maxId=0;for(int i=0;i<n;i++)if(prior[i].decision_id>maxId)maxId=prior[i].decision_id;if(maxId>0)g_router.SeedNextId(maxId+1);
