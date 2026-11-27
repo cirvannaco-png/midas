@@ -78,7 +78,7 @@ def read_position_labels(path: Path) -> dict[str, dict]:
     }
     grouped: dict[str, dict] = defaultdict(lambda: {
         "directions": set(), "sessions": set(), "stop_prices": set(),
-        "stop_distances": set(), "deal_reasons": set(),
+        "stop_distances": set(), "deal_reasons": set(), "exit_reasons": set(),
     })
     with path.open(newline="", encoding="utf-8-sig") as stream:
         reader = csv.DictReader(stream)
@@ -99,6 +99,9 @@ def read_position_labels(path: Path) -> dict[str, dict]:
                 target["sessions"].add(session)
             if reason:
                 target["deal_reasons"].add(reason)
+                entry_kind = (row.get("entry") or "").strip().upper()
+                if entry_kind in {"OUT", "OUT_BY", "DEAL_ENTRY_OUT", "DEAL_ENTRY_OUT_BY", "1", "3"}:
+                    target["exit_reasons"].add(reason)
             stop_price = finite_number(row.get("initial_stop_price", ""), "initial_stop_price", row_num, optional=True)
             stop_distance = finite_number(row.get("initial_stop_distance_points", ""), "initial_stop_distance_points", row_num, optional=True)
             if stop_price is not None and stop_price > 0:
@@ -121,6 +124,7 @@ def read_position_labels(path: Path) -> dict[str, dict]:
             "initial_stop_price": next(iter(item["stop_prices"]), None),
             "initial_stop_distance_points": next(iter(item["stop_distances"]), None),
             "deal_reasons": sorted(item["deal_reasons"]),
+            "exit_deal_reasons": sorted(item["exit_reasons"]),
         }
     return output
 
@@ -243,15 +247,16 @@ def main() -> int:
                 round(sum(d["slippage_cost_cash"] for d in rows), 8)
                 if position["slippage_complete"] else None
             )
-            position["exit_deal_reasons"] = sorted({
-                str(raw.get("deal_reason", "")).upper()
-                for raw in csv.DictReader(args.deals.open(newline="", encoding="utf-8-sig"))
-                if str(raw.get("position_id", "")).strip() == pid and str(raw.get("entry", "")).upper() in {"OUT", "OUT_BY", "DEAL_ENTRY_OUT", "DEAL_ENTRY_OUT_BY"}
-            })
             enriched.append(position)
 
-        total_rows = deals
+        eligible_ids = {p["position_id"] for p in enriched}
+        total_rows = [d for d in deals if d["position_id"] in eligible_ids]
         losses = [p for p in enriched if p["net_pnl"] < -1e-7]
+        stop_loss_positions = [p for p in enriched if "DEAL_REASON_SL" in p.get("exit_deal_reasons", [])]
+        exit_reason_counts = {}
+        for p in enriched:
+            for reason in p.get("exit_deal_reasons", []):
+                exit_reason_counts[reason] = exit_reason_counts.get(reason, 0) + 1
         cost_breakdown = {
             "gross_deal_profit_cashflow": round(sum(d["profit"] for d in total_rows), 2),
             "commission_cashflow": round(sum(d["commission"] for d in total_rows), 2),
@@ -266,12 +271,33 @@ def main() -> int:
             "loss_position_fee_cashflow": round(sum(p["fee_cashflow"] for p in losses), 2),
             "loss_positions_with_complete_slippage": sum(1 for p in losses if p["slippage_complete"]),
             "loss_position_known_slippage_cost_cash": round(sum(p["slippage_cost_cash"] or 0.0 for p in losses), 2),
+            "positions_exited_by_stop_loss": len(stop_loss_positions),
+            "losing_positions_exited_by_stop_loss": sum(1 for p in stop_loss_positions if p["net_pnl"] < -1e-7),
+            "exit_deal_reason_position_counts": exit_reason_counts,
             "baseline_spread_points_mean": metadata.get("spread_points_mean"),
             "baseline_spread_points_max": metadata.get("spread_points_max"),
             "spread_cash_note": "Baseline spread is embedded in MT5 tester fills; do not subtract it again. Use cost_stress_monte_carlo.py for incremental spread-widening scenarios.",
         }
 
         joined_outcomes = [row for row in outcomes if row["decision_id"] in decision_ids]
+        outcome_groups: dict[str, list[dict]] = defaultdict(list)
+        for row in joined_outcomes:
+            key = "|".join((row["symbol"], row["strategy"], row["direction"], row["session"]))
+            outcome_groups[key].append(row)
+        by_strategy_session_outcomes = {}
+        for key, group in sorted(outcome_groups.items()):
+            by_strategy_session_outcomes[key] = {
+                "symbol": group[0]["symbol"], "strategy": group[0]["strategy"],
+                "direction": group[0]["direction"], "session": group[0]["session"],
+                "decisions": len(group),
+                "mean_mfe_R": round(sum(r["mfe_r"] for r in group) / len(group), 4),
+                "mean_mae_R": round(sum(r["mae_r"] for r in group) / len(group), 4),
+                "mean_bars_held": round(sum(r["bars_held"] for r in group) / len(group), 2),
+                "mean_realized_R": round(sum(r["realized_r"] for r in group) / len(group), 4),
+                "sl_hit_decisions": sum(1 for r in group if r["exit_outcome"] == "SL_HIT"),
+                "tp_hit_decisions": sum(1 for r in group if r["exit_outcome"] == "FINALTP_HIT"),
+                "possible_premature_exit_candidates": sum(1 for r in group if r["exit_outcome"] not in {"SL_HIT", "FINALTP_HIT"} and r["mfe_r"] >= 1.0 and r["realized_r"] <= 0.25),
+            }
         premature = [
             row for row in joined_outcomes
             if row["exit_outcome"] not in {"SL_HIT", "FINALTP_HIT"}
@@ -309,12 +335,7 @@ def main() -> int:
                 "mean_realized_R": round(sum(r["realized_r"] for r in joined_outcomes) / len(joined_outcomes), 4) if joined_outcomes else None,
                 "possible_premature_exit_candidates": len(premature),
                 "premature_exit_rule": "decision-level non-SL/non-TP exit with MFE_R >= 1.0 and RealizedR <= 0.25; diagnostic candidate only, not proof of an avoidable exit",
-                "by_strategy_session": grouped_metrics(
-                    [
-                        {**r, "net_pnl": r["realized_net_pnl"], "risk_cash": 1.0}
-                        for r in joined_outcomes
-                    ], initial_balance, ("symbol", "strategy", "direction", "session")
-                ),
+                "by_strategy_session": by_strategy_session_outcomes,
             },
             "loss_cost_attribution": cost_breakdown,
             "ignored_or_censored_position_groups": ignored,
@@ -325,6 +346,8 @@ def main() -> int:
                 "strategy_tagged": sum(1 for p in enriched if p.get("strategy") not in {"", "UNTAGGED", "CONFLICT"}),
                 "slippage_complete_positions": sum(1 for p in enriched if p.get("slippage_complete")),
                 "slippage_unknown_positions": sum(1 for p in enriched if not p.get("slippage_complete")),
+                "positions_with_initial_stop_distance": sum(1 for p in enriched if p.get("initial_stop_distance_points") is not None),
+                "positions_with_exit_reason": sum(1 for p in enriched if p.get("exit_deal_reasons")),
             },
             "interpretation": {
                 "position_unit": "stable MT5 position_id; partial close deals are collapsed",
