@@ -74,11 +74,13 @@ def read_export_metadata(path: Path) -> dict:
 def read_position_labels(path: Path) -> dict[str, dict]:
     required = {
         "position_id", "direction", "session", "initial_stop_price",
-        "initial_stop_distance_points", "deal_reason",
+        "initial_stop_distance_points", "deal_reason", "spread_points_observed", "spread_observed",
     }
     grouped: dict[str, dict] = defaultdict(lambda: {
         "directions": set(), "sessions": set(), "stop_prices": set(),
         "stop_distances": set(), "deal_reasons": set(), "exit_reasons": set(),
+        "spread_volume_points_sum": 0.0, "spread_observed_volume": 0.0,
+        "spread_unknown_rows": 0, "deal_rows": 0,
     })
     with path.open(newline="", encoding="utf-8-sig") as stream:
         reader = csv.DictReader(stream)
@@ -97,11 +99,22 @@ def read_position_labels(path: Path) -> dict[str, dict]:
                 target["directions"].add(direction)
             if session:
                 target["sessions"].add(session)
+            target["deal_rows"] += 1
             if reason:
                 target["deal_reasons"].add(reason)
                 entry_kind = (row.get("entry") or "").strip().upper()
                 if entry_kind in {"OUT", "OUT_BY", "DEAL_ENTRY_OUT", "DEAL_ENTRY_OUT_BY", "1", "3"}:
                     target["exit_reasons"].add(reason)
+            spread_flag = (row.get("spread_observed") or "").strip().lower() in {"1", "true", "yes"}
+            if spread_flag:
+                spread_points = finite_number(row.get("spread_points_observed", ""), "spread_points_observed", row_num)
+                volume = finite_number(row.get("volume", ""), "volume", row_num)
+                if spread_points < 0 or volume <= 0:
+                    raise AttributionError(f"deals row {row_num}: invalid observed spread or volume")
+                target["spread_volume_points_sum"] += spread_points * volume
+                target["spread_observed_volume"] += volume
+            else:
+                target["spread_unknown_rows"] += 1
             stop_price = finite_number(row.get("initial_stop_price", ""), "initial_stop_price", row_num, optional=True)
             stop_distance = finite_number(row.get("initial_stop_distance_points", ""), "initial_stop_distance_points", row_num, optional=True)
             if stop_price is not None and stop_price > 0:
@@ -125,6 +138,9 @@ def read_position_labels(path: Path) -> dict[str, dict]:
             "initial_stop_distance_points": next(iter(item["stop_distances"]), None),
             "deal_reasons": sorted(item["deal_reasons"]),
             "exit_deal_reasons": sorted(item["exit_reasons"]),
+            "spread_observation_complete": item["spread_unknown_rows"] == 0 and item["deal_rows"] > 0,
+            "spread_volume_points_sum": item["spread_volume_points_sum"],
+            "spread_observed_volume": item["spread_observed_volume"],
         }
     return output
 
@@ -221,6 +237,8 @@ def main() -> int:
         open_ids = read_open_ids(args.open_positions)
         positions, ignored = reconstruct_positions(deals, open_ids)
         labels = read_position_labels(args.deals)
+        cash_per_point = metadata.get("cash_per_point_per_lot")
+        cash_per_point = float(cash_per_point) if cash_per_point is not None else 0.0
         outcomes = read_decision_outcomes(args.outcomes)
         decision_ids = {str(row["decision_id"]) for row in positions if row.get("decision_id")}
         outcome_by_id = {row["decision_id"]: row for row in outcomes}
@@ -237,6 +255,12 @@ def main() -> int:
         for position in positions:
             pid = position["position_id"]
             position.update(labels.get(pid, {}))
+            if position.get("spread_observation_complete") and cash_per_point > 0.0:
+                position["estimated_embedded_spread_cost_cash"] = round(
+                    0.5 * position["spread_volume_points_sum"] * cash_per_point, 8
+                )
+            else:
+                position["estimated_embedded_spread_cost_cash"] = None
             rows = deals_by_position[pid]
             position["gross_deal_profit"] = round(sum(d["profit"] for d in rows), 8)
             position["commission_cashflow"] = round(sum(d["commission"] for d in rows), 8)
@@ -276,7 +300,17 @@ def main() -> int:
             "exit_deal_reason_position_counts": exit_reason_counts,
             "baseline_spread_points_mean": metadata.get("spread_points_mean"),
             "baseline_spread_points_max": metadata.get("spread_points_max"),
-            "spread_cash_note": "Baseline spread is embedded in MT5 tester fills; do not subtract it again. Use cost_stress_monte_carlo.py for incremental spread-widening scenarios.",
+            "positions_with_complete_observed_spread": sum(1 for p in enriched if p.get("spread_observation_complete")),
+            "positions_with_unknown_observed_spread": sum(1 for p in enriched if not p.get("spread_observation_complete")),
+            "estimated_embedded_spread_cost_cash": (
+                round(sum(p["estimated_embedded_spread_cost_cash"] for p in enriched if p.get("estimated_embedded_spread_cost_cash") is not None), 2)
+                if any(p.get("estimated_embedded_spread_cost_cash") is not None for p in enriched) else None
+            ),
+            "loss_position_estimated_embedded_spread_cost_cash": (
+                round(sum(p["estimated_embedded_spread_cost_cash"] for p in losses if p.get("estimated_embedded_spread_cost_cash") is not None), 2)
+                if any(p.get("estimated_embedded_spread_cost_cash") is not None for p in losses) else None
+            ),
+            "spread_cash_note": "Estimated from deal-callback observed spread and broker cash-per-point metadata. It is an explanatory estimate of spread already embedded in tester fills, not an additional deduction. Use cost_stress_monte_carlo.py for incremental spread-widening scenarios.",
         }
 
         joined_outcomes = [row for row in outcomes if row["decision_id"] in decision_ids]
@@ -348,6 +382,7 @@ def main() -> int:
                 "slippage_unknown_positions": sum(1 for p in enriched if not p.get("slippage_complete")),
                 "positions_with_initial_stop_distance": sum(1 for p in enriched if p.get("initial_stop_distance_points") is not None),
                 "positions_with_exit_reason": sum(1 for p in enriched if p.get("exit_deal_reasons")),
+                "positions_with_complete_observed_spread": sum(1 for p in enriched if p.get("spread_observation_complete")),
             },
             "interpretation": {
                 "position_unit": "stable MT5 position_id; partial close deals are collapsed",
