@@ -80,6 +80,9 @@ jobs:
           $errors = [int]$match.Groups[1].Value
           $warnings = [int]$match.Groups[2].Value
           Write-Host "Midas EA: $errors errors, $warnings warnings"
+          New-Item -ItemType Directory -Force -Path "artifacts" | Out-Null
+          Copy-Item $log "artifacts/MedisTouch_v2.8.MetaEditor.log" -Force
+          "Midas EA compile: $errors errors, $warnings warnings" | Out-File "artifacts/compile-summary.txt" -Encoding utf8
           if ($errors -ne 0 -or $warnings -ne 0) { throw "Release compile gate requires zero errors and zero warnings; found $errors errors and $warnings warnings." }
           $ex5 = Join-Path $target "MedisTouch_v2.8.ex5"
           if (-not (Test-Path $ex5)) { throw "Compiled EX5 not produced" }
