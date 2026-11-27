@@ -58,8 +58,9 @@ def test_position_label_conflicts_fail_closed(tmp_path):
         "10,SELL,SESSION_LONDON,1.0800,120,DEAL_REASON_SL,1.4,true,0.5,OUT\n",
         encoding="utf-8",
     )
-    with pytest.raises(AttributionError, match="conflicting direction"):
-        read_position_labels(path)
+    labels = read_position_labels(path)
+    assert labels["10"]["direction"] == "CONFLICT"
+    assert labels["10"]["attribution_conflict"] is True
 
 
 def test_outcome_reader_joins_by_stable_decision_id(tmp_path):
