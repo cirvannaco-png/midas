@@ -1784,6 +1784,9 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
       int exportLegIndex=0;
       string exportStrategy="UNTAGGED";
       string exportRegime="UNTAGGED";
+      string exportSession="UNTAGGED";
+      string exportDirection="UNTAGGED";
+      double initialStopDistancePoints=0.0;
       double requestedPrice=0.0;
       double slippagePoints=0.0;
       double slippageCostCash=0.0;
@@ -1795,10 +1798,22 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
          string orderComment=HistoryOrderGetString(exportOrder,ORDER_COMMENT);
          if(entry==DEAL_ENTRY_IN &&
             ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex))
-            g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime);
+            g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime,
+                                     exportSession,exportDirection,initialStopDistancePoints);
          double entryStop=HistoryOrderGetDouble(exportOrder,ORDER_SL);
          if(entry==DEAL_ENTRY_IN && entryStop>0.0 && dealVolume>0.0 && dealPrice>0.0)
+           {
             entryRiskCash=g_risk.RiskAmountForLots(_Symbol,dealVolume,dealPrice,entryStop);
+            double pointSize=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+            if(pointSize>0.0)
+               initialStopDistancePoints=MathAbs(dealPrice-entryStop)/pointSize;
+            if(exportDirection=="UNTAGGED")
+              {
+               ENUM_ORDER_TYPE entryOrderType=(ENUM_ORDER_TYPE)HistoryOrderGetInteger(exportOrder,ORDER_TYPE);
+               if(entryOrderType==ORDER_TYPE_BUY) exportDirection="BUY";
+               else if(entryOrderType==ORDER_TYPE_SELL) exportDirection="SELL";
+              }
+           }
 
          // Only market BUY/SELL orders are scored as execution slippage.
          // Pending stop/limit triggers are deliberately left unknown rather than
@@ -1842,6 +1857,10 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
             HistoryDealGetDouble(trans.deal,DEAL_SWAP),
             HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash,
             exportDecisionId,exportStrategy,exportRegime,
+            exportDirection,exportSession,
+            (entry==DEAL_ENTRY_IN?HistoryOrderGetDouble(exportOrder,ORDER_SL):0.0),
+            initialStopDistancePoints,
+            EnumToString((ENUM_DEAL_REASON)HistoryDealGetInteger(trans.deal,DEAL_REASON)),
             requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
          PrintFormat("MIDAS_TEST_EXPORT_ERROR deal=%I64u position=%I64u; artifact will be incomplete",
                      trans.deal,positionIdentifier);
