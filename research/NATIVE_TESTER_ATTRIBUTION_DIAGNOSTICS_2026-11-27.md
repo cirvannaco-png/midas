@@ -105,6 +105,8 @@ python backend/source/tools/cost_stress_monte_carlo.py \
 
 ## Remaining evidence requirement
 
+The native `SessionFilterUtc` policy suite now exercises broker-offset conversion and the independent US/EU daylight-saving transition windows. The EA also compiles with the new session normalization code before any tester dataset is accepted.
+
 The code and analysis pipeline are prepared, but no native tester CSVs or HTML reports were supplied in this work session. Therefore **no production-EA expectancy, profit factor, session ranking, or stop/exit conclusion is claimed yet**. The next factual step is to run the production EA in native MT5 and provide the matching four CSV/JSON artifacts plus the tester report and `.set` file.
 
 The pipeline must then be checked for attribution coverage, history reconciliation, spread/slippage coverage, commission completeness and enough completed positions before any family is shortlisted for further research.
