@@ -798,6 +798,7 @@ class CSignalLogger
 private:
    string            m_filename;
    string            m_outcomeFilename;
+   string            m_outcomeRunId;
    string            m_smcFilename;
    bool              m_smcHeaderWritten;
    bool              m_headerWritten;
@@ -846,6 +847,7 @@ void CSignalLogger::Init(string symbol, int gmtOffsetOverrideHours,string outcom
    StringReplace(safeRunId,":","_");
    StringReplace(safeRunId," ","_");
    if(StringLen(safeRunId)==0) safeRunId="manual";
+   m_outcomeRunId=safeRunId;
    if((bool)MQLInfoInteger(MQL_TESTER))
       safeRunId+="_"+IntegerToString((long)GetTickCount());
    m_outcomeFilename = "MedisTouch_Outcomes_v3_" + symbol + "_" + safeRunId + ".csv";
@@ -1190,7 +1192,7 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
                // positional columns remain stable in this versioned outcome file.
                "SelectedStrategy", "SelectedStrategyScore", "OutcomeEpoch",
                // Stable lineage and session fields are appended to preserve legacy column positions.
-               "DecisionID", "Session");
+               "DecisionID", "Session", "RunID");
       m_outcomeHeaderWritten = true;
      }
 
@@ -1266,7 +1268,8 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
             DoubleToString(p.setup.reasons.selected_strategy_score, 1),
             (long)resolvedAt,
             p.decisionId,
-            EnumToString(p.setup.reasons.session));
+            EnumToString(p.setup.reasons.session),
+            m_outcomeRunId);
 
    FileClose(handle);
    return true;
