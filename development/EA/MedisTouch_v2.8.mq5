@@ -1180,7 +1180,9 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
                "KeyLevelSource", "KeyLevelReaction", "KeyLevelScore",
                // v2.15 — same rationale. OutcomeEpoch is appended so legacy
                // positional columns remain stable in this versioned outcome file.
-               "SelectedStrategy", "SelectedStrategyScore", "OutcomeEpoch");
+               "SelectedStrategy", "SelectedStrategyScore", "OutcomeEpoch",
+               // Stable lineage and session fields are appended to preserve legacy column positions.
+               "DecisionID", "Session");
       m_outcomeHeaderWritten = true;
      }
 
@@ -1254,7 +1256,9 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
             DoubleToString(p.setup.reasons.keylevel_score, 1),
             SelectedStrategyLabel(p.setup.reasons.selected_strategy),
             DoubleToString(p.setup.reasons.selected_strategy_score, 1),
-            (long)resolvedAt);
+            (long)resolvedAt,
+            p.decisionId,
+            EnumToString(p.setup.reasons.session));
 
    FileClose(handle);
    return true;
@@ -9628,16 +9632,27 @@ public:
    void Init(CSignalLogger* logger,string symbol,ENUM_TIMEFRAMES tf,int maxBars,ENUM_FILL_POLICY fp=FILL_CONSERVATIVE,ENUM_TIMEFRAMES replayTF=PERIOD_M1){m_logger=logger;m_symbol=symbol;m_entryTF=tf;m_maxBars=MathMax(5,maxBars);m_fillPolicy=fp;m_replayTF=replayTF;m_count=0;m_lastFinalizedR=0.0;m_lastFinalizedQualified=false;ArrayResize(m_pending,0);ArrayResize(m_seenDealTickets,0);ArrayResize(m_rebuiltDecisionIds,0);ZeroMemory(m_stats);}
    void ConfigureExecutionMode(bool live){m_liveExecution=live;}void ConfigureSimulation(double risk,bool allow,double be,double partial,double frac,double trail,double comm,double spread,double slip){m_riskPercent=risk;m_allowMinLotOverride=allow;m_breakEvenAtR=be;m_partialAtR=partial;m_partialFraction=MathMax(0.0,MathMin(1.0,frac));m_trailATRMult=trail;m_commissionPerLot=MathMax(0.0,comm);m_spreadPoints=MathMax(0.0,spread);m_slippagePoints=MathMax(0.0,slip);}void ConfigureCalibration(bool enabled,int minSample=30){m_calibrationEnabled=enabled;m_calibration.Init(m_symbol,minSample);}void ConfigureConfidenceDecay(double halfLife=12.0){m_decayHalfLifeBars=halfLife;}void ConfigurePublishing(CSignalPublisher* p,string version){m_publisher=p;m_weightVersion=version;}void ConfigureEnvironmentMemory(CEnvironmentStrategyMemory* memory){m_environmentMemory=memory;}
    int ActiveCount()const{return m_count;}double LastFinalizedR()const{return m_lastFinalizedR;}bool LastFinalizedQualified()const{return m_lastFinalizedQualified;}OutcomeStats GetStats()const{return m_stats;}double GetCalibratedProbability(double confidence,int &sample,bool &enough)const{return m_calibration.GetCalibratedProbability(confidence,sample,enough);}
-   bool GetAttribution(long decisionId,string &strategy,string &regime)
+   bool GetAttribution(long decisionId,string &strategy,string &regime,string &session,
+                       string &direction,double &initialStopDistancePoints)
      {
       strategy="UNTAGGED";
       regime="UNTAGGED";
+      session="UNTAGGED";
+      direction="UNTAGGED";
+      initialStopDistancePoints=0.0;
       int index=Find(decisionId);
       if(index<0) return false;
-      strategy=EnumToString(m_pending[index].setup.reasons.selected_strategy);
-      regime=EnumToString(m_pending[index].setup.reasons.regime);
+      PendingSetup p=m_pending[index];
+      strategy=EnumToString(p.setup.reasons.selected_strategy);
+      regime=EnumToString(p.setup.reasons.regime);
+      session=EnumToString(p.setup.reasons.session);
+      direction=(p.setup.type==ORDER_TYPE_BUY?"BUY":"SELL");
+      double point=SymbolInfoDouble(m_symbol,SYMBOL_POINT);
+      if(point>0.0 && p.riskDist>0.0)
+         initialStopDistancePoints=p.riskDist/point;
       if(StringLen(strategy)==0) strategy="UNTAGGED";
       if(StringLen(regime)==0) regime="UNTAGGED";
+      if(StringLen(session)==0) session="UNTAGGED";
       return true;
      }
    void AddSetup(TradeSetup &setup,long decisionId=-1,string decisionFingerprint=""){if(!setup.active||decisionId<=0||Find(decisionId)>=0)return;PendingSetup p;ZeroMemory(p);p.setup=setup;p.decisionId=decisionId;p.decision_fingerprint=decisionFingerprint;p.entryRef=ResolveExecutionEntry(setup);p.riskDist=MathAbs(p.entryRef-setup.stop_loss);p.sizingEntryPrice=p.entryRef;p.mgmtRiskDist=p.riskDist;p.weightedRiskDistLots=0.0;p.mfePrice=p.entryRef;p.maePrice=p.entryRef;p.currentSL=setup.stop_loss;p.confidenceAtSignal=setup.confidence;p.confidenceDecayed=setup.confidence;p.cashflowsKnown=true;p.outcomeHistoryComplete=true;p.excursionHistoryComplete=true;int n=m_count++;ArrayResize(m_pending,m_count);m_pending[n]=p;}
@@ -13655,6 +13670,11 @@ struct TesterDealExportRow
    long decision_id;
    string strategy;
    string regime;
+   string direction;
+   string session;
+   double initial_stop_price;
+   double initial_stop_distance_points;
+   string deal_reason;
    double requested_price;
    double slippage_points;
    double slippage_cost_cash;
@@ -13667,6 +13687,10 @@ struct TesterPositionAttribution
    long decision_id;
    string strategy;
    string regime;
+   string direction;
+   string session;
+   double initial_stop_price;
+   double initial_stop_distance_points;
   };
 
 class CTesterDealExport
@@ -13707,7 +13731,9 @@ private:
      }
 
    void RememberAttribution(const ulong positionId,const long decisionId,
-                            const string strategy,const string regime)
+                            const string strategy,const string regime,
+                            const string direction,const string session,
+                            const double initialStopPrice,const double initialStopDistancePoints)
      {
       if(positionId==0) return;
       int index=AttributionIndex(positionId);
@@ -13723,6 +13749,10 @@ private:
          m_attributions[index].decision_id=decisionId;
          m_attributions[index].strategy=(StringLen(strategy)>0?strategy:"UNTAGGED");
          m_attributions[index].regime=(StringLen(regime)>0?regime:"UNTAGGED");
+         m_attributions[index].direction=(StringLen(direction)>0?direction:"UNTAGGED");
+         m_attributions[index].session=(StringLen(session)>0?session:"UNTAGGED");
+         m_attributions[index].initial_stop_price=initialStopPrice;
+         m_attributions[index].initial_stop_distance_points=initialStopDistancePoints;
          return;
         }
       if(m_attributions[index].strategy=="CONFLICT" ||
@@ -13734,7 +13764,10 @@ private:
                      strategy!=m_attributions[index].strategy) ||
                     (StringLen(regime)>0 && regime!="UNTAGGED" &&
                      m_attributions[index].regime!="UNTAGGED" &&
-                     regime!=m_attributions[index].regime);
+                     regime!=m_attributions[index].regime) ||
+                    (StringLen(direction)>0 && direction!="UNTAGGED" &&
+                     m_attributions[index].direction!="UNTAGGED" &&
+                     direction!=m_attributions[index].direction);
       if(conflict)
         {
          m_attributions[index].decision_id=0;
@@ -13748,6 +13781,14 @@ private:
          m_attributions[index].strategy=strategy;
       if(m_attributions[index].regime=="UNTAGGED" && StringLen(regime)>0 && regime!="UNTAGGED")
          m_attributions[index].regime=regime;
+      if(m_attributions[index].direction=="UNTAGGED" && StringLen(direction)>0 && direction!="UNTAGGED")
+         m_attributions[index].direction=direction;
+      if(m_attributions[index].session=="UNTAGGED" && StringLen(session)>0 && session!="UNTAGGED")
+         m_attributions[index].session=session;
+      if(m_attributions[index].initial_stop_price<=0.0 && initialStopPrice>0.0)
+         m_attributions[index].initial_stop_price=initialStopPrice;
+      if(m_attributions[index].initial_stop_distance_points<=0.0 && initialStopDistancePoints>0.0)
+         m_attributions[index].initial_stop_distance_points=initialStopDistancePoints;
      }
 
    string SafeName(string value)
@@ -13853,7 +13894,8 @@ private:
       ResetLastError();
       if(FileWrite(handle,"position_id","time","entry","volume","profit","commission",
                    "swap","fee","risk_cash","lane","deal_id","order_id","symbol",
-                   "decision_id","strategy","regime","requested_price","slippage_points",
+                   "decision_id","strategy","regime","direction","session","initial_stop_price",
+                   "initial_stop_distance_points","deal_reason","requested_price","slippage_points",
                    "slippage_cost_cash","slippage_known")==0)
          ok=false;
 
@@ -13877,6 +13919,11 @@ private:
                       IntegerToString(row.decision_id),
                       row.strategy,
                       row.regime,
+                      row.direction,
+                      row.session,
+                      (row.initial_stop_price>0.0?DoubleToString(row.initial_stop_price,10):""),
+                      (row.initial_stop_distance_points>0.0?DoubleToString(row.initial_stop_distance_points,8):""),
+                      row.deal_reason,
                       (row.slippage_known?DoubleToString(row.requested_price,10):""),
                       (row.slippage_known?DoubleToString(row.slippage_points,8):""),
                       (row.slippage_known?DoubleToString(row.slippage_cost_cash,8):""),
@@ -14130,7 +14177,9 @@ public:
                const double profit,const double commission,const double swap,
                const double fee,const double entryRiskCash,
                const long decisionId,const string strategy,const string regime,
-               const double requestedPrice,const double slippagePoints,
+               const string direction,const string session,
+               const double initialStopPrice,const double initialStopDistancePoints,
+               const string dealReason,const double requestedPrice,const double slippagePoints,
                const double slippageCostCash,const bool slippageKnown)
      {
       if(!m_enabled) return true;
@@ -14163,7 +14212,8 @@ public:
 
       int attribution=AttributionIndex(positionId);
       if(entry==DEAL_ENTRY_IN)
-         RememberAttribution(positionId,decisionId,strategy,regime);
+         RememberAttribution(positionId,decisionId,strategy,regime,direction,session,
+                             initialStopPrice,initialStopDistancePoints);
       else if(entry==DEAL_ENTRY_INOUT)
         {
          // A netting reversal preserves DEAL_POSITION_ID while changing exposure.
@@ -14175,6 +14225,8 @@ public:
             m_attributions[attribution].decision_id=0;
             m_attributions[attribution].strategy="CONFLICT";
             m_attributions[attribution].regime="CONFLICT";
+            m_attributions[attribution].direction="CONFLICT";
+            m_attributions[attribution].session="CONFLICT";
            }
         }
       else if(attribution<0 && decisionId>0)
@@ -14183,6 +14235,10 @@ public:
       long resolvedDecisionId=decisionId;
       string resolvedStrategy=strategy;
       string resolvedRegime=regime;
+      string resolvedDirection=direction;
+      string resolvedSession=session;
+      double resolvedInitialStopPrice=initialStopPrice;
+      double resolvedInitialStopDistancePoints=initialStopDistancePoints;
       if(attribution>=0)
         {
          // Once a netting reversal has made this identifier ambiguous, do not
@@ -14193,6 +14249,8 @@ public:
             resolvedDecisionId=0;
             resolvedStrategy="CONFLICT";
             resolvedRegime="CONFLICT";
+            resolvedDirection="CONFLICT";
+            resolvedSession="CONFLICT";
            }
          else
            {
@@ -14201,10 +14259,20 @@ public:
                resolvedStrategy=m_attributions[attribution].strategy;
             if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
                resolvedRegime=m_attributions[attribution].regime;
+            if(StringLen(resolvedDirection)==0 || resolvedDirection=="UNTAGGED")
+               resolvedDirection=m_attributions[attribution].direction;
+            if(StringLen(resolvedSession)==0 || resolvedSession=="UNTAGGED")
+               resolvedSession=m_attributions[attribution].session;
+            if(resolvedInitialStopPrice<=0.0)
+               resolvedInitialStopPrice=m_attributions[attribution].initial_stop_price;
+            if(resolvedInitialStopDistancePoints<=0.0)
+               resolvedInitialStopDistancePoints=m_attributions[attribution].initial_stop_distance_points;
            }
         }
       if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
       if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
+      if(StringLen(resolvedDirection)==0) resolvedDirection="UNTAGGED";
+      if(StringLen(resolvedSession)==0) resolvedSession="UNTAGGED";
 
       int seen=ArraySize(m_seenDeals);
       if(ArrayResize(m_seenDeals,seen+1)!=seen+1)
@@ -14237,6 +14305,11 @@ public:
       m_rows[count].decision_id=resolvedDecisionId;
       m_rows[count].strategy=resolvedStrategy;
       m_rows[count].regime=resolvedRegime;
+      m_rows[count].direction=resolvedDirection;
+      m_rows[count].session=resolvedSession;
+      m_rows[count].initial_stop_price=resolvedInitialStopPrice;
+      m_rows[count].initial_stop_distance_points=resolvedInitialStopDistancePoints;
+      m_rows[count].deal_reason=(StringLen(dealReason)>0?dealReason:"UNKNOWN");
       m_rows[count].requested_price=(slippageKnown?requestedPrice:0.0);
       m_rows[count].slippage_points=(slippageKnown?slippagePoints:0.0);
       m_rows[count].slippage_cost_cash=(slippageKnown?slippageCostCash:0.0);
@@ -17184,6 +17257,10 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
       int exportLegIndex=0;
       string exportStrategy="UNTAGGED";
       string exportRegime="UNTAGGED";
+      string exportSession="UNTAGGED";
+      string exportDirection="UNTAGGED";
+      double initialStopDistancePoints=0.0;
+      double initialStopPrice=0.0;
       double requestedPrice=0.0;
       double slippagePoints=0.0;
       double slippageCostCash=0.0;
@@ -17195,10 +17272,23 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
          string orderComment=HistoryOrderGetString(exportOrder,ORDER_COMMENT);
          if(entry==DEAL_ENTRY_IN &&
             ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex))
-            g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime);
+            g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime,
+                                     exportSession,exportDirection,initialStopDistancePoints);
          double entryStop=HistoryOrderGetDouble(exportOrder,ORDER_SL);
          if(entry==DEAL_ENTRY_IN && entryStop>0.0 && dealVolume>0.0 && dealPrice>0.0)
+           {
+            initialStopPrice=entryStop;
             entryRiskCash=g_risk.RiskAmountForLots(_Symbol,dealVolume,dealPrice,entryStop);
+            double pointSize=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+            if(pointSize>0.0)
+               initialStopDistancePoints=MathAbs(dealPrice-entryStop)/pointSize;
+            if(exportDirection=="UNTAGGED")
+              {
+               ENUM_ORDER_TYPE entryOrderType=(ENUM_ORDER_TYPE)HistoryOrderGetInteger(exportOrder,ORDER_TYPE);
+               if(entryOrderType==ORDER_TYPE_BUY) exportDirection="BUY";
+               else if(entryOrderType==ORDER_TYPE_SELL) exportDirection="SELL";
+              }
+           }
 
          // Only market BUY/SELL orders are scored as execution slippage.
          // Pending stop/limit triggers are deliberately left unknown rather than
@@ -17242,6 +17332,8 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
             HistoryDealGetDouble(trans.deal,DEAL_SWAP),
             HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash,
             exportDecisionId,exportStrategy,exportRegime,
+            exportDirection,exportSession,initialStopPrice,initialStopDistancePoints,
+            EnumToString((ENUM_DEAL_REASON)HistoryDealGetInteger(trans.deal,DEAL_REASON)),
             requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
          PrintFormat("MIDAS_TEST_EXPORT_ERROR deal=%I64u position=%I64u; artifact will be incomplete",
                      trans.deal,positionIdentifier);
