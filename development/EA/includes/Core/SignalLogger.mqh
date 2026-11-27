@@ -42,7 +42,7 @@ private:
 
 public:
                      CSignalLogger();
-   void              Init(string symbol, int gmtOffsetOverrideHours = 999);
+   void              Init(string symbol, int gmtOffsetOverrideHours = 999,string outcomeRunId="live");
    bool              LogSetup(TradeSetup &setup, string symbol, ENUM_TIMEFRAMES entryTF, string trendLabel);
    bool              LogSMCStructure(TradeSetup &setup, string symbol, ENUM_TIMEFRAMES entryTF);
    bool              LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES entryTF, string outcome,
@@ -52,14 +52,22 @@ public:
 //+------------------------------------------------------------------+
 CSignalLogger::CSignalLogger() : m_headerWritten(false), m_outcomeHeaderWritten(false), m_smcHeaderWritten(false), m_gmtOffsetOverrideHours(999) {}
 //+------------------------------------------------------------------+
-void CSignalLogger::Init(string symbol, int gmtOffsetOverrideHours)
+void CSignalLogger::Init(string symbol, int gmtOffsetOverrideHours,string outcomeRunId)
   {
    m_filename = "MedisTouch_Signals_" + symbol + ".csv";
     m_smcFilename = "MedisTouch_SMC_Structures_" + symbol + ".csv";
     m_smcHeaderWritten = FileIsExist(m_smcFilename);
-   // Version the outcome stream when its schema changes. Never append new-schema
-   // decision/session lineage fields to an older outcome header.
-   m_outcomeFilename = "MedisTouch_Outcomes_v3_" + symbol + ".csv";
+   // Each tester run gets a unique outcome artifact so decision IDs cannot collide
+   // when multiple reports for the same symbol are analyzed together.
+   string safeRunId=outcomeRunId;
+   StringReplace(safeRunId,"/","_");
+   StringReplace(safeRunId,"\\","_");
+   StringReplace(safeRunId,":","_");
+   StringReplace(safeRunId," ","_");
+   if(StringLen(safeRunId)==0) safeRunId="manual";
+   if((bool)MQLInfoInteger(MQL_TESTER))
+      safeRunId+="_"+IntegerToString((long)GetTickCount());
+   m_outcomeFilename = "MedisTouch_Outcomes_v3_" + symbol + "_" + safeRunId + ".csv";
    m_headerWritten = FileIsExist(m_filename);
    m_outcomeHeaderWritten = FileIsExist(m_outcomeFilename);
    m_gmtOffsetOverrideHours = gmtOffsetOverrideHours;
