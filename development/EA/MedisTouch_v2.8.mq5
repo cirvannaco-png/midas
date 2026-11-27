@@ -13675,6 +13675,8 @@ struct TesterDealExportRow
    double initial_stop_price;
    double initial_stop_distance_points;
    string deal_reason;
+   double spread_points_observed;
+   bool spread_observed;
    double requested_price;
    double slippage_points;
    double slippage_cost_cash;
@@ -13895,7 +13897,8 @@ private:
       if(FileWrite(handle,"position_id","time","entry","volume","profit","commission",
                    "swap","fee","risk_cash","lane","deal_id","order_id","symbol",
                    "decision_id","strategy","regime","direction","session","initial_stop_price",
-                   "initial_stop_distance_points","deal_reason","requested_price","slippage_points",
+                   "initial_stop_distance_points","deal_reason","spread_points_observed",
+                   "spread_observed","requested_price","slippage_points",
                    "slippage_cost_cash","slippage_known")==0)
          ok=false;
 
@@ -13924,6 +13927,8 @@ private:
                       (row.initial_stop_price>0.0?DoubleToString(row.initial_stop_price,10):""),
                       (row.initial_stop_distance_points>0.0?DoubleToString(row.initial_stop_distance_points,8):""),
                       row.deal_reason,
+                      (row.spread_observed?DoubleToString(row.spread_points_observed,8):""),
+                      (row.spread_observed?"true":"false"),
                       (row.slippage_known?DoubleToString(row.requested_price,10):""),
                       (row.slippage_known?DoubleToString(row.slippage_points,8):""),
                       (row.slippage_known?DoubleToString(row.slippage_cost_cash,8):""),
@@ -14179,7 +14184,8 @@ public:
                const long decisionId,const string strategy,const string regime,
                const string direction,const string session,
                const double initialStopPrice,const double initialStopDistancePoints,
-               const string dealReason,const double requestedPrice,const double slippagePoints,
+               const string dealReason,const double spreadPointsObserved,const bool spreadObserved,
+               const double requestedPrice,const double slippagePoints,
                const double slippageCostCash,const bool slippageKnown)
      {
       if(!m_enabled) return true;
@@ -14197,6 +14203,11 @@ public:
             return false;
            }
       if(volume<=0.0 || price<=0.0)
+        {
+         m_writeFailed=true;
+         return false;
+        }
+      if(spreadObserved && (!MathIsValidNumber(spreadPointsObserved) || spreadPointsObserved<0.0))
         {
          m_writeFailed=true;
          return false;
@@ -14310,6 +14321,8 @@ public:
       m_rows[count].initial_stop_price=resolvedInitialStopPrice;
       m_rows[count].initial_stop_distance_points=resolvedInitialStopDistancePoints;
       m_rows[count].deal_reason=(StringLen(dealReason)>0?dealReason:"UNKNOWN");
+      m_rows[count].spread_points_observed=(spreadObserved?spreadPointsObserved:0.0);
+      m_rows[count].spread_observed=spreadObserved;
       m_rows[count].requested_price=(slippageKnown?requestedPrice:0.0);
       m_rows[count].slippage_points=(slippageKnown?slippagePoints:0.0);
       m_rows[count].slippage_cost_cash=(slippageKnown?slippageCostCash:0.0);
@@ -17261,12 +17274,23 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
       string exportDirection="UNTAGGED";
       double initialStopDistancePoints=0.0;
       double initialStopPrice=0.0;
+      double observedSpreadPoints=0.0;
+      bool spreadObserved=false;
       double requestedPrice=0.0;
       double slippagePoints=0.0;
       double slippageCostCash=0.0;
       bool slippageKnown=false;
       double dealVolume=HistoryDealGetDouble(trans.deal,DEAL_VOLUME);
       double dealPrice=HistoryDealGetDouble(trans.deal,DEAL_PRICE);
+      double spreadPointSize=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+      MqlTick observedDealTick;
+      if(spreadPointSize>0.0 && SymbolInfoTick(_Symbol,observedDealTick) &&
+         observedDealTick.ask>0.0 && observedDealTick.bid>0.0 &&
+         observedDealTick.ask>=observedDealTick.bid)
+        {
+         observedSpreadPoints=(observedDealTick.ask-observedDealTick.bid)/spreadPointSize;
+         spreadObserved=MathIsValidNumber(observedSpreadPoints) && observedSpreadPoints>=0.0;
+        }
       if(exportOrder>0 && HistoryOrderSelect(exportOrder))
         {
          string orderComment=HistoryOrderGetString(exportOrder,ORDER_COMMENT);
@@ -17334,6 +17358,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
             exportDecisionId,exportStrategy,exportRegime,
             exportDirection,exportSession,initialStopPrice,initialStopDistancePoints,
             EnumToString((ENUM_DEAL_REASON)HistoryDealGetInteger(trans.deal,DEAL_REASON)),
+            observedSpreadPoints,spreadObserved,
             requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
          PrintFormat("MIDAS_TEST_EXPORT_ERROR deal=%I64u position=%I64u; artifact will be incomplete",
                      trans.deal,positionIdentifier);
