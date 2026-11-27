@@ -123,19 +123,18 @@ def read_position_labels(path: Path) -> dict[str, dict]:
                 target["stop_distances"].add(round(stop_distance, 6))
     output = {}
     for pid, item in grouped.items():
-        if len(item["directions"]) > 1:
-            raise AttributionError(f"position {pid}: conflicting direction attribution")
-        # A position can be scaled into later; preserve the first known session
-        # from the exporter rather than inventing a session from its close time.
-        if len(item["sessions"]) > 1:
-            raise AttributionError(f"position {pid}: conflicting session attribution")
-        if len(item["stop_prices"]) > 1 or len(item["stop_distances"]) > 1:
-            raise AttributionError(f"position {pid}: conflicting initial-stop attribution")
+        direction_conflict = len(item["directions"]) > 1
+        session_conflict = len(item["sessions"]) > 1
+        stop_conflict = len(item["stop_prices"]) > 1 or len(item["stop_distances"]) > 1
+        # Conflicts on an INOUT/netting-reversal group are retained as labels;
+        # reconstruct_positions will censor that group. Completed positions
+        # are checked fail-closed before they enter any cohort.
         output[pid] = {
-            "direction": next(iter(item["directions"]), "UNTAGGED"),
-            "session": next(iter(item["sessions"]), "UNTAGGED"),
-            "initial_stop_price": next(iter(item["stop_prices"]), None),
-            "initial_stop_distance_points": next(iter(item["stop_distances"]), None),
+            "direction": ("CONFLICT" if direction_conflict else next(iter(item["directions"]), "UNTAGGED")),
+            "session": ("CONFLICT" if session_conflict else next(iter(item["sessions"]), "UNTAGGED")),
+            "initial_stop_price": (None if stop_conflict else next(iter(item["stop_prices"]), None)),
+            "initial_stop_distance_points": (None if stop_conflict else next(iter(item["stop_distances"]), None)),
+            "attribution_conflict": direction_conflict or session_conflict or stop_conflict,
             "deal_reasons": sorted(item["deal_reasons"]),
             "exit_deal_reasons": sorted(item["exit_reasons"]),
             "spread_observation_complete": item["spread_unknown_rows"] == 0 and item["deal_rows"] > 0,
@@ -268,6 +267,8 @@ def main() -> int:
         for position in positions:
             pid = position["position_id"]
             position.update(labels.get(pid, {}))
+            if position.get("attribution_conflict"):
+                raise AttributionError(f"completed position {pid}: conflicting direction, session or initial-stop attribution")
             if position.get("spread_observation_complete") and cash_per_point > 0.0:
                 position["estimated_embedded_spread_cost_cash"] = round(
                     0.5 * position["spread_volume_points_sum"] * cash_per_point, 8
