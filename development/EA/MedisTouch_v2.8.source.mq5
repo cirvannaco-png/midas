@@ -1788,12 +1788,23 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
       string exportDirection="UNTAGGED";
       double initialStopDistancePoints=0.0;
       double initialStopPrice=0.0;
+      double observedSpreadPoints=0.0;
+      bool spreadObserved=false;
       double requestedPrice=0.0;
       double slippagePoints=0.0;
       double slippageCostCash=0.0;
       bool slippageKnown=false;
       double dealVolume=HistoryDealGetDouble(trans.deal,DEAL_VOLUME);
       double dealPrice=HistoryDealGetDouble(trans.deal,DEAL_PRICE);
+      double spreadPointSize=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+      MqlTick observedDealTick;
+      if(spreadPointSize>0.0 && SymbolInfoTick(_Symbol,observedDealTick) &&
+         observedDealTick.ask>0.0 && observedDealTick.bid>0.0 &&
+         observedDealTick.ask>=observedDealTick.bid)
+        {
+         observedSpreadPoints=(observedDealTick.ask-observedDealTick.bid)/spreadPointSize;
+         spreadObserved=MathIsValidNumber(observedSpreadPoints) && observedSpreadPoints>=0.0;
+        }
       if(exportOrder>0 && HistoryOrderSelect(exportOrder))
         {
          string orderComment=HistoryOrderGetString(exportOrder,ORDER_COMMENT);
@@ -1863,6 +1874,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
             initialStopPrice,
             initialStopDistancePoints,
             EnumToString((ENUM_DEAL_REASON)HistoryDealGetInteger(trans.deal,DEAL_REASON)),
+            observedSpreadPoints,spreadObserved,
             requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
          PrintFormat("MIDAS_TEST_EXPORT_ERROR deal=%I64u position=%I64u; artifact will be incomplete",
                      trans.deal,positionIdentifier);
