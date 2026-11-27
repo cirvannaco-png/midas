@@ -485,7 +485,7 @@
   "current_source_snapshot": {
     "repository": "cirvannaco-png/midas",
     "branch": "research/native-tester-attribution-diagnostics-20261127",
-    "commit": "fffd58a2a1762ea0632bb373b5be8a461889dc64",
+    "commit": "a0f105151bed27bc1aee539e967cd9878b007cd0",
     "root": "development/EA",
     "file_count": 102,
     "files": [
@@ -496,13 +496,13 @@
       },
       {
         "path": "development/EA/MedisTouch_v2.8.source.mq5",
-        "git_blob_sha": "dd51f25121b79c5b4b040e38cd01a888606a4a6c",
-        "size_bytes": 117246
+        "git_blob_sha": "f5403e635213f2b132aa114127b35881d8d02dd8",
+        "size_bytes": 117367
       },
       {
         "path": "development/EA/includes/Analysis/Scoring.mqh",
-        "git_blob_sha": "e7bb9d660e1ff969d8aea661416425172ba88d28",
-        "size_bytes": 59186
+        "git_blob_sha": "a6a50a472e045e53897e448bbfbf389701e0b0aa",
+        "size_bytes": 59432
       },
       {
         "path": "development/EA/includes/Analysis/TFContext.mqh",
@@ -536,8 +536,8 @@
       },
       {
         "path": "development/EA/includes/Core/Config.mqh",
-        "git_blob_sha": "9a4cab793a6bc4ef6c2677fa61e6721c481817c6",
-        "size_bytes": 10262
+        "git_blob_sha": "abfd7dd313be72062a596d34a980da5148575ab2",
+        "size_bytes": 10279
       },
       {
         "path": "development/EA/includes/Core/NewsFilter.mqh",
@@ -556,8 +556,8 @@
       },
       {
         "path": "development/EA/includes/Core/SessionFilter.mqh",
-        "git_blob_sha": "9f93943735f6b4deae448a899653192afa20a02a",
-        "size_bytes": 9038
+        "git_blob_sha": "a93ec39663e825af999c8926fd47585b53409067",
+        "size_bytes": 10114
       },
       {
         "path": "development/EA/includes/Core/SignalLogger.mqh",
