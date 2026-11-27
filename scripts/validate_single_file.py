@@ -114,7 +114,7 @@ def main():
         "unknown slippage is exported as blank numeric fields": r'row\.slippage_known\?DoubleToString\(row\.slippage_cost_cash,8\):""',
         "position rows retain direction and session": r'm_rows\[count\]\.direction=resolvedDirection;[\s\S]{0,120}m_rows\[count\]\.session=resolvedSession;',
         "tester export records initial stop geometry and deal reason": r'initial_stop_distance_points.*deal_reason',
-        "tester export records observed deal spread": r'spread_points_observed[\\s\\S]*spread_observed',
+        "tester export records observed deal spread": r'spread_points_observed[\s\S]*spread_observed',
         "outcome export adds stable decision and session join keys": r'"DecisionID", "Session"',
         "outcome export isolates each tester run": r'MedisTouch_Outcomes_v3_.*safeRunId'
     }
