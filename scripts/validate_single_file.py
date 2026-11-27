@@ -115,7 +115,7 @@ def main():
         "position rows retain direction and session": r'm_rows\[count\]\.direction=resolvedDirection;[\s\S]{0,120}m_rows\[count\]\.session=resolvedSession;',
         "tester export records initial stop geometry and deal reason": r'initial_stop_distance_points.*deal_reason',
         "tester export records observed deal spread": r'spread_points_observed[\s\S]*spread_observed',
-        "outcome export adds stable decision and session join keys": r'"DecisionID", "Session"',
+        "outcome export adds stable decision, session and run join keys": r'"DecisionID", "Session", "RunID"',
         "outcome export isolates each tester run": r'MedisTouch_Outcomes_v3_.*safeRunId'
     }
     for name,pattern in native_deal_attribution_checks.items():
