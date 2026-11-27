@@ -21,6 +21,10 @@ jobs:
         run: python scripts/build_single_file.py && python scripts/build_single_file.py --check
       - name: Validate flattened source and safety defaults
         run: python scripts/validate_single_file.py
+      - name: Test native tester attribution and cost evidence contracts
+        run: |
+          python -m pip install pytest
+          python -m pytest backend/source/tools/tests/test_tester_deal_export_contract.py backend/source/tools/tests/test_native_tester_attribution.py
 
   metaeditor-compile-and-policy-tests:
     runs-on: windows-latest
