@@ -35,7 +35,9 @@ private:
    bool              m_allowNewYork;
    bool              m_allowOverlap;   // London/NY overlap — highest-liquidity window, allowed even if
                                         // m_allowLondon/m_allowNewYork are individually off
+   int               m_testerServerUtcOffsetMinutes; // explicit broker-server minus UTC offset in tester
 
+   datetime          CurrentGMT();
    static int        DaysInMonth(int year, int month);
    static datetime   NthSunday(int year, int month, int n); // n>0: nth Sunday; n<0: last Sunday
    static bool       IsEUDST(datetime gmtNow);   // London/EU: last Sun Mar - last Sun Oct
@@ -45,6 +47,7 @@ public:
                      CSessionFilter();
    void              Configure(bool enabled, bool allowTokyo = false, bool allowLondon = true,
                                bool allowNewYork = true, bool allowOverlap = true);
+   void              SetTesterServerUtcOffsetMinutes(int offsetMinutes);
    ENUM_TRADING_SESSION CurrentSession();
    // v2.17 addition — for CExtendedKeyLevels::NearestSessionLevel(),
    // which needs to know WHEN the current session opened, not just
@@ -58,7 +61,8 @@ public:
   };
 //+------------------------------------------------------------------+
 CSessionFilter::CSessionFilter() : m_enabled(false), m_allowTokyo(false), m_allowLondon(true),
-                                    m_allowNewYork(true), m_allowOverlap(true) {}
+                                    m_allowNewYork(true), m_allowOverlap(true),
+                                    m_testerServerUtcOffsetMinutes(99999) {}
 //+------------------------------------------------------------------+
 void CSessionFilter::Configure(bool enabled, bool allowTokyo, bool allowLondon, bool allowNewYork, bool allowOverlap)
   {
@@ -67,6 +71,22 @@ void CSessionFilter::Configure(bool enabled, bool allowTokyo, bool allowLondon, 
    m_allowLondon = allowLondon;
    m_allowNewYork = allowNewYork;
    m_allowOverlap = allowOverlap;
+  }
+//+------------------------------------------------------------------+
+void CSessionFilter::SetTesterServerUtcOffsetMinutes(int offsetMinutes)
+  {
+   m_testerServerUtcOffsetMinutes=(offsetMinutes>=-840 && offsetMinutes<=840 ? offsetMinutes : 99999);
+  }
+//+------------------------------------------------------------------+
+datetime CSessionFilter::CurrentGMT()
+  {
+   if((bool)MQLInfoInteger(MQL_TESTER))
+     {
+      if(m_testerServerUtcOffsetMinutes < -840 || m_testerServerUtcOffsetMinutes > 840)
+         return 0; // unknown, never mislabel broker server time as UTC
+      return TimeCurrent()-(datetime)(m_testerServerUtcOffsetMinutes*60);
+     }
+   return TimeGMT();
   }
 //+------------------------------------------------------------------+
 int CSessionFilter::DaysInMonth(int year, int month)
@@ -129,7 +149,8 @@ bool CSessionFilter::IsUSDST(datetime gmtNow)
 // Each city's own DST state shifts its GMT window by exactly one hour.
 ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
   {
-   datetime nowGmt = TimeGMT();
+   datetime nowGmt = CurrentGMT();
+   if(nowGmt<=0) return SESSION_UNKNOWN;
    MqlDateTime t;
    TimeToStruct(nowGmt, t);
    int h = t.hour;
@@ -160,7 +181,8 @@ ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
 // begun before both sides are open.
 datetime CSessionFilter::CurrentSessionStartGMT()
   {
-   datetime nowGmt = TimeGMT();
+   datetime nowGmt = CurrentGMT();
+   if(nowGmt<=0) return 0;
    MqlDateTime t;
    TimeToStruct(nowGmt, t);
 
