@@ -147,18 +147,23 @@ def read_position_labels(path: Path) -> dict[str, dict]:
 
 def read_decision_outcomes(path: Path) -> list[dict]:
     required = {
-        "DecisionID", "Symbol", "Direction", "Session", "SelectedStrategy",
+        "DecisionID", "RunID", "Symbol", "Direction", "Session", "SelectedStrategy",
         "Regime", "Outcome", "MFE_R", "MAE_R", "BarsHeld", "RealizedR",
         "RealizedNetPnL", "OutcomeEpoch",
     }
     rows = []
     seen = set()
+    run_ids = set()
     with path.open(newline="", encoding="utf-8-sig") as stream:
         reader = csv.DictReader(stream)
         missing = required - set(reader.fieldnames or [])
         if missing:
             raise AttributionError("outcome CSV lacks required columns: " + ", ".join(sorted(missing)))
         for row_num, row in enumerate(reader, 2):
+            run_id = (row.get("RunID") or "").strip()
+            if not run_id:
+                raise AttributionError(f"outcome row {row_num}: blank RunID")
+            run_ids.add(run_id)
             decision = (row.get("DecisionID") or "").strip()
             if not decision or decision == "0":
                 continue
@@ -169,6 +174,7 @@ def read_decision_outcomes(path: Path) -> list[dict]:
                 continue
             rows.append({
                 "decision_id": decision,
+                "run_id": run_id,
                 "symbol": (row.get("Symbol") or "UNKNOWN").strip().upper(),
                 "direction": (row.get("Direction") or "UNTAGGED").strip().upper(),
                 "session": (row.get("Session") or "UNTAGGED").strip().upper(),
@@ -185,6 +191,8 @@ def read_decision_outcomes(path: Path) -> list[dict]:
                 "break_even_done": (row.get("BreakEvenDone") or "").strip().lower() in {"yes", "true", "1"},
                 "partial_done": (row.get("PartialDone") or "").strip().lower() in {"yes", "true", "1"},
             })
+    if len(run_ids) != 1:
+        raise AttributionError("outcome CSV must contain exactly one tester RunID")
     return rows
 
 
@@ -240,6 +248,11 @@ def main() -> int:
         cash_per_point = metadata.get("cash_per_point_per_lot")
         cash_per_point = float(cash_per_point) if cash_per_point is not None else 0.0
         outcomes = read_decision_outcomes(args.outcomes)
+        if not outcomes:
+            raise AttributionError("outcome CSV contains no filled decision rows")
+        outcome_run_id = outcomes[0]["run_id"]
+        if not str(metadata.get("run_id", "")).startswith(outcome_run_id + "_"):
+            raise AttributionError("outcome RunID does not match tester deal export metadata")
         decision_ids = {str(row["decision_id"]) for row in positions if row.get("decision_id")}
         outcome_by_id = {row["decision_id"]: row for row in outcomes}
         missing_outcomes = sorted(decision_ids - set(outcome_by_id))
