@@ -176,21 +176,29 @@ This confirms the filter's first-fold positive result was not persistent: four c
 
 ### Strict-family isolation
 
-The Trend-Only script normally disables its strict-family lane and trades through its continuation fallback. To check whether the strict-family lane alone was stronger, it was enabled while both single-swing and continuation fallbacks were disabled. The same M15 Gold risk controls were retained.
+The Trend-Only script normally disables its strict-family lane and trades through its continuation fallback. To check whether the strict-family lane alone was stronger, it was enabled while both single-swing and continuation fallbacks were disabled. The same M15 risk controls were retained.
 
-| Window | Completed entries | Wins / losses | Entry win rate | PF | Net P&L | Max drawdown |
+| Instrument / window | Completed entries | Wins / losses | Entry win rate | PF | Net P&L | Max drawdown |
 |---|---:|---:|---:|---:|---:|---:|
-| 2025-12-13–2026-01-13 | 6 | 5 / 1 | 83.3% | 1.412 | +$10.31 | $38.21 |
-| 2026-01-13–2026-02-13 | 28 | 23 / 5 | 82.1% | 0.918 | -$9.27 | $65.92 |
-| 2026-02-13–2026-03-13 | 21 | 17 / 4 | 81.0% | 0.607 | -$39.82 | $70.36 |
+| Gold, 2025-12-13–2026-01-13 | 6 | 5 / 1 | 83.3% | 1.412 | +$10.31 | $38.21 |
+| Gold, 2026-01-13–2026-02-13 | 28 | 23 / 5 | 82.1% | 0.918 | -$9.27 | $65.92 |
+| Gold, 2026-02-13–2026-03-13 | 21 | 17 / 4 | 81.0% | 0.607 | -$39.82 | $70.36 |
+| EURUSD, 2025-12-13–2026-01-13 | 17 | 15 / 2 | 88.2% | 1.835 | +$41.47 | $82.10 |
+| EURUSD, 2026-01-13–2026-02-13 | 12 | 8 / 4 | 66.7% | 0.322 | -$65.06 | $94.17 |
+| GBPUSD, 2025-12-13–2026-01-13 | 5 | 3 / 2 | 60.0% | 0.224 | -$37.85 | $53.76 |
 
-The first fold's apparent PF above 1 came from only six completed entries and included one -USD 25 loss. It failed in both following folds. The strict-family plus continuation configuration also lost money on the first fold: 49 completed entries, 37 wins / 12 losses, 75.5% win rate, PF 0.777, net -USD 28.92. Neither configuration is promoted.
+The Gold first fold's apparent PF above 1 came from only six completed entries and included one -USD 25 loss; it failed in both following folds. EURUSD looked promising in the first fold, but its next fold reversed sharply to -USD 65.06 and PF 0.322. GBPUSD was negative on only five entries. The strict-family plus continuation configuration also lost money on the first Gold fold: 49 completed entries, 37 wins / 12 losses, 75.5% win rate, PF 0.777, net -USD 28.92. None is a validated instrument-specific edge.
+
+The first EURUSD strict-only session ended with one open residual row; its +USD 10.92 unrealized P&L is excluded from completed-position win rate and PF. Only the 17 completed entries and USD 41.47 realized P&L are reported above.
 
 Saved strict-family sessions:
-- Strict only, first fold: `jb61h12z7ulqs9sxnv3t3erk`.
-- Strict plus continuation, first fold: `yr08rb9ljx9ehstjtocssxvg`.
-- Strict only, second fold: `n4mu3fvo3hhlftk94kpr5it2`.
-- Strict only, third fold: `ykhm3m449iy74roqmn4efeiu`.
+- Gold strict only, first fold: `jb61h12z7ulqs9sxnv3t3erk`.
+- Gold strict plus continuation, first fold: `yr08rb9ljx9ehstjtocssxvg`.
+- Gold strict only, second fold: `n4mu3fvo3hhlftk94kpr5it2`.
+- Gold strict only, third fold: `ykhm3m449iy74roqmn4efeiu`.
+- EURUSD strict only, first fold: `vktcbjsq9fduppvca72xx9gd`.
+- EURUSD strict only, second fold: `invi4fqzjw2nndgr8wyl142z`.
+- GBPUSD strict only, first fold: `x0r8d2klwawqj1b3o0z4gpeb`.
 
 Saved sessions:
 - First-fold Gold: `z685vouju1t4omqyhp16nvne`; EURUSD: `r72mq253pc9ffdy2egrb3ce7`; GBPUSD: `asjfw3czz8hsurjl58bxan1a`.
