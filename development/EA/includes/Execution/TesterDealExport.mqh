@@ -587,7 +587,7 @@ public:
          // A netting reversal preserves DEAL_POSITION_ID while changing exposure.
          // One stable position ID can therefore span multiple decision lineages.
          if(attribution<0)
-            RememberAttribution(positionId,0,"CONFLICT","CONFLICT");
+            RememberAttribution(positionId,0,"CONFLICT","CONFLICT","CONFLICT","CONFLICT",0.0,0.0);
          else
            {
             m_attributions[attribution].decision_id=0;
@@ -598,7 +598,8 @@ public:
            }
         }
       else if(attribution<0 && decisionId>0)
-         RememberAttribution(positionId,decisionId,strategy,regime);
+         RememberAttribution(positionId,decisionId,strategy,regime,direction,session,
+                             initialStopPrice,initialStopDistancePoints);
       attribution=AttributionIndex(positionId);
       long resolvedDecisionId=decisionId;
       string resolvedStrategy=strategy;
