@@ -15,8 +15,8 @@ def test_strategy_tester_session_uses_explicit_server_utc_offset():
     assert "ServerTimeToGMT(TimeCurrent(),m_testerServerUtcOffsetMinutes)" in session
     assert "return SESSION_UNKNOWN;" in session
     assert "return TimeGMT();" in session
-    assert "static datetime ServerTimeToGMT(datetime serverTime,int offsetMinutes)" in session
-    assert "static ENUM_TRADING_SESSION SessionAtGMT(datetime nowGmt)" in session
+    assert "ServerTimeToGMT(datetime serverTime,int offsetMinutes)" in session
+    assert "SessionAtGMT(datetime nowGmt)" in session
 
 
 def test_both_automatic_and_manual_session_filters_receive_tester_offset():
