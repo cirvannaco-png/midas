@@ -116,7 +116,10 @@ def main():
         "tester export records initial stop geometry and deal reason": r'initial_stop_distance_points.*deal_reason',
         "tester export records observed deal spread": r'spread_points_observed[\s\S]*spread_observed',
         "outcome export adds stable decision, session and run join keys": r'"DecisionID", "Session", "RunID"',
-        "outcome export isolates each tester run": r'MedisTouch_Outcomes_v3_.*safeRunId'
+        "outcome export isolates each tester run": r'MedisTouch_Outcomes_v3_.*safeRunId',
+        "tester session classifier uses explicit server UTC offset": r'CurrentGMT[\s\S]{0,600}TimeCurrent\(\)-\(datetime\)\(m_testerServerUtcOffsetMinutes\*60\)',
+        "missing tester UTC offset produces unknown session": r'return SESSION_UNKNOWN',
+        "automatic and manual session filters receive tester offset": r'g_scoring.ConfigureSessionFilter[\s\S]{0,200}InpTesterServerUtcOffsetMinutes[\s\S]{0,160}g_operatorSessionFilter.SetTesterServerUtcOffsetMinutes'
     }
     for name,pattern in native_deal_attribution_checks.items():
         if not re.search(pattern,raw): fail.append("native deal attribution regression: "+name)
