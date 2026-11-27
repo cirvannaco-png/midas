@@ -75,7 +75,9 @@ def test_native_export_carries_decision_strategy_regime_and_slippage_provenance(
     assert "Pending stop/limit triggers are deliberately left unknown" in ea
     assert "slippage_known" in exporter
     assert '"decision_id","strategy","regime","direction","session","initial_stop_price"' in exporter
-    assert '"initial_stop_distance_points","deal_reason","requested_price","slippage_points"' in exporter
+    assert '"initial_stop_distance_points","deal_reason","spread_points_observed"' in exporter
+    assert '"spread_observed","requested_price","slippage_points"' in exporter
+    assert "m_rows[count].spread_observed=spreadObserved;" in exporter
     assert "RememberAttribution(positionId,decisionId,strategy,regime,direction,session," in exporter
 
 
