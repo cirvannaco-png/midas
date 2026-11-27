@@ -45,6 +45,8 @@ def test_position_labels_keep_direction_session_and_stop_geometry(tmp_path):
     assert labels["10"]["session"] == "SESSION_LONDON"
     assert labels["10"]["initial_stop_distance_points"] == 120
     assert labels["10"]["exit_deal_reasons"] == ["DEAL_REASON_SL"]
+    assert labels["10"]["spread_observation_complete"] is True
+    assert labels["10"]["spread_volume_points_sum"] == pytest.approx(1.3)
 
 
 def test_position_label_conflicts_fail_closed(tmp_path):
