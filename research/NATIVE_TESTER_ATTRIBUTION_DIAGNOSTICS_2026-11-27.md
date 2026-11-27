@@ -36,6 +36,8 @@ The deal export uses the EA enum labels:
 
 The outcome log uses the existing display labels (`SMC`, `MomentumBreakout`, `MeanReversion`, `KeyLevel`, etc.) and the enum session labels. Decision outcomes are keyed by DecisionID and reported separately from broker-position metrics; one decision may create multiple execution legs, so its excursion statistics must not be copied onto each position and counted multiple times.
 
+**Tester timezone safeguard:** MT5 Strategy Tester time is simulated broker-server time; `TimeGMT()` must not be assumed to be true UTC inside the tester. The production session filter now uses `TimeCurrent() - InpTesterServerUtcOffsetMinutes` in tester mode, while live mode continues to use `TimeGMT()`. If the tester offset is absent or invalid, the classifier returns `SESSION_UNKNOWN`; the session gate blocks unknown sessions when enabled, and the attribution report keeps them separate rather than assigning them to London/New York.
+
 ## Cost accounting rules
 
 - Net position P&L is the sum of deal profit + signed commission + signed swap + signed broker fee. These cashflows are counted once.
