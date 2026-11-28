@@ -1,7 +1,7 @@
 // MedisTouch v2.8 self-contained single-file production build
 // Package version: 1.0.0-rc.1
 // Upstream baseline: cirvannaco-png/Midas-touch2-@3622ed5a434c36f0c05ab9c9863d17b6fd743e9a
-// Staged EA source snapshot: cirvannaco-png/midas@05d653ed547f88a7f8bd7fb800a246c1edd2702a
+// Staged EA source snapshot: cirvannaco-png/midas@26c6c94b9804fc9ebe8def533f42be6674297141
 // Modular source is preserved in MedisTouch_v2.8.source.mq5 and includes/.
 // Regenerate with: python scripts/build_single_file.py
 // Upload this one file to MQL5/Experts/; do not hand-edit it.
@@ -208,7 +208,7 @@ enum ENUM_VALUE_PROFILE_SOURCE { VA_SOURCE_UNDEFINED, VA_SOURCE_REAL_TRADE_TICKS
 enum ENUM_VALUE_PROFILE_STATE { VA_STATE_UNDEFINED, VA_STATE_BALANCED, VA_STATE_ACCEPTED_ABOVE, VA_STATE_ACCEPTED_BELOW, VA_STATE_REJECTED_ABOVE, VA_STATE_REJECTED_BELOW };
 enum ENUM_OB_STATE { OB_FRESH, OB_TESTED, OB_MITIGATED };
 enum ENUM_VOL_REGIME { VOL_REGIME_UNDEFINED, VOL_REGIME_LOW, VOL_REGIME_NORMAL, VOL_REGIME_HIGH };
-enum ENUM_TRADING_SESSION { SESSION_DEAD, SESSION_TOKYO, SESSION_LONDON, SESSION_NEWYORK, SESSION_LONDON_NY_OVERLAP };
+enum ENUM_TRADING_SESSION { SESSION_DEAD, SESSION_TOKYO, SESSION_LONDON, SESSION_NEWYORK, SESSION_LONDON_NY_OVERLAP, SESSION_UNKNOWN };
 enum ENUM_MARKET_REGIME { REGIME_UNDEFINED, REGIME_TRENDING, REGIME_RANGING, REGIME_TRANSITION };
 enum ENUM_SMC_STRUCTURE_STATE { SMC_WAIT, SMC_INVALID, SMC_VALID, SMC_STALE, SMC_INVALIDATED };
 enum ENUM_BREAKOUT_CLASS { BREAKOUT_NONE, BREAKOUT_EXPANSION, BREAKOUT_LIQUIDITY, BREAKOUT_FAILED, BREAKOUT_EXHAUSTION };
@@ -450,7 +450,9 @@ private:
    bool              m_allowNewYork;
    bool              m_allowOverlap;   // London/NY overlap — highest-liquidity window, allowed even if
                                         // m_allowLondon/m_allowNewYork are individually off
+   int               m_testerServerUtcOffsetMinutes; // explicit broker-server minus UTC offset in tester
 
+   datetime          CurrentGMT();
    static int        DaysInMonth(int year, int month);
    static datetime   NthSunday(int year, int month, int n); // n>0: nth Sunday; n<0: last Sunday
    static bool       IsEUDST(datetime gmtNow);   // London/EU: last Sun Mar - last Sun Oct
@@ -460,6 +462,9 @@ public:
                      CSessionFilter();
    void              Configure(bool enabled, bool allowTokyo = false, bool allowLondon = true,
                                bool allowNewYork = true, bool allowOverlap = true);
+   void              SetTesterServerUtcOffsetMinutes(int offsetMinutes);
+   static datetime   ServerTimeToGMT(datetime serverTime,int offsetMinutes);
+   static ENUM_TRADING_SESSION SessionAtGMT(datetime nowGmt);
    ENUM_TRADING_SESSION CurrentSession();
    // v2.17 addition — for CExtendedKeyLevels::NearestSessionLevel(),
    // which needs to know WHEN the current session opened, not just
@@ -473,7 +478,8 @@ public:
   };
 //+------------------------------------------------------------------+
 CSessionFilter::CSessionFilter() : m_enabled(false), m_allowTokyo(false), m_allowLondon(true),
-                                    m_allowNewYork(true), m_allowOverlap(true) {}
+                                    m_allowNewYork(true), m_allowOverlap(true),
+                                    m_testerServerUtcOffsetMinutes(99999) {}
 //+------------------------------------------------------------------+
 void CSessionFilter::Configure(bool enabled, bool allowTokyo, bool allowLondon, bool allowNewYork, bool allowOverlap)
   {
@@ -482,6 +488,22 @@ void CSessionFilter::Configure(bool enabled, bool allowTokyo, bool allowLondon, 
    m_allowLondon = allowLondon;
    m_allowNewYork = allowNewYork;
    m_allowOverlap = allowOverlap;
+  }
+//+------------------------------------------------------------------+
+void CSessionFilter::SetTesterServerUtcOffsetMinutes(int offsetMinutes)
+  {
+   m_testerServerUtcOffsetMinutes=(offsetMinutes>=-840 && offsetMinutes<=840 ? offsetMinutes : 99999);
+  }
+//+------------------------------------------------------------------+
+datetime CSessionFilter::CurrentGMT()
+  {
+   if((bool)MQLInfoInteger(MQL_TESTER))
+     {
+      if(m_testerServerUtcOffsetMinutes < -840 || m_testerServerUtcOffsetMinutes > 840)
+         return 0; // unknown, never mislabel broker server time as UTC
+      return ServerTimeToGMT(TimeCurrent(),m_testerServerUtcOffsetMinutes);
+     }
+   return TimeGMT();
   }
 //+------------------------------------------------------------------+
 int CSessionFilter::DaysInMonth(int year, int month)
@@ -542,9 +564,15 @@ bool CSessionFilter::IsUSDST(datetime gmtNow)
 //+------------------------------------------------------------------+
 // London local session ~08:00-16:30; New York local session ~08:00-17:00.
 // Each city's own DST state shifts its GMT window by exactly one hour.
-ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
+datetime CSessionFilter::ServerTimeToGMT(datetime serverTime,int offsetMinutes)
   {
-   datetime nowGmt = TimeGMT();
+   if(serverTime<=0 || offsetMinutes < -840 || offsetMinutes > 840) return 0;
+   return serverTime-(datetime)(offsetMinutes*60);
+  }
+//+------------------------------------------------------------------+
+ENUM_TRADING_SESSION CSessionFilter::SessionAtGMT(datetime nowGmt)
+  {
+   if(nowGmt<=0) return SESSION_UNKNOWN;
    MqlDateTime t;
    TimeToStruct(nowGmt, t);
    int h = t.hour;
@@ -568,6 +596,11 @@ ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
    return SESSION_DEAD;
   }
 //+------------------------------------------------------------------+
+ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
+  {
+   return SessionAtGMT(CurrentGMT());
+  }
+//+------------------------------------------------------------------+
 // Same start-hour derivation CurrentSession() uses, just returning the
 // GMT timestamp of today's boundary instead of a bool membership test.
 // SESSION_LONDON_NY_OVERLAP starts when the LATER of the two opens (NY,
@@ -575,7 +608,8 @@ ENUM_TRADING_SESSION CSessionFilter::CurrentSession()
 // begun before both sides are open.
 datetime CSessionFilter::CurrentSessionStartGMT()
   {
-   datetime nowGmt = TimeGMT();
+   datetime nowGmt = CurrentGMT();
+   if(nowGmt<=0) return 0;
    MqlDateTime t;
    TimeToStruct(nowGmt, t);
 
@@ -592,7 +626,7 @@ datetime CSessionFilter::CurrentSessionStartGMT()
       case SESSION_LONDON:            startHour = londonStart; break;
       case SESSION_NEWYORK:           startHour = nyStart;     break;
       case SESSION_TOKYO:             startHour = 0;           break; // Tokyo doesn't observe DST — fixed window, unaffected
-      default:                        return 0;                       // SESSION_DEAD — no boundary to report
+      default:                        return 0;                       // SESSION_DEAD/SESSION_UNKNOWN — no boundary to report
      }
 
    MqlDateTime st = t;
@@ -613,7 +647,7 @@ bool CSessionFilter::IsAllowed()
       case SESSION_LONDON:            return m_allowLondon;
       case SESSION_NEWYORK:           return m_allowNewYork;
       case SESSION_TOKYO:             return m_allowTokyo;
-      default:                        return false; // SESSION_DEAD — off by design, no allow flag for it
+      default:                        return false; // SESSION_DEAD and SESSION_UNKNOWN fail closed when the gate is enabled
      }
   }
 #endif
@@ -798,6 +832,7 @@ class CSignalLogger
 private:
    string            m_filename;
    string            m_outcomeFilename;
+   string            m_outcomeRunId;
    string            m_smcFilename;
    bool              m_smcHeaderWritten;
    bool              m_headerWritten;
@@ -823,7 +858,7 @@ private:
 
 public:
                      CSignalLogger();
-   void              Init(string symbol, int gmtOffsetOverrideHours = 999);
+   void              Init(string symbol, int gmtOffsetOverrideHours = 999,string outcomeRunId="live");
    bool              LogSetup(TradeSetup &setup, string symbol, ENUM_TIMEFRAMES entryTF, string trendLabel);
    bool              LogSMCStructure(TradeSetup &setup, string symbol, ENUM_TIMEFRAMES entryTF);
    bool              LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES entryTF, string outcome,
@@ -833,14 +868,23 @@ public:
 //+------------------------------------------------------------------+
 CSignalLogger::CSignalLogger() : m_headerWritten(false), m_outcomeHeaderWritten(false), m_smcHeaderWritten(false), m_gmtOffsetOverrideHours(999) {}
 //+------------------------------------------------------------------+
-void CSignalLogger::Init(string symbol, int gmtOffsetOverrideHours)
+void CSignalLogger::Init(string symbol, int gmtOffsetOverrideHours,string outcomeRunId)
   {
    m_filename = "MedisTouch_Signals_" + symbol + ".csv";
     m_smcFilename = "MedisTouch_SMC_Structures_" + symbol + ".csv";
     m_smcHeaderWritten = FileIsExist(m_smcFilename);
-   // Version the outcome stream because the new OutcomeEpoch column is required by the
-   // chronological evidence builder. Never append new-schema rows to a legacy header.
-   m_outcomeFilename = "MedisTouch_Outcomes_v2_" + symbol + ".csv";
+   // Each tester run gets a unique outcome artifact so decision IDs cannot collide
+   // when multiple reports for the same symbol are analyzed together.
+   string safeRunId=outcomeRunId;
+   StringReplace(safeRunId,"/","_");
+   StringReplace(safeRunId,"\\","_");
+   StringReplace(safeRunId,":","_");
+   StringReplace(safeRunId," ","_");
+   if(StringLen(safeRunId)==0) safeRunId="manual";
+   m_outcomeRunId=safeRunId;
+   if((bool)MQLInfoInteger(MQL_TESTER))
+      safeRunId+="_"+IntegerToString((long)GetTickCount());
+   m_outcomeFilename = "MedisTouch_Outcomes_v3_" + symbol + "_" + safeRunId + ".csv";
    m_headerWritten = FileIsExist(m_filename);
    m_outcomeHeaderWritten = FileIsExist(m_outcomeFilename);
    m_gmtOffsetOverrideHours = gmtOffsetOverrideHours;
@@ -1180,7 +1224,9 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
                "KeyLevelSource", "KeyLevelReaction", "KeyLevelScore",
                // v2.15 — same rationale. OutcomeEpoch is appended so legacy
                // positional columns remain stable in this versioned outcome file.
-               "SelectedStrategy", "SelectedStrategyScore", "OutcomeEpoch");
+               "SelectedStrategy", "SelectedStrategyScore", "OutcomeEpoch",
+               // Stable lineage and session fields are appended to preserve legacy column positions.
+               "DecisionID", "Session", "RunID");
       m_outcomeHeaderWritten = true;
      }
 
@@ -1254,7 +1300,10 @@ bool CSignalLogger::LogOutcome(PendingSetup &p, string symbol, ENUM_TIMEFRAMES e
             DoubleToString(p.setup.reasons.keylevel_score, 1),
             SelectedStrategyLabel(p.setup.reasons.selected_strategy),
             DoubleToString(p.setup.reasons.selected_strategy_score, 1),
-            (long)resolvedAt);
+            (long)resolvedAt,
+            p.decisionId,
+            EnumToString(p.setup.reasons.session),
+            m_outcomeRunId);
 
    FileClose(handle);
    return true;
@@ -6546,7 +6595,8 @@ public:
    // the London/NY overlap; blocks Tokyo-only and dead hours. Pass
    // enabled=false to restore pre-v2.8 all-sessions behavior.
    void              ConfigureSessionFilter(bool enabled, bool allowTokyo = false, bool allowLondon = true,
-                                            bool allowNewYork = true, bool allowOverlap = true);
+                                            bool allowNewYork = true, bool allowOverlap = true,
+                                            int testerServerUtcOffsetMinutes = 99999);
    // v2.9 addition. FVGScore() now ranks every qualifying FVG and keeps
    // the best-scoring one instead of returning the first match found —
    // "first" had no relationship to "best" (freshness/proximity), so two
@@ -6782,9 +6832,11 @@ void CScoringEngine::ConfigureVolatilityRegime(bool blockLowVolRegime, int lookb
   }
 //+------------------------------------------------------------------+
 void CScoringEngine::ConfigureSessionFilter(bool enabled, bool allowTokyo, bool allowLondon,
-                                            bool allowNewYork, bool allowOverlap)
+                                            bool allowNewYork, bool allowOverlap,
+                                            int testerServerUtcOffsetMinutes)
   {
    m_sessionFilter.Configure(enabled, allowTokyo, allowLondon, allowNewYork, allowOverlap);
+   m_sessionFilter.SetTesterServerUtcOffsetMinutes(testerServerUtcOffsetMinutes);
   }
 //+------------------------------------------------------------------+
 void CScoringEngine::ConfigureFVGProximity(double maxDistATR)
@@ -9628,16 +9680,27 @@ public:
    void Init(CSignalLogger* logger,string symbol,ENUM_TIMEFRAMES tf,int maxBars,ENUM_FILL_POLICY fp=FILL_CONSERVATIVE,ENUM_TIMEFRAMES replayTF=PERIOD_M1){m_logger=logger;m_symbol=symbol;m_entryTF=tf;m_maxBars=MathMax(5,maxBars);m_fillPolicy=fp;m_replayTF=replayTF;m_count=0;m_lastFinalizedR=0.0;m_lastFinalizedQualified=false;ArrayResize(m_pending,0);ArrayResize(m_seenDealTickets,0);ArrayResize(m_rebuiltDecisionIds,0);ZeroMemory(m_stats);}
    void ConfigureExecutionMode(bool live){m_liveExecution=live;}void ConfigureSimulation(double risk,bool allow,double be,double partial,double frac,double trail,double comm,double spread,double slip){m_riskPercent=risk;m_allowMinLotOverride=allow;m_breakEvenAtR=be;m_partialAtR=partial;m_partialFraction=MathMax(0.0,MathMin(1.0,frac));m_trailATRMult=trail;m_commissionPerLot=MathMax(0.0,comm);m_spreadPoints=MathMax(0.0,spread);m_slippagePoints=MathMax(0.0,slip);}void ConfigureCalibration(bool enabled,int minSample=30){m_calibrationEnabled=enabled;m_calibration.Init(m_symbol,minSample);}void ConfigureConfidenceDecay(double halfLife=12.0){m_decayHalfLifeBars=halfLife;}void ConfigurePublishing(CSignalPublisher* p,string version){m_publisher=p;m_weightVersion=version;}void ConfigureEnvironmentMemory(CEnvironmentStrategyMemory* memory){m_environmentMemory=memory;}
    int ActiveCount()const{return m_count;}double LastFinalizedR()const{return m_lastFinalizedR;}bool LastFinalizedQualified()const{return m_lastFinalizedQualified;}OutcomeStats GetStats()const{return m_stats;}double GetCalibratedProbability(double confidence,int &sample,bool &enough)const{return m_calibration.GetCalibratedProbability(confidence,sample,enough);}
-   bool GetAttribution(long decisionId,string &strategy,string &regime)
+   bool GetAttribution(long decisionId,string &strategy,string &regime,string &session,
+                       string &direction,double &initialStopDistancePoints)
      {
       strategy="UNTAGGED";
       regime="UNTAGGED";
+      session="UNTAGGED";
+      direction="UNTAGGED";
+      initialStopDistancePoints=0.0;
       int index=Find(decisionId);
       if(index<0) return false;
-      strategy=EnumToString(m_pending[index].setup.reasons.selected_strategy);
-      regime=EnumToString(m_pending[index].setup.reasons.regime);
+      PendingSetup p=m_pending[index];
+      strategy=EnumToString(p.setup.reasons.selected_strategy);
+      regime=EnumToString(p.setup.reasons.regime);
+      session=EnumToString(p.setup.reasons.session);
+      direction=(p.setup.type==ORDER_TYPE_BUY?"BUY":"SELL");
+      double point=SymbolInfoDouble(m_symbol,SYMBOL_POINT);
+      if(point>0.0 && p.riskDist>0.0)
+         initialStopDistancePoints=p.riskDist/point;
       if(StringLen(strategy)==0) strategy="UNTAGGED";
       if(StringLen(regime)==0) regime="UNTAGGED";
+      if(StringLen(session)==0) session="UNTAGGED";
       return true;
      }
    void AddSetup(TradeSetup &setup,long decisionId=-1,string decisionFingerprint=""){if(!setup.active||decisionId<=0||Find(decisionId)>=0)return;PendingSetup p;ZeroMemory(p);p.setup=setup;p.decisionId=decisionId;p.decision_fingerprint=decisionFingerprint;p.entryRef=ResolveExecutionEntry(setup);p.riskDist=MathAbs(p.entryRef-setup.stop_loss);p.sizingEntryPrice=p.entryRef;p.mgmtRiskDist=p.riskDist;p.weightedRiskDistLots=0.0;p.mfePrice=p.entryRef;p.maePrice=p.entryRef;p.currentSL=setup.stop_loss;p.confidenceAtSignal=setup.confidence;p.confidenceDecayed=setup.confidence;p.cashflowsKnown=true;p.outcomeHistoryComplete=true;p.excursionHistoryComplete=true;int n=m_count++;ArrayResize(m_pending,m_count);m_pending[n]=p;}
@@ -13655,6 +13718,13 @@ struct TesterDealExportRow
    long decision_id;
    string strategy;
    string regime;
+   string direction;
+   string session;
+   double initial_stop_price;
+   double initial_stop_distance_points;
+   string deal_reason;
+   double spread_points_observed;
+   bool spread_observed;
    double requested_price;
    double slippage_points;
    double slippage_cost_cash;
@@ -13667,6 +13737,10 @@ struct TesterPositionAttribution
    long decision_id;
    string strategy;
    string regime;
+   string direction;
+   string session;
+   double initial_stop_price;
+   double initial_stop_distance_points;
   };
 
 class CTesterDealExport
@@ -13707,7 +13781,9 @@ private:
      }
 
    void RememberAttribution(const ulong positionId,const long decisionId,
-                            const string strategy,const string regime)
+                            const string strategy,const string regime,
+                            const string direction,const string session,
+                            const double initialStopPrice,const double initialStopDistancePoints)
      {
       if(positionId==0) return;
       int index=AttributionIndex(positionId);
@@ -13723,6 +13799,10 @@ private:
          m_attributions[index].decision_id=decisionId;
          m_attributions[index].strategy=(StringLen(strategy)>0?strategy:"UNTAGGED");
          m_attributions[index].regime=(StringLen(regime)>0?regime:"UNTAGGED");
+         m_attributions[index].direction=(StringLen(direction)>0?direction:"UNTAGGED");
+         m_attributions[index].session=(StringLen(session)>0?session:"UNTAGGED");
+         m_attributions[index].initial_stop_price=initialStopPrice;
+         m_attributions[index].initial_stop_distance_points=initialStopDistancePoints;
          return;
         }
       if(m_attributions[index].strategy=="CONFLICT" ||
@@ -13734,12 +13814,22 @@ private:
                      strategy!=m_attributions[index].strategy) ||
                     (StringLen(regime)>0 && regime!="UNTAGGED" &&
                      m_attributions[index].regime!="UNTAGGED" &&
-                     regime!=m_attributions[index].regime);
+                     regime!=m_attributions[index].regime) ||
+                    (StringLen(direction)>0 && direction!="UNTAGGED" &&
+                     m_attributions[index].direction!="UNTAGGED" &&
+                     direction!=m_attributions[index].direction) ||
+                    (StringLen(session)>0 && session!="UNTAGGED" &&
+                     m_attributions[index].session!="UNTAGGED" &&
+                     session!=m_attributions[index].session);
       if(conflict)
         {
          m_attributions[index].decision_id=0;
          m_attributions[index].strategy="CONFLICT";
          m_attributions[index].regime="CONFLICT";
+         m_attributions[index].direction="CONFLICT";
+         m_attributions[index].session="CONFLICT";
+         m_attributions[index].initial_stop_price=0.0;
+         m_attributions[index].initial_stop_distance_points=0.0;
          return;
         }
       if(m_attributions[index].decision_id<=0 && decisionId>0)
@@ -13748,6 +13838,14 @@ private:
          m_attributions[index].strategy=strategy;
       if(m_attributions[index].regime=="UNTAGGED" && StringLen(regime)>0 && regime!="UNTAGGED")
          m_attributions[index].regime=regime;
+      if(m_attributions[index].direction=="UNTAGGED" && StringLen(direction)>0 && direction!="UNTAGGED")
+         m_attributions[index].direction=direction;
+      if(m_attributions[index].session=="UNTAGGED" && StringLen(session)>0 && session!="UNTAGGED")
+         m_attributions[index].session=session;
+      if(m_attributions[index].initial_stop_price<=0.0 && initialStopPrice>0.0)
+         m_attributions[index].initial_stop_price=initialStopPrice;
+      if(m_attributions[index].initial_stop_distance_points<=0.0 && initialStopDistancePoints>0.0)
+         m_attributions[index].initial_stop_distance_points=initialStopDistancePoints;
      }
 
    string SafeName(string value)
@@ -13853,7 +13951,9 @@ private:
       ResetLastError();
       if(FileWrite(handle,"position_id","time","entry","volume","profit","commission",
                    "swap","fee","risk_cash","lane","deal_id","order_id","symbol",
-                   "decision_id","strategy","regime","requested_price","slippage_points",
+                   "decision_id","strategy","regime","direction","session","initial_stop_price",
+                   "initial_stop_distance_points","deal_reason","spread_points_observed",
+                   "spread_observed","requested_price","slippage_points",
                    "slippage_cost_cash","slippage_known")==0)
          ok=false;
 
@@ -13877,6 +13977,13 @@ private:
                       IntegerToString(row.decision_id),
                       row.strategy,
                       row.regime,
+                      row.direction,
+                      row.session,
+                      (row.initial_stop_price>0.0?DoubleToString(row.initial_stop_price,10):""),
+                      (row.initial_stop_distance_points>0.0?DoubleToString(row.initial_stop_distance_points,8):""),
+                      row.deal_reason,
+                      (row.spread_observed?DoubleToString(row.spread_points_observed,8):""),
+                      (row.spread_observed?"true":"false"),
                       (row.slippage_known?DoubleToString(row.requested_price,10):""),
                       (row.slippage_known?DoubleToString(row.slippage_points,8):""),
                       (row.slippage_known?DoubleToString(row.slippage_cost_cash,8):""),
@@ -14130,6 +14237,9 @@ public:
                const double profit,const double commission,const double swap,
                const double fee,const double entryRiskCash,
                const long decisionId,const string strategy,const string regime,
+               const string direction,const string session,
+               const double initialStopPrice,const double initialStopDistancePoints,
+               const string dealReason,const double spreadPointsObserved,const bool spreadObserved,
                const double requestedPrice,const double slippagePoints,
                const double slippageCostCash,const bool slippageKnown)
      {
@@ -14152,6 +14262,11 @@ public:
          m_writeFailed=true;
          return false;
         }
+      if(spreadObserved && (!MathIsValidNumber(spreadPointsObserved) || spreadPointsObserved<0.0))
+        {
+         m_writeFailed=true;
+         return false;
+        }
       if(slippageKnown &&
          (!MathIsValidNumber(requestedPrice) || requestedPrice<=0.0 ||
           !MathIsValidNumber(slippagePoints) || !MathIsValidNumber(slippageCostCash) ||
@@ -14163,26 +14278,34 @@ public:
 
       int attribution=AttributionIndex(positionId);
       if(entry==DEAL_ENTRY_IN)
-         RememberAttribution(positionId,decisionId,strategy,regime);
+         RememberAttribution(positionId,decisionId,strategy,regime,direction,session,
+                             initialStopPrice,initialStopDistancePoints);
       else if(entry==DEAL_ENTRY_INOUT)
         {
          // A netting reversal preserves DEAL_POSITION_ID while changing exposure.
          // One stable position ID can therefore span multiple decision lineages.
          if(attribution<0)
-            RememberAttribution(positionId,0,"CONFLICT","CONFLICT");
+            RememberAttribution(positionId,0,"CONFLICT","CONFLICT","CONFLICT","CONFLICT",0.0,0.0);
          else
            {
             m_attributions[attribution].decision_id=0;
             m_attributions[attribution].strategy="CONFLICT";
             m_attributions[attribution].regime="CONFLICT";
+            m_attributions[attribution].direction="CONFLICT";
+            m_attributions[attribution].session="CONFLICT";
            }
         }
       else if(attribution<0 && decisionId>0)
-         RememberAttribution(positionId,decisionId,strategy,regime);
+         RememberAttribution(positionId,decisionId,strategy,regime,direction,session,
+                             initialStopPrice,initialStopDistancePoints);
       attribution=AttributionIndex(positionId);
       long resolvedDecisionId=decisionId;
       string resolvedStrategy=strategy;
       string resolvedRegime=regime;
+      string resolvedDirection=direction;
+      string resolvedSession=session;
+      double resolvedInitialStopPrice=initialStopPrice;
+      double resolvedInitialStopDistancePoints=initialStopDistancePoints;
       if(attribution>=0)
         {
          // Once a netting reversal has made this identifier ambiguous, do not
@@ -14193,6 +14316,10 @@ public:
             resolvedDecisionId=0;
             resolvedStrategy="CONFLICT";
             resolvedRegime="CONFLICT";
+            resolvedDirection="CONFLICT";
+            resolvedSession="CONFLICT";
+            resolvedInitialStopPrice=0.0;
+            resolvedInitialStopDistancePoints=0.0;
            }
          else
            {
@@ -14201,10 +14328,20 @@ public:
                resolvedStrategy=m_attributions[attribution].strategy;
             if(StringLen(resolvedRegime)==0 || resolvedRegime=="UNTAGGED")
                resolvedRegime=m_attributions[attribution].regime;
+            if(StringLen(resolvedDirection)==0 || resolvedDirection=="UNTAGGED")
+               resolvedDirection=m_attributions[attribution].direction;
+            if(StringLen(resolvedSession)==0 || resolvedSession=="UNTAGGED")
+               resolvedSession=m_attributions[attribution].session;
+            if(resolvedInitialStopPrice<=0.0)
+               resolvedInitialStopPrice=m_attributions[attribution].initial_stop_price;
+            if(resolvedInitialStopDistancePoints<=0.0)
+               resolvedInitialStopDistancePoints=m_attributions[attribution].initial_stop_distance_points;
            }
         }
       if(StringLen(resolvedStrategy)==0) resolvedStrategy="UNTAGGED";
       if(StringLen(resolvedRegime)==0) resolvedRegime="UNTAGGED";
+      if(StringLen(resolvedDirection)==0) resolvedDirection="UNTAGGED";
+      if(StringLen(resolvedSession)==0) resolvedSession="UNTAGGED";
 
       int seen=ArraySize(m_seenDeals);
       if(ArrayResize(m_seenDeals,seen+1)!=seen+1)
@@ -14237,6 +14374,13 @@ public:
       m_rows[count].decision_id=resolvedDecisionId;
       m_rows[count].strategy=resolvedStrategy;
       m_rows[count].regime=resolvedRegime;
+      m_rows[count].direction=resolvedDirection;
+      m_rows[count].session=resolvedSession;
+      m_rows[count].initial_stop_price=resolvedInitialStopPrice;
+      m_rows[count].initial_stop_distance_points=resolvedInitialStopDistancePoints;
+      m_rows[count].deal_reason=(StringLen(dealReason)>0?dealReason:"UNKNOWN");
+      m_rows[count].spread_points_observed=(spreadObserved?spreadPointsObserved:0.0);
+      m_rows[count].spread_observed=spreadObserved;
       m_rows[count].requested_price=(slippageKnown?requestedPrice:0.0);
       m_rows[count].slippage_points=(slippageKnown?slippagePoints:0.0);
       m_rows[count].slippage_cost_cash=(slippageKnown?slippageCostCash:0.0);
@@ -16296,8 +16440,9 @@ int OnInit()
       g_topDownMTF.Configure(InpMTFMaxConfidenceAdjustment,InpMTFChochLookbackBars);
       Print("Midas: direction-agnostic D1/H4/H1/M30/M15/M5/M1 scoring enabled; matched validation is required before production activation.");
      }
-   g_scoring.Init(g_trendCtx,g_bosCtx,g_liqCtx,g_fvgCtx,g_chartCtx,&g_chartCtx.candles);g_scoring.ConfigureMTFStructureAlignment(InpRequireMtfStructureAlignment,InpMtfMaxBosAgeBars);g_scoring.ConfigureInducement(InpImpulseLookbackBars,InpImpulseATRMult,InpImpulseBodyRatio,InpEqualTolATR,InpMaxLegExtend,InpRequirePremiumDiscount,InpRequireDistributionPhase,InpPhaseRangeLookback,InpPhaseCompressionATRMult);g_scoring.ConfigureVolumeFibonacci(InpRequireVolumeConfirmation,InpRVOLThreshold,InpRequireFibonacciZone,InpFibZoneMinPct,InpFibZoneMaxPct);g_scoring.ConfigureValueArea(InpRequireValueAreaLocation,InpBlockValueAreaContradictions);g_scoring.ConfigureHtfOrderBlock(g_htfObCtx,InpRequireHtfOB,InpOBDistATRMax);g_scoring.ConfigureVolatilityRegime(InpBlockLowVolRegime,InpVolRegimeLookback,InpVolRegimeLowPct,InpVolRegimeHighPct);g_scoring.ConfigureSessionFilter(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_operatorSessionFilter.Configure(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_scoring.ConfigureSweepQuality(InpRequireMinSweepGrade,(ENUM_SWEEP_GRADE)InpMinSweepGrade,InpRequireFreshSetup,InpMaxBarsSinceBOS);g_scoring.ConfigureChaseFilter(InpRequireChaseFilter,InpMaxChaseDistATR);g_scoring.ConfigureFVGProximity(InpFVGMaxDistATR);g_scoring.ConfigureLearnedDiagnostics(InpDiagContradictionWeight,InpDiagEnvWeight,InpDiagExecWeight);g_scoring.ConfigureStrategyDiagnostics(InpMomentumBreakoutRecencyBars,InpBreakoutLiqOverlapBars,InpBreakoutExtensionLookbackBars,InpBreakoutExhaustionATRMult,InpMomentumLookbackBars);g_scoring.ConfigureMeanReversionDiagnostics(InpReversionMinStretchATR,InpReversionSRZoneATRTolerance,InpReversionWickRejectionRatio,InpReversionLiqRecencyBars,InpReversionTrendConflictRecencyBars,InpReversionTrendConflictMinStrength);g_scoring.ConfigureKeyLevelDiagnostics(InpKeyLevelLookbackBars,InpKeyLevelSearchATRMax,InpKeyLevelTouchToleranceATRMult,InpKeyLevelAbsorptionMinTouches,InpKeyLevelWickRejectionRatio,InpKeyLevelRoundStep);g_scoring.ConfigureStrategySelection(InpMinSelectionScore);
-   g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_decision.ConfigureFreshSweepAdditiveRouter(InpEnableFreshSweepAdditiveRouter,InpFreshSweepEnableSingleSwingFallback,InpFreshSweepMaxSignalAgeBars,InpFreshSweepDirectionalAdvantage,InpFreshSweepUseDualLaneRankB);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride);g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber,3,300,InpMaxQuoteAgeSeconds,InpMaxSpreadPoints);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
+   g_scoring.Init(g_trendCtx,g_bosCtx,g_liqCtx,g_fvgCtx,g_chartCtx,&g_chartCtx.candles);g_scoring.ConfigureMTFStructureAlignment(InpRequireMtfStructureAlignment,InpMtfMaxBosAgeBars);g_scoring.ConfigureInducement(InpImpulseLookbackBars,InpImpulseATRMult,InpImpulseBodyRatio,InpEqualTolATR,InpMaxLegExtend,InpRequirePremiumDiscount,InpRequireDistributionPhase,InpPhaseRangeLookback,InpPhaseCompressionATRMult);g_scoring.ConfigureVolumeFibonacci(InpRequireVolumeConfirmation,InpRVOLThreshold,InpRequireFibonacciZone,InpFibZoneMinPct,InpFibZoneMaxPct);g_scoring.ConfigureValueArea(InpRequireValueAreaLocation,InpBlockValueAreaContradictions);g_scoring.ConfigureHtfOrderBlock(g_htfObCtx,InpRequireHtfOB,InpOBDistATRMax);g_scoring.ConfigureVolatilityRegime(InpBlockLowVolRegime,InpVolRegimeLookback,InpVolRegimeLowPct,InpVolRegimeHighPct);g_scoring.ConfigureSessionFilter(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap,InpTesterServerUtcOffsetMinutes);g_operatorSessionFilter.Configure(InpUseSessionFilter,InpAllowTokyoSession,InpAllowLondonSession,InpAllowNewYorkSession,InpAllowLondonNYOverlap);g_operatorSessionFilter.SetTesterServerUtcOffsetMinutes(InpTesterServerUtcOffsetMinutes);g_scoring.ConfigureSweepQuality(InpRequireMinSweepGrade,(ENUM_SWEEP_GRADE)InpMinSweepGrade,InpRequireFreshSetup,InpMaxBarsSinceBOS);g_scoring.ConfigureChaseFilter(InpRequireChaseFilter,InpMaxChaseDistATR);g_scoring.ConfigureFVGProximity(InpFVGMaxDistATR);g_scoring.ConfigureLearnedDiagnostics(InpDiagContradictionWeight,InpDiagEnvWeight,InpDiagExecWeight);g_scoring.ConfigureStrategyDiagnostics(InpMomentumBreakoutRecencyBars,InpBreakoutLiqOverlapBars,InpBreakoutExtensionLookbackBars,InpBreakoutExhaustionATRMult,InpMomentumLookbackBars);g_scoring.ConfigureMeanReversionDiagnostics(InpReversionMinStretchATR,InpReversionSRZoneATRTolerance,InpReversionWickRejectionRatio,InpReversionLiqRecencyBars,InpReversionTrendConflictRecencyBars,InpReversionTrendConflictMinStrength);g_scoring.ConfigureKeyLevelDiagnostics(InpKeyLevelLookbackBars,InpKeyLevelSearchATRMax,InpKeyLevelTouchToleranceATRMult,InpKeyLevelAbsorptionMinTouches,InpKeyLevelWickRejectionRatio,InpKeyLevelRoundStep);g_scoring.ConfigureStrategySelection(InpMinSelectionScore);
+   g_environmentMemory.Init(_Symbol,InpEnvironmentMemoryMinSample,InpEnvironmentMemoryBonus,InpEnvironmentMemoryPenalty);g_decision.Init(&g_chartCtx.candles,g_fvgCtx,g_liqCtx,&g_scoring,InpSLBufferATR,InpMinStopSpreadMult,InpFVGMaxDistATR,InpMinSelectionScore,g_chartCtx,g_bosCtx,GetPointer(g_environmentMemory));g_decision.ConfigureSMCStructuralGate(InpRequireSMCStructuralValidity);g_decision.ConfigureFreshSweepAdditiveRouter(InpEnableFreshSweepAdditiveRouter,InpFreshSweepEnableSingleSwingFallback,InpFreshSweepMaxSignalAgeBars,InpFreshSweepDirectionalAdvantage,InpFreshSweepUseDualLaneRankB);g_logger.Init(_Symbol,InpSessionGMTOffsetOverride,
+                ((bool)MQLInfoInteger(MQL_TESTER)?InpTesterExportRunId:"live"));g_tracker.Init(&g_logger,_Symbol,_Period,InpMaxTrackingBars,InpFillPolicy,InpReplayTF);g_tracker.ConfigureEnvironmentMemory(GetPointer(g_environmentMemory));g_tracker.ConfigureSimulation(g_activeRiskLimits.riskPercentPerTrade,InpAllowMinLotOverride,InpBreakEvenAtR,InpPartialAtR,InpPartialFraction,InpTrailATRMult,InpSimCommissionPerLot,InpSimSpreadPoints,InpSimSlippagePoints);g_tracker.ConfigureCalibration(InpTrackOutcomes,InpCalibrationMinSample);g_tracker.ConfigureConfidenceDecay(InpDiagDecayHalfLifeBars);g_router.Init(_Symbol,InpEnableExecution,InpEnableSignals,InpMinConfidenceExecute,InpMinConfidenceSignal,InpFullRiskConfidence,InpMaxSpreadPoints);g_multiTrade.Init(InpEnableMultiTrade,InpMultiTradeDualProbability,InpMultiTradeTripleProbability,InpMultiTradeMinRawConfidence,InpMultiTradeMinCalibrationSample,InpMultiTradeDualLeg0RiskFraction,InpMultiTradeDualLeg1RiskFraction,InpMultiTradeTripleLeg0RiskFraction,InpMultiTradeTripleLeg1RiskFraction,InpMultiTradeTripleLeg2RiskFraction,InpRequireHedgingForMultiTrade);g_broker.Init(InpMagicNumber,3,300,InpMaxQuoteAgeSeconds,InpMaxSpreadPoints);g_monitor.Init(_Symbol,InpHeartbeatIntervalSec,InpMaxDrawdownAlertPercent);g_orders.Init(&g_broker,g_activeRiskLimits.maxOpenTrades,&g_monitor);g_positions.Init(&g_orders,&g_broker,InpPartialAtR,InpPartialFraction,&g_chartCtx.swings,&g_executionLedger,&g_risk,g_activeRiskLimits.riskPercentPerTrade);g_store.Init(_Symbol);g_execAudit.Init(_Symbol,InpMagicNumber);g_emergencyStop=(GlobalVariableCheck(EmergencyStopGlobalKey()) && GlobalVariableGet(EmergencyStopGlobalKey())>0.5);if(InpShowTradeControlPanel || g_emergencyStop){g_panelInitialized=g_controlPanel.Init(ChartID(),_Symbol,InpMagicNumber);if(!g_panelInitialized)Print("MedisTouch: trade control panel could not create every chart object.");}g_execAudit.Log("INIT",StringFormat("version=2.81 magic=%I64u risk_profile=%s risk_per_trade=%.3f max_open=%d emergency_latched=%s account_margin_mode=%d",InpMagicNumber,g_activeRiskLimits.profileName,g_activeRiskLimits.riskPercentPerTrade,g_activeRiskLimits.maxOpenTrades,g_emergencyStop?"true":"false",(int)AccountInfoInteger(ACCOUNT_MARGIN_MODE)));if((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING){g_execAudit.Log("ACCOUNT_MODE_WARNING","MT5 netting/exchange mode aggregates same-symbol exposure; isolate manual/other-EA activity before using close-all");Print("MedisTouch: WARNING — netting/exchange account may aggregate this symbol with other trade sources.");}bool qualifiedTradeTrackingSupported=InpTrackOutcomes && InpEnableExecution;g_dailyTradeTarget.Init(qualifiedTradeTrackingSupported?InpMinimumQualifiedTradesPerDay:0,InpMinimumQualifiedTradeR,InpMagicNumber);if(InpMinimumQualifiedTradesPerDay>0 && !qualifiedTradeTrackingSupported)Print("Midas Touch: weekday qualified-trade counter disabled; requires outcome tracking and automated execution.");if(InpAllowConcurrentOpposingPositions && !IsRetailHedgingAccount()){g_execAudit.Log("DUAL_MODE_UNSUPPORTED","InpAllowConcurrentOpposingPositions=true but the account is not MT5 retail hedging; simultaneous same-symbol long/short positions are not supported");Print("Midas Touch: opposing-position mode requested, but this account is not retail hedging; same-symbol opposing exposure remains blocked.");}else if(InpAllowConcurrentOpposingPositions){g_execAudit.Log("DUAL_MODE_ENABLED","same-symbol opposing positions permitted by explicit input; portfolio risk and position caps still apply");}g_subscribers.Init();g_publisher.Init(_Symbol,&g_subscribers,InpWebRequestTimeoutMs,InpBridgeApiKey);g_publisher.SetWeightVersion(InpWeightSetVersion);
    if(StringLen(InpConfigSyncEndpoint)>0){g_configSync.Init(_Symbol,InpConfigSyncEndpoint,InpBridgeApiKey,InpWeightSetVersion,InpWebRequestTimeoutMs);EventSetTimer(MathMax(60,InpConfigSyncPollMinutes*60));}g_tracker.ConfigurePublishing(&g_publisher,InpWeightSetVersion);g_portfolio.Init(g_activeRiskLimits.maxPortfolioRiskPercent,g_activeRiskLimits.maxPositionsPerSymbol,g_activeRiskLimits.maxPositionsPerGroup,InpMagicNumber,&g_risk);g_riskGuard.Init(_Symbol,g_activeRiskLimits.maxDailyLossPercent,g_activeRiskLimits.maxDrawdownPercent,g_activeRiskLimits.deriskStartPercent,g_activeRiskLimits.deriskFloor,InpEnableProgressiveDailyLossDeRisk);if(InpUseNewsFilter)g_newsFilter.Load(InpNewsFilterFile,InpNewsMinutesBefore,InpNewsMinutesAfter);g_scoring.ConfigureNewsAwareness(GetPointer(g_newsFilter),InpNewsWarnMinutesBefore,InpNewsWarnMinutesAfter,InpNewsWarnMultiplier);g_recovery.Init(&g_store,&g_orders,InpMagicNumber,_Symbol);int restored=g_recovery.Recover();if(restored>0)PrintFormat("MedisTouch EA: recovery restored %d live trade(s).",restored);TradeDecisionRecord prior[];int n=g_store.LoadAll(prior);long maxId=0;for(int i=0;i<n;i++)if(prior[i].decision_id>maxId)maxId=prior[i].decision_id;if(maxId>0)g_router.SeedNextId(maxId+1);
    if(InpEnableExecution && g_executionLedger.Ready())
      {
@@ -17184,21 +17329,49 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
       int exportLegIndex=0;
       string exportStrategy="UNTAGGED";
       string exportRegime="UNTAGGED";
+      string exportSession="UNTAGGED";
+      string exportDirection="UNTAGGED";
+      double initialStopDistancePoints=0.0;
+      double initialStopPrice=0.0;
+      double observedSpreadPoints=0.0;
+      bool spreadObserved=false;
       double requestedPrice=0.0;
       double slippagePoints=0.0;
       double slippageCostCash=0.0;
       bool slippageKnown=false;
       double dealVolume=HistoryDealGetDouble(trans.deal,DEAL_VOLUME);
       double dealPrice=HistoryDealGetDouble(trans.deal,DEAL_PRICE);
+      double spreadPointSize=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+      MqlTick observedDealTick;
+      if(spreadPointSize>0.0 && SymbolInfoTick(_Symbol,observedDealTick) &&
+         observedDealTick.ask>0.0 && observedDealTick.bid>0.0 &&
+         observedDealTick.ask>=observedDealTick.bid)
+        {
+         observedSpreadPoints=(observedDealTick.ask-observedDealTick.bid)/spreadPointSize;
+         spreadObserved=MathIsValidNumber(observedSpreadPoints) && observedSpreadPoints>=0.0;
+        }
       if(exportOrder>0 && HistoryOrderSelect(exportOrder))
         {
          string orderComment=HistoryOrderGetString(exportOrder,ORDER_COMMENT);
          if(entry==DEAL_ENTRY_IN &&
             ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex))
-            g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime);
+            g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime,
+                                     exportSession,exportDirection,initialStopDistancePoints);
          double entryStop=HistoryOrderGetDouble(exportOrder,ORDER_SL);
          if(entry==DEAL_ENTRY_IN && entryStop>0.0 && dealVolume>0.0 && dealPrice>0.0)
+           {
+            initialStopPrice=entryStop;
             entryRiskCash=g_risk.RiskAmountForLots(_Symbol,dealVolume,dealPrice,entryStop);
+            double pointSize=SymbolInfoDouble(_Symbol,SYMBOL_POINT);
+            if(pointSize>0.0)
+               initialStopDistancePoints=MathAbs(dealPrice-entryStop)/pointSize;
+            if(exportDirection=="UNTAGGED")
+              {
+               ENUM_ORDER_TYPE entryOrderType=(ENUM_ORDER_TYPE)HistoryOrderGetInteger(exportOrder,ORDER_TYPE);
+               if(entryOrderType==ORDER_TYPE_BUY) exportDirection="BUY";
+               else if(entryOrderType==ORDER_TYPE_SELL) exportDirection="SELL";
+              }
+           }
 
          // Only market BUY/SELL orders are scored as execution slippage.
          // Pending stop/limit triggers are deliberately left unknown rather than
@@ -17242,6 +17415,11 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
             HistoryDealGetDouble(trans.deal,DEAL_SWAP),
             HistoryDealGetDouble(trans.deal,DEAL_FEE),entryRiskCash,
             exportDecisionId,exportStrategy,exportRegime,
+            exportDirection,exportSession,
+            initialStopPrice,
+            initialStopDistancePoints,
+            EnumToString((ENUM_DEAL_REASON)HistoryDealGetInteger(trans.deal,DEAL_REASON)),
+            observedSpreadPoints,spreadObserved,
             requestedPrice,slippagePoints,slippageCostCash,slippageKnown))
          PrintFormat("MIDAS_TEST_EXPORT_ERROR deal=%I64u position=%I64u; artifact will be incomplete",
                      trans.deal,positionIdentifier);

@@ -226,7 +226,8 @@ public:
    // the London/NY overlap; blocks Tokyo-only and dead hours. Pass
    // enabled=false to restore pre-v2.8 all-sessions behavior.
    void              ConfigureSessionFilter(bool enabled, bool allowTokyo = false, bool allowLondon = true,
-                                            bool allowNewYork = true, bool allowOverlap = true);
+                                            bool allowNewYork = true, bool allowOverlap = true,
+                                            int testerServerUtcOffsetMinutes = 99999);
    // v2.9 addition. FVGScore() now ranks every qualifying FVG and keeps
    // the best-scoring one instead of returning the first match found —
    // "first" had no relationship to "best" (freshness/proximity), so two
@@ -462,9 +463,11 @@ void CScoringEngine::ConfigureVolatilityRegime(bool blockLowVolRegime, int lookb
   }
 //+------------------------------------------------------------------+
 void CScoringEngine::ConfigureSessionFilter(bool enabled, bool allowTokyo, bool allowLondon,
-                                            bool allowNewYork, bool allowOverlap)
+                                            bool allowNewYork, bool allowOverlap,
+                                            int testerServerUtcOffsetMinutes)
   {
    m_sessionFilter.Configure(enabled, allowTokyo, allowLondon, allowNewYork, allowOverlap);
+   m_sessionFilter.SetTesterServerUtcOffsetMinutes(testerServerUtcOffsetMinutes);
   }
 //+------------------------------------------------------------------+
 void CScoringEngine::ConfigureFVGProximity(double maxDistATR)

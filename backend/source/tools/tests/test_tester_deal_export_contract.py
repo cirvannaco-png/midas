@@ -64,9 +64,9 @@ def test_native_export_carries_decision_strategy_regime_and_slippage_provenance(
     exporter = read_modular("includes/Execution/TesterDealExport.mqh")
     tracker = read_modular("includes/Trading/OutcomeTrackerLive.mqh")
 
-    assert "bool GetAttribution(long decisionId,string &strategy,string &regime)" in tracker
+    assert "bool GetAttribution(long decisionId,string &strategy,string &regime,string &session," in tracker
     assert "ParseManagedOrderComment(orderComment,exportDecisionId,exportLegIndex)" in ea
-    assert "g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime)" in ea
+    assert "g_tracker.GetAttribution(exportDecisionId,exportStrategy,exportRegime," in ea
     assert "HistoryOrderGetDouble(exportOrder,ORDER_PRICE_OPEN)" in ea
     assert "OrderCalcProfit(slippageCalcType,_Symbol,dealVolume" in ea
     assert "entry!=DEAL_ENTRY_INOUT && (buyMatch || sellMatch)" in ea
@@ -74,8 +74,11 @@ def test_native_export_carries_decision_strategy_regime_and_slippage_provenance(
     assert "historicalOrderType==ORDER_TYPE_SELL" in ea
     assert "Pending stop/limit triggers are deliberately left unknown" in ea
     assert "slippage_known" in exporter
-    assert '"decision_id","strategy","regime","requested_price","slippage_points"' in exporter
-    assert "RememberAttribution(positionId,decisionId,strategy,regime)" in exporter
+    assert '"decision_id","strategy","regime","direction","session","initial_stop_price"' in exporter
+    assert '"initial_stop_distance_points","deal_reason","spread_points_observed"' in exporter
+    assert '"spread_observed","requested_price","slippage_points"' in exporter
+    assert "m_rows[count].spread_observed=spreadObserved;" in exporter
+    assert "RememberAttribution(positionId,decisionId,strategy,regime,direction,session," in exporter
 
 
 def test_unknown_slippage_is_blank_not_zero_and_labels_follow_position_id():
@@ -84,6 +87,9 @@ def test_unknown_slippage_is_blank_not_zero_and_labels_follow_position_id():
     assert 'm_attributions[attribution].strategy' in exporter
     assert 'm_attributions[attribution].regime' in exporter
     assert 'm_attributions[index].strategy="CONFLICT"' in exporter
+    assert 'm_attributions[attribution].direction="CONFLICT"' in exporter
+    assert 'session!=m_attributions[index].session' in exporter
+    assert 'm_attributions[index].session="CONFLICT"' in exporter
 
 
 def test_only_opening_orders_resolve_strategy_decision_identity():
@@ -144,3 +150,18 @@ def test_export_metadata_contains_deal_level_cashflow_totals():
     assert "deal_swap_total" in exporter
     assert "deal_fee_total" in exporter
     assert "deal_net_cashflow_total" in exporter
+
+
+def test_outcome_export_adds_stable_decision_and_session_join_keys():
+    logger = read_modular("includes/Core/SignalLogger.mqh")
+    assert '"DecisionID", "Session", "RunID"' in logger
+    assert "m_outcomeRunId" in logger
+    assert "p.decisionId," in logger
+    assert "EnumToString(p.setup.reasons.session)" in logger
+
+
+
+def test_outcome_csv_schema_is_versioned_for_decision_session_extension():
+    logger = read_modular("includes/Core/SignalLogger.mqh")
+    assert 'm_outcomeFilename = "MedisTouch_Outcomes_v3_" + symbol + "_" + safeRunId + ".csv";' in logger
+    assert 'safeRunId+="_"+IntegerToString((long)GetTickCount());' in logger
