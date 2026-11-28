@@ -12,6 +12,7 @@ from analyze_native_tester_attribution import (  # noqa: E402
     read_position_labels,
     read_decision_outcomes,
     summarize,
+    assess_research_eligibility,
 )
 
 
@@ -95,3 +96,50 @@ def test_position_summary_uses_completed_positions_not_partial_rows():
     assert result["breakeven"] == 1
     assert result["profit_factor"] == 2.0
     assert result["expectancy_per_position"] == pytest.approx(5 / 3, abs=1e-4)
+
+
+
+def test_research_eligibility_rejects_every_cohort_below_70_percent():
+    result = assess_research_eligibility({
+        "positions": 500,
+        "win_rate_pct_excluding_flats": 69.99,
+        "profit_factor": 1.8,
+        "expectancy_per_position": 2.0,
+    })
+    assert result["eligible_for_independent_replication"] is False
+    assert result["status"] == "not_eligible"
+    assert "minimum_position_win_rate" in result["failed_checks"]
+
+
+def test_research_eligibility_accepts_exactly_70_only_when_other_gates_pass():
+    result = assess_research_eligibility({
+        "positions": 100,
+        "win_rate_pct_excluding_flats": 70.0,
+        "profit_factor": 1.05,
+        "expectancy_per_position": 0.01,
+    })
+    assert result["eligible_for_independent_replication"] is True
+    assert result["status"] == "candidate_for_independent_replication"
+
+
+def test_70_percent_win_rate_alone_never_overrides_negative_expectancy():
+    result = assess_research_eligibility({
+        "positions": 250,
+        "win_rate_pct_excluding_flats": 85.0,
+        "profit_factor": 0.95,
+        "expectancy_per_position": -0.2,
+    })
+    assert result["eligible_for_independent_replication"] is False
+    assert "minimum_profit_factor" in result["failed_checks"]
+    assert "positive_net_expectancy" in result["failed_checks"]
+
+
+def test_research_eligibility_rejects_small_samples_even_with_high_win_rate():
+    result = assess_research_eligibility({
+        "positions": 99,
+        "win_rate_pct_excluding_flats": 90.0,
+        "profit_factor": 2.0,
+        "expectancy_per_position": 1.0,
+    })
+    assert result["eligible_for_independent_replication"] is False
+    assert "minimum_completed_positions" in result["failed_checks"]
