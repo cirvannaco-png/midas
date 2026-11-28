@@ -238,6 +238,7 @@ def summarize(rows: list[dict], initial_balance: float) -> dict:
 
 
 MIN_PROMOTION_WIN_RATE_PCT = 70.0
+PERFORMANCE_TARGET_WIN_RATE_PCT = 87.0
 MIN_PROMOTION_POSITIONS = 100
 MIN_PROMOTION_PROFIT_FACTOR = 1.05
 
@@ -271,6 +272,7 @@ def assess_research_eligibility(metrics: dict) -> dict:
         "policy": {
             "minimum_completed_positions": MIN_PROMOTION_POSITIONS,
             "minimum_position_win_rate_pct": MIN_PROMOTION_WIN_RATE_PCT,
+            "performance_target_win_rate_pct": PERFORMANCE_TARGET_WIN_RATE_PCT,
             "minimum_profit_factor": MIN_PROMOTION_PROFIT_FACTOR,
             "expectancy": "strictly positive after broker profit, commission, swap and fee cashflows",
             "scope": "research shortlist only; not production promotion",
@@ -485,6 +487,7 @@ def main() -> int:
                 "promotion": "no family below 70% completed-position win rate is eligible even for independent replication; eligible cohorts still require native multi-fold validation, realistic cost stress and explicit human review",
                 "promotion_policy": {
                     "minimum_completed_position_win_rate_pct": MIN_PROMOTION_WIN_RATE_PCT,
+                    "performance_target_win_rate_pct": PERFORMANCE_TARGET_WIN_RATE_PCT,
                     "minimum_completed_positions": MIN_PROMOTION_POSITIONS,
                     "minimum_profit_factor": MIN_PROMOTION_PROFIT_FACTOR,
                     "positive_expectancy_required": True,
