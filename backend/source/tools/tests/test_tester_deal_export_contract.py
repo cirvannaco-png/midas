@@ -88,6 +88,8 @@ def test_unknown_slippage_is_blank_not_zero_and_labels_follow_position_id():
     assert 'm_attributions[attribution].regime' in exporter
     assert 'm_attributions[index].strategy="CONFLICT"' in exporter
     assert 'm_attributions[attribution].direction="CONFLICT"' in exporter
+    assert 'session!=m_attributions[index].session' in exporter
+    assert 'm_attributions[index].session="CONFLICT"' in exporter
 
 
 def test_only_opening_orders_resolve_strategy_decision_identity():
