@@ -13,6 +13,7 @@ from analyze_native_tester_attribution import (  # noqa: E402
     read_decision_outcomes,
     summarize,
     assess_research_eligibility,
+    grouped_metrics,
 )
 
 
@@ -143,3 +144,21 @@ def test_research_eligibility_rejects_small_samples_even_with_high_win_rate():
     })
     assert result["eligible_for_independent_replication"] is False
     assert "minimum_completed_positions" in result["failed_checks"]
+
+
+
+def test_every_direction_session_or_family_cohort_gets_its_own_70_percent_gate():
+    positions = [
+        {"symbol": "EURUSD", "strategy": "STRATEGY_SMC", "direction": "BUY", "session": "SESSION_LONDON",
+         "net_pnl": 2.0, "risk_cash": 1.0}
+        for _ in range(69)
+    ] + [
+        {"symbol": "EURUSD", "strategy": "STRATEGY_SMC", "direction": "BUY", "session": "SESSION_LONDON",
+         "net_pnl": -1.0, "risk_cash": 1.0}
+        for _ in range(31)
+    ]
+    groups = grouped_metrics(positions, 10000.0, ("symbol", "strategy", "direction", "session"))
+    cohort = groups["EURUSD|STRATEGY_SMC|BUY|SESSION_LONDON"]
+    assert cohort["win_rate_pct_excluding_flats"] == 69.0
+    assert cohort["research_eligibility"]["eligible_for_independent_replication"] is False
+    assert "minimum_position_win_rate" in cohort["research_eligibility"]["failed_checks"]
