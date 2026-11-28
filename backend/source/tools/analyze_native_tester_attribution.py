@@ -287,7 +287,12 @@ def grouped_metrics(positions: list[dict], initial_balance: float, keys: tuple[s
     output = {}
     for key, rows in sorted(groups.items(), key=lambda x: tuple(str(v) for v in x[0])):
         label = "|".join(str(v) for v in key)
-        output[label] = {**dict(zip(keys, key)), **summarize(rows, initial_balance)}
+        metrics = summarize(rows, initial_balance)
+        output[label] = {
+            **dict(zip(keys, key)),
+            **metrics,
+            "research_eligibility": assess_research_eligibility(metrics),
+        }
     return output
 
 
