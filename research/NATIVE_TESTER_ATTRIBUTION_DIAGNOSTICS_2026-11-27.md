@@ -63,7 +63,7 @@ The outcome log uses the existing display labels (`SMC`, `MomentumBreakout`, `Me
 
 ## Mandatory 70% research eligibility floor
 
-The user's minimum win-rate requirement is now a hard gate, calculated on completed positions after partial exits are consolidated. Breakeven positions are excluded from the win-rate denominator.
+The user's minimum win-rate requirement is now a hard gate, calculated on completed positions after partial exits are consolidated. Breakeven positions are excluded from the win-rate denominator. Midas's previously recorded **87% completed-position win-rate target remains the performance objective**; 70% is the absolute eligibility floor, not the target.
 
 A strategy-family cohort is eligible even for **independent replication only** when all of the following hold:
 
