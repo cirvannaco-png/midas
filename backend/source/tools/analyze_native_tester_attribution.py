@@ -237,6 +237,47 @@ def summarize(rows: list[dict], initial_balance: float) -> dict:
     }
 
 
+MIN_PROMOTION_WIN_RATE_PCT = 70.0
+MIN_PROMOTION_POSITIONS = 100
+MIN_PROMOTION_PROFIT_FACTOR = 1.05
+
+
+def assess_research_eligibility(metrics: dict) -> dict:
+    """Apply the user's hard win-rate floor plus independent profitability/sample gates.
+
+    Passing this screen only permits independent replication; it never promotes
+    a strategy into production or changes an EA default.
+    """
+    win_rate = metrics.get("win_rate_pct_excluding_flats")
+    positions = metrics.get("positions", 0)
+    profit_factor = metrics.get("profit_factor")
+    expectancy = metrics.get("expectancy_per_position")
+    checks = {
+        "minimum_completed_positions": positions >= MIN_PROMOTION_POSITIONS,
+        "minimum_position_win_rate": (
+            isinstance(win_rate, (int, float)) and win_rate >= MIN_PROMOTION_WIN_RATE_PCT
+        ),
+        "minimum_profit_factor": (
+            isinstance(profit_factor, (int, float)) and profit_factor >= MIN_PROMOTION_PROFIT_FACTOR
+        ),
+        "positive_net_expectancy": isinstance(expectancy, (int, float)) and expectancy > 0,
+    }
+    failed = [name for name, passed in checks.items() if not passed]
+    return {
+        "eligible_for_independent_replication": not failed,
+        "status": "candidate_for_independent_replication" if not failed else "not_eligible",
+        "checks": checks,
+        "failed_checks": failed,
+        "policy": {
+            "minimum_completed_positions": MIN_PROMOTION_POSITIONS,
+            "minimum_position_win_rate_pct": MIN_PROMOTION_WIN_RATE_PCT,
+            "minimum_profit_factor": MIN_PROMOTION_PROFIT_FACTOR,
+            "expectancy": "strictly positive after broker profit, commission, swap and fee cashflows",
+            "scope": "research shortlist only; not production promotion",
+        },
+    }
+
+
 def grouped_metrics(positions: list[dict], initial_balance: float, keys: tuple[str, ...]) -> dict:
     groups: dict[tuple, list] = defaultdict(list)
     for p in positions:
@@ -376,19 +417,15 @@ def main() -> int:
         family_metrics = grouped_metrics(enriched, initial_balance, ("symbol", "strategy"))
         family_priority = []
         for cohort in family_metrics.values():
-            pf = cohort.get("profit_factor")
-            expectancy = cohort.get("expectancy_per_position")
-            count = cohort.get("positions", 0)
-            if count < 30:
-                priority = "insufficient_sample"
-            elif isinstance(pf, (int, float)) and pf >= 1.05 and isinstance(expectancy, (int, float)) and expectancy > 0:
-                priority = "candidate_for_independent_replication"
-            else:
-                priority = "deprioritize"
+            eligibility = assess_research_eligibility(cohort)
             family_priority.append({
                 "symbol": cohort.get("symbol"), "strategy": cohort.get("strategy"),
-                "positions": count, "profit_factor": pf,
-                "expectancy_per_position": expectancy, "priority": priority,
+                "positions": cohort.get("positions"),
+                "win_rate_pct_excluding_flats": cohort.get("win_rate_pct_excluding_flats"),
+                "profit_factor": cohort.get("profit_factor"),
+                "expectancy_per_position": cohort.get("expectancy_per_position"),
+                "priority": eligibility["status"],
+                "eligibility": eligibility,
             })
         report = {
             "schema_version": 1,
@@ -445,7 +482,14 @@ def main() -> int:
                 "slippage": "adverse cash cost reported only where every deal in the position has valid requested-price provenance",
                 "spread": "baseline spread already embedded in tester fills; only incremental widening belongs in cost stress",
                 "drawdown": "closed-position settlement sequence; not tick-level equity drawdown",
-                "promotion": "diagnostic ranking only; no family is promoted automatically",
+                "promotion": "no family below 70% completed-position win rate is eligible even for independent replication; eligible cohorts still require native multi-fold validation, realistic cost stress and explicit human review",
+                "promotion_policy": {
+                    "minimum_completed_position_win_rate_pct": MIN_PROMOTION_WIN_RATE_PCT,
+                    "minimum_completed_positions": MIN_PROMOTION_POSITIONS,
+                    "minimum_profit_factor": MIN_PROMOTION_PROFIT_FACTOR,
+                    "positive_expectancy_required": True,
+                    "automatic_production_promotion": False,
+                },
             },
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)
