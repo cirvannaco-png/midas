@@ -122,7 +122,10 @@ private:
                      regime!=m_attributions[index].regime) ||
                     (StringLen(direction)>0 && direction!="UNTAGGED" &&
                      m_attributions[index].direction!="UNTAGGED" &&
-                     direction!=m_attributions[index].direction);
+                     direction!=m_attributions[index].direction) ||
+                    (StringLen(session)>0 && session!="UNTAGGED" &&
+                     m_attributions[index].session!="UNTAGGED" &&
+                     session!=m_attributions[index].session);
       if(conflict)
         {
          m_attributions[index].decision_id=0;
