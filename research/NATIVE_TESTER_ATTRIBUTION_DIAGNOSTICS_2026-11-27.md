@@ -61,7 +61,20 @@ The outcome log uses the existing display labels (`SMC`, `MomentumBreakout`, `Me
 - Flags a **possible premature-exit candidate** only when a non-SL/non-TP decision exit had MFE_R >= 1.0 and realized R <= 0.25. This is a diagnostic screen, not proof that the exit was avoidable.
 - Reports initial stop geometry and stop-loss exit reasons so stop placement can be examined against adverse excursion. Closed-position drawdown is not tick-level equity drawdown.
 
-No strategy family is automatically promoted. A cohort with fewer than 30 completed positions is marked insufficient; 30–99 is exploratory. These are review labels, not statistical certification.
+## Mandatory 70% research eligibility floor
+
+The user's minimum win-rate requirement is now a hard gate, calculated on completed positions after partial exits are consolidated. Breakeven positions are excluded from the win-rate denominator.
+
+A strategy-family cohort is eligible even for **independent replication only** when all of the following hold:
+
+- At least 100 completed positions.
+- Completed-position win rate of at least **70.00%**.
+- Profit factor of at least 1.05.
+- Strictly positive net expectancy after broker profit, signed commission, swap and fee cashflows.
+
+Any cohort below 70.00% is marked `not_eligible`, regardless of its profit factor, expectancy or sample size. A 70% win rate by itself is not sufficient. Unknown or incomplete cost evidence, inadequate spread/slippage stress, a lack of multiple chronological folds, or missing native MT5 real-tick validation also blocks any production promotion. Passing this screen is only permission to conduct independent replication; it is not production approval and never changes EA defaults automatically.
+
+The analyzer's family-priority output exposes each gate and its failed checks. Samples below 100 are not eligible for replication under this policy.
 
 ## Running a native test
 
